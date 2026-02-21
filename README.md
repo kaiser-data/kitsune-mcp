@@ -81,7 +81,80 @@ Saved to `.env` and active immediately — auto-loaded on every future call.
 
 ---
 
-## Demo
+## Real-World Demo
+
+### "Research my competitor before my investor meeting"
+
+You have an investor meeting in 2 hours. They'll ask about your main competitor — Notion.
+You know nothing. One prompt to Claude:
+
+> *"Research Notion as a competitor and save a brief I can use in my investor meeting."*
+
+Here's exactly what happens:
+
+```
+# Claude discovers the right tool on its own
+search("web research")
+→ @exa/exa found — 3 tools, no API key required
+
+# Claude BECOMES the search tool — tools appear as native
+morph("@exa/exa")
+→ Morphed. Now available: web_search_exa, find_similar, get_contents
+
+web_search_exa("Notion 2024 revenue growth strategy")
+→ $333M ARR · 4M paying teams · 35% YoY growth · expanding enterprise
+
+web_search_exa("Notion weaknesses user complaints")
+→ Slow on large databases · no offline mode · API gaps vs competitors
+
+shed()
+→ Shed @exa/exa. Back to base form.
+
+# Switches skin entirely — becomes a GitHub tool
+morph("@modelcontextprotocol/server-github")
+→ Morphed. Now available: search_repositories, list_issues, get_file_contents
+
+search_repositories("open source notion alternative")
+→ AppFlowy 22k ⭐ · AFFiNE 38k ⭐ — open-source clones gaining momentum fast
+
+shed()
+→ Shed GitHub. Back to base form.
+
+# Becomes a filesystem tool and writes the deliverable
+morph("@modelcontextprotocol/server-filesystem")
+→ Morphed. Now available: write_file, read_file, list_directory
+
+write_file("competitor_brief.md", """
+# Notion — Investor Brief
+
+## Numbers
+- $333M ARR, 4M paying teams, 35% YoY growth
+
+## Weaknesses (our angle)
+- Degrades past 10K pages — enterprise teams hit a wall
+- No offline mode — dealbreaker for regulated industries
+- Open-source alternatives (AppFlowy, AFFiNE) eating SMB market
+
+## Our positioning
+[Claude fills this in based on what it learned]
+""")
+
+shed()
+```
+
+**Result:** A ready-to-use competitor brief. Researched, synthesized, written to disk.
+Time: ~30 seconds. Config required: zero.
+
+---
+
+**What just happened:** Claude didn't route requests *through* a hub. It *became* three completely
+different tools — a search engine, a code intelligence layer, a filesystem — then shed each skin
+when done. The tools appeared in Claude's tool list as if they were built in. No wrappers.
+No indirection. No config files touched.
+
+That's morph.
+
+---
 
 ### Basic usage
 
