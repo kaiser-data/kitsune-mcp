@@ -4,6 +4,47 @@ import json
 import pytest
 import respx
 import httpx
+from unittest.mock import AsyncMock, MagicMock
+
+# ---------------------------------------------------------------------------
+# Shared subprocess mock helpers (importable or usable as fixtures)
+# ---------------------------------------------------------------------------
+
+def make_mock_process(returncode=None):
+    """Create a mock asyncio subprocess with working stdin/stdout."""
+    proc = MagicMock()
+    proc.returncode = returncode
+    proc.pid = 99999
+    proc.stdin = MagicMock()
+    proc.stdin.write = MagicMock()
+    proc.stdin.drain = AsyncMock()
+    proc.stdin.close = MagicMock()
+    proc.stdout = MagicMock()
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock(return_value=0)
+    return proc
+
+
+def make_stdout_with_responses(responses: list[dict]):
+    """Create a mock stdout that yields JSON-RPC responses one by one."""
+    lines = iter((json.dumps(r) + "\n").encode() for r in responses)
+
+    async def readline():
+        try:
+            return next(lines)
+        except StopIteration:
+            return b""
+
+    stdout = MagicMock()
+    stdout.readline = readline
+    return stdout
+
+
+@pytest.fixture
+def mock_process():
+    """Pytest fixture: a mock asyncio subprocess (alive by default)."""
+    return make_mock_process(returncode=None)
+
 
 # ---------------------------------------------------------------------------
 # Mock subprocess helpers

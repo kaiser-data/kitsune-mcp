@@ -58,7 +58,7 @@ Documentation = "https://github.com/kaiser-data/chameleon-mcp/tree/main/docs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-include = ["server.py"]
+include = ["server.py", "chameleon_mcp/*.py"]
 
 [tool.ruff]
 line-length = 100

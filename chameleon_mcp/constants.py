@@ -1,0 +1,24 @@
+MCP_PROTOCOL_VERSION = "2024-11-05"
+MCP_CLIENT_INFO = {"name": "chameleon", "version": "1.0.0"}
+
+TIMEOUT_STDIO_INIT    = 60.0
+TIMEOUT_STDIO_TOOL    = 30.0
+TIMEOUT_HTTP_TOOL     = 30.0
+TIMEOUT_RESOURCE_LIST = 5.0
+TIMEOUT_RESOURCE_READ = 5.0
+TIMEOUT_TCP_PROBE     = 0.5
+TIMEOUT_FETCH_URL     = 15.0
+
+MAX_RESPONSE_TOKENS = 1500
+MAX_EXPLORE_DESC    = 80
+MAX_INSPECT_DESC    = 120
+
+CRED_SUFFIXES = (
+    "_KEY", "_TOKEN", "_SECRET", "_API_KEY", "_PASSWORD",
+    "_APIKEY", "_ACCESS_KEY", "_CLIENT_ID", "_CLIENT_SECRET",
+)
+
+RESOURCE_PRIORITY_KEYWORDS = [["env"], ["param"], ["auth", "key"], ["quick", "setup"], ["config"]]
+MAX_RESOURCE_DOCS = 4
+
+PROVIDER_PARAM_SUFFIXES = ("provider", "engine", "backend", "service", "mode")

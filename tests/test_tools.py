@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from server import _truncate, _clean_response, _estimate_tokens, _credentials_guide
+from server import _truncate, _clean_response, _estimate_tokens, _credentials_guide, _extract_content
 
 
 class TestTruncate:
@@ -121,3 +121,26 @@ class TestCredentialsGuide:
         assert "token" in result
         assert "secret" in result
         # apiKey is resolved so should not appear in missing list
+
+
+class TestExtractContent:
+    def test_single_text_part_extracted(self):
+        result = {"content": [{"type": "text", "text": "Hello world"}]}
+        assert _extract_content(result) == "Hello world"
+
+    def test_multiple_text_parts_joined(self):
+        result = {"content": [
+            {"type": "text", "text": "Part 1"},
+            {"type": "text", "text": "Part 2"},
+        ]}
+        assert _extract_content(result) == "Part 1\nPart 2"
+
+    def test_non_text_content_falls_back_to_json(self):
+        result = {"content": [{"type": "image", "data": "abc123"}]}
+        out = _extract_content(result)
+        assert "image" in out  # JSON dump includes the type field
+
+    def test_empty_content_falls_back_to_json_result(self):
+        result = {"someKey": "someValue"}
+        out = _extract_content(result)
+        assert "someKey" in out

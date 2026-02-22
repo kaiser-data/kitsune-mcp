@@ -250,3 +250,182 @@ class TestConnect:
         assert "Already connected" in result
         assert "running" in result
         _process_pool.pop(pool_key, None)
+
+
+# ---------------------------------------------------------------------------
+# PersistentStdioTransport.list_resources() tests
+# ---------------------------------------------------------------------------
+
+class TestListResources:
+    def _init_resp(self):
+        return {
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+        }
+
+    async def test_list_resources_returns_list(self):
+        resources_resp = {
+            "jsonrpc": "2.0", "id": 3,
+            "result": {"resources": [
+                {"uri": "config://env/vars", "name": "Env Vars"},
+                {"uri": "docs://auth", "name": "Auth Docs"},
+            ]},
+        }
+        mock_proc = _make_mock_process(returncode=None)
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), resources_resp])
+
+        pool_key = json.dumps(["list-res-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            transport = PersistentStdioTransport(["list-res-cmd"])
+            result = await transport.list_resources()
+
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["uri"] == "config://env/vars"
+        _process_pool.pop(pool_key, None)
+
+    async def test_list_resources_returns_empty_on_error(self):
+        error_resp = {
+            "jsonrpc": "2.0", "id": 3,
+            "error": {"code": -32601, "message": "Method not found"},
+        }
+        mock_proc = _make_mock_process(returncode=None)
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), error_resp])
+
+        pool_key = json.dumps(["list-res-err-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            transport = PersistentStdioTransport(["list-res-err-cmd"])
+            result = await transport.list_resources()
+
+        assert result == []
+        _process_pool.pop(pool_key, None)
+
+    async def test_list_resources_returns_empty_on_timeout(self):
+        """If process never responds to resources/list, returns []."""
+        mock_proc = _make_mock_process(returncode=None)
+        # Only provide init response; resources/list response never arrives
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp()])
+
+        pool_key = json.dumps(["list-res-timeout-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            with patch("chameleon_mcp.transport.StdioTransport._read_response", AsyncMock(side_effect=[
+                self._init_resp(),  # init
+                None,               # resources/list → timeout
+            ])):
+                transport = PersistentStdioTransport(["list-res-timeout-cmd"])
+                result = await transport.list_resources()
+
+        assert result == []
+        _process_pool.pop(pool_key, None)
+
+
+# ---------------------------------------------------------------------------
+# PersistentStdioTransport.read_resource() tests
+# ---------------------------------------------------------------------------
+
+class TestReadResource:
+    def _init_resp(self):
+        return {
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+        }
+
+    async def test_read_resource_extracts_text(self):
+        read_resp = {
+            "jsonrpc": "2.0", "id": 3,
+            "result": {"contents": [
+                {"uri": "config://env/vars", "mimeType": "text/plain", "text": "MY_KEY=abc"},
+            ]},
+        }
+        mock_proc = _make_mock_process(returncode=None)
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), read_resp])
+
+        pool_key = json.dumps(["read-res-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            transport = PersistentStdioTransport(["read-res-cmd"])
+            result = await transport.read_resource("config://env/vars")
+
+        assert result == "MY_KEY=abc"
+        _process_pool.pop(pool_key, None)
+
+    async def test_read_resource_returns_empty_on_error(self):
+        error_resp = {
+            "jsonrpc": "2.0", "id": 3,
+            "error": {"code": -32601, "message": "Not found"},
+        }
+        mock_proc = _make_mock_process(returncode=None)
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), error_resp])
+
+        pool_key = json.dumps(["read-res-err-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            transport = PersistentStdioTransport(["read-res-err-cmd"])
+            result = await transport.read_resource("config://env/vars")
+
+        assert result == ""
+        _process_pool.pop(pool_key, None)
+
+
+# ---------------------------------------------------------------------------
+# inherit_stderr parameter tests
+# ---------------------------------------------------------------------------
+
+class TestInheritStderr:
+    def _init_resp(self):
+        return {
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+        }
+
+    async def test_inherit_stderr_true_passes_none(self):
+        """Default inherit_stderr=True → stderr=None (inherit from parent process)."""
+        mock_proc = _make_mock_process(returncode=None)
+        tool_resp = {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), tool_resp])
+
+        pool_key = json.dumps(["inherit-true-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        captured_kwargs = {}
+
+        async def mock_exec(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_proc
+
+        with patch("asyncio.create_subprocess_exec", mock_exec):
+            transport = PersistentStdioTransport(["inherit-true-cmd"], inherit_stderr=True)
+            await transport.execute("my_tool", {}, {})
+
+        assert captured_kwargs.get("stderr") is None
+        _process_pool.pop(pool_key, None)
+
+    async def test_inherit_stderr_false_passes_pipe(self):
+        """inherit_stderr=False → stderr=asyncio.subprocess.PIPE."""
+        mock_proc = _make_mock_process(returncode=None)
+        tool_resp = {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), tool_resp])
+
+        pool_key = json.dumps(["inherit-false-cmd"], sort_keys=True)
+        _process_pool.pop(pool_key, None)
+
+        captured_kwargs = {}
+
+        async def mock_exec(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return mock_proc
+
+        with patch("asyncio.create_subprocess_exec", mock_exec):
+            transport = PersistentStdioTransport(["inherit-false-cmd"], inherit_stderr=False)
+            await transport.execute("my_tool", {}, {})
+
+        assert captured_kwargs.get("stderr") == asyncio.subprocess.PIPE
+        _process_pool.pop(pool_key, None)
