@@ -736,7 +736,8 @@ async def bench(server_id: str, tool_name: str, args: dict = {}, iterations: int
                 transport_obj.execute(tool_name, args, resolved_config), timeout=TIMEOUT_STDIO_TOOL
             )
             elapsed_ms = (time.monotonic() - t0) * 1000
-            if "error" in result.lower() and i == 0:
+            _r = result.lower()
+            if any(kw in _r for kw in ("error", "auth failed", "failed to connect", "timeout connecting")):
                 errors.append(f"call {i + 1}: tool returned error")
             else:
                 latencies.append(elapsed_ms)

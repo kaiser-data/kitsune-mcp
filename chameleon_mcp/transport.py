@@ -68,11 +68,12 @@ class HTTPSSETransport(BaseTransport):
         ).decode().rstrip("=")
         base_url = (
             f"https://server.smithery.ai/{self.qualified_name}"
-            f"?config={config_b64}&api_key={api_key}"
+            f"?config={config_b64}"
         )
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "Authorization": f"Bearer {api_key}",
         }
 
         def _parse_sse(text: str) -> dict | None:
