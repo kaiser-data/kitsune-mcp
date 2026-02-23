@@ -51,17 +51,9 @@ Chameleon works with servers from any source — GitHub repositories, npm packag
 
 Chameleon acts as a **single, stable entry point** in your MCP config. Everything else is dynamic:
 
-```
-Your AI client (Claude, Cursor, etc.)
-        │
-        ▼
-  Chameleon MCP  ← the only server in your mcp.json
-        │
-        ├─ morph("@modelcontextprotocol/server-filesystem")  → filesystem tools appear
-        ├─ morph("mcp-server-brave-search")                  → web search tools appear
-        ├─ morph("github:user/my-custom-server")             → custom tools appear
-        └─ shed()                                            → all removed, back to base
-```
+<div align="center">
+  <img src="docs/architecture.svg" alt="Chameleon MCP architecture diagram" width="820"/>
+</div>
 
 This works because Chameleon uses FastMCP's live tool registration API — tools are added and removed from a running server at runtime, not at startup.
 
