@@ -1,6 +1,8 @@
-# 🦎 Chameleon MCP
-
-**A single MCP server that becomes any other MCP server on demand.**
+<div align="center">
+  <img src="chameleon-logo.png" alt="Chameleon MCP" width="200" />
+  <h1>🦎 Chameleon MCP</h1>
+  <p><strong>A single MCP server that becomes any other MCP server on demand.</strong></p>
+</div>
 
 [![PyPI](https://img.shields.io/pypi/v/chameleon-mcp?color=blue)](https://pypi.org/project/chameleon-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/chameleon-mcp)](https://pypi.org/project/chameleon-mcp/)
@@ -10,13 +12,98 @@
 
 ---
 
-## What is Chameleon MCP?
+## The Problem
 
-The [Model Context Protocol](https://modelcontextprotocol.io) lets AI agents call external tools — but the standard workflow requires you to know which server you want, configure it in a JSON file, and restart your AI client every time you add or switch one.
+The [Model Context Protocol](https://modelcontextprotocol.io) is a great standard — but the day-to-day experience of using MCP servers is still painful:
 
-Chameleon solves this by acting as a **dynamic proxy**. You configure it once, and from that point Claude can discover, connect to, and call any of 3,000+ MCP servers in the [Smithery registry](https://smithery.ai) — or any npm/pip-installable server — without touching a config file or restarting anything.
+- **You need to know the exact server name** before you can use it
+- **Every new server requires editing a config file** (`mcp.json`) and restarting your AI client
+- **You can only have servers you've pre-configured** — there's no way to discover or try a new one mid-session
+- **Running multiple servers at once bloats your tool list** — your AI sees hundreds of tools it rarely needs, hurting response quality and token efficiency
+- **There's no standard way to run a server from a GitHub repo** — you have to figure out install commands yourself
 
-The key primitive is `morph()`: when you call `morph("exa/exa")`, Chameleon downloads the server's tool definitions and registers them directly onto itself via FastMCP's live tool API. The tools appear in Claude's tool list as native tools — no wrapper, no extra indirection. When you're done, `shed()` removes them and you're back to the base set.
+The result: most people configure 2–3 servers once and never explore further. The ecosystem has thousands of servers, but the tooling makes them inaccessible.
+
+---
+
+## What Chameleon MCP Does
+
+Chameleon is a **dynamic MCP proxy** — one server you configure once, which can become any other MCP server on demand.
+
+Instead of managing a list of pre-configured servers, you work interactively:
+
+```
+search("web search")                         → discover what's available
+morph("@modelcontextprotocol/server-brave")  → instantly add those tools
+brave_web_search(query="MCP 2025")           → use them natively
+shed()                                       → remove them when done
+```
+
+No config file edits. No restarts. Your tool list only contains what you're using right now.
+
+The key primitive is `morph()`: it downloads a server's tool definitions and registers them **directly onto Chameleon** via FastMCP's live tool API. After morphing, Claude sees those tools exactly as if the server were configured natively — no wrapper, no extra indirection. `shed()` removes them cleanly.
+
+Chameleon works with servers from any source — GitHub repositories, npm packages, PyPI packages — with no API key required to get started.
+
+---
+
+## How It Fits Together
+
+Chameleon acts as a **single, stable entry point** in your MCP config. Everything else is dynamic:
+
+```
+Your AI client (Claude, Cursor, etc.)
+        │
+        ▼
+  Chameleon MCP  ← the only server in your mcp.json
+        │
+        ├─ morph("@modelcontextprotocol/server-filesystem")  → filesystem tools appear
+        ├─ morph("mcp-server-brave-search")                  → web search tools appear
+        ├─ morph("github:user/my-custom-server")             → custom tools appear
+        └─ shed()                                            → all removed, back to base
+```
+
+This works because Chameleon uses FastMCP's live tool registration API — tools are added and removed from a running server at runtime, not at startup.
+
+---
+
+## Compatibility
+
+Chameleon is a standard MCP server that speaks the [MCP protocol](https://modelcontextprotocol.io) over stdio. It works with **any AI client that supports MCP** — it is completely independent of which LLM or model backend you use.
+
+### Supported AI clients
+
+| Client | MCP support | Notes |
+|--------|-------------|-------|
+| [Claude Desktop](https://claude.ai/download) | ✅ Native | Add to `claude_desktop_config.json` |
+| [Claude Code](https://github.com/anthropics/claude-code) | ✅ Native | Add to `.claude/mcp.json` |
+| [Cursor](https://cursor.sh) | ✅ Native | Add to `.cursor/mcp.json` |
+| [Continue.dev](https://continue.dev) | ✅ Native | Works with local Ollama models too |
+| [Zed](https://zed.dev) | ✅ Native | Via MCP extension |
+| [Open WebUI](https://openwebui.com) | ✅ Supported | Works with Ollama backend |
+| Any custom agent | ✅ Via library | Use [`mcp`](https://pypi.org/project/mcp/) Python client or [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk) |
+
+### What about Ollama, LM Studio, vLLM, and other local models?
+
+Chameleon runs on the **tool side** of MCP, not the model side. It doesn't care which LLM is calling it.
+
+- **Ollama** doesn't natively implement an MCP client, but [Continue.dev](https://continue.dev) + Ollama does — and Chameleon works with Continue.dev
+- **LM Studio** has an OpenAI-compatible API; pair it with an MCP-capable client layer
+- **vLLM / llama.cpp / any OpenAI-compatible server**: same — the client layer handles MCP, the model layer handles inference
+
+If you're building a custom agent with Python, you can connect to Chameleon using the official [`mcp`](https://pypi.org/project/mcp/) library with any LLM backend:
+
+```python
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+# Chameleon MCP with any LLM — Ollama, OpenAI, Anthropic, local model
+server_params = StdioServerParameters(command="chameleon-mcp")
+async with stdio_client(server_params) as (read, write):
+    async with ClientSession(read, write) as session:
+        await session.initialize()
+        tools = await session.list_tools()
+```
 
 ---
 
@@ -36,6 +123,101 @@ Add Chameleon to your `mcp.json` (Claude Desktop, Claude Code, or any MCP-compat
 {
   "mcpServers": {
     "chameleon": {
+      "command": "chameleon-mcp"
+    }
+  }
+}
+```
+
+That's it — no API keys needed to start. You can now run any MCP server from npm, PyPI, or GitHub.
+
+### 3. Use it
+
+**From a GitHub repository (official MCP servers):**
+```
+morph("@modelcontextprotocol/server-filesystem")
+read_file(path="/tmp/notes.txt")
+shed()
+```
+
+**From an npm package:**
+```
+morph("@modelcontextprotocol/server-brave-search")
+brave_web_search(query="MCP protocol 2025")
+shed()
+```
+
+**From a GitHub repo directly:**
+```
+connect("uvx --from git+https://github.com/user/my-mcp-server my-server", name="myserver")
+```
+
+**With Smithery registry (optional — gives access to 3,000+ hosted servers):**
+```
+search("web search")          → find servers in registry
+morph("exa/exa")              → take the form of Exa
+web_search_exa(query="...")   → call the tool natively
+shed()                        → return to base form
+```
+
+---
+
+## Server Sources
+
+Chameleon works with MCP servers from multiple sources — no single registry required.
+
+### GitHub Repositories (recommended starting point)
+
+Run any MCP server directly from a GitHub repository. This is ideal for:
+- Official servers from the [`modelcontextprotocol`](https://github.com/modelcontextprotocol/servers) organization
+- Community servers that haven't been published to a registry
+- Your own servers under active development
+
+```bash
+# Via uvx (pip-based servers)
+connect("uvx --from git+https://github.com/user/repo server-name", name="myserver")
+
+# Via npx (npm-based servers, supports github: shorthand)
+connect("npx github:user/repo", name="myserver")
+```
+
+The [official MCP servers repository](https://github.com/modelcontextprotocol/servers) contains reference implementations for filesystem, git, memory, databases, web search, and more — all runnable without a registry.
+
+### npm Registry
+
+Any npm package that follows the MCP server convention is supported natively:
+
+```
+morph("@modelcontextprotocol/server-filesystem")
+morph("mcp-server-brave-search")
+run("@modelcontextprotocol/server-memory", "create_entities", {...})
+```
+
+Search the npm registry without any authentication:
+```
+search("filesystem", registry="npm")
+```
+
+### PyPI / pip Packages
+
+Any pip-installable MCP server runs via `uvx`:
+
+```
+morph("mcp-server-git")
+morph("mcp-server-sqlite")
+run("uvx:mcp-server-time", "get_current_time", {})
+```
+
+### Smithery Registry (optional)
+
+[Smithery](https://smithery.ai) is a curated registry of 3,000+ verified servers, including remotely hosted servers that run in the cloud without local installation.
+
+To enable Smithery, add an API key (free at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys)):
+
+```json
+{
+  "mcpServers": {
+    "chameleon": {
       "command": "chameleon-mcp",
       "env": {
         "SMITHERY_API_KEY": "your-key-here"
@@ -45,18 +227,9 @@ Add Chameleon to your `mcp.json` (Claude Desktop, Claude Code, or any MCP-compat
 }
 ```
 
-A free Smithery API key gives access to 3,000+ verified remote servers. Get one at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys).
+With Smithery enabled, `search()` includes verified registry results alongside npm results. Remote (cloud-hosted) servers can be called without any local installation.
 
-**Without a Smithery key:** Chameleon still works — it falls back to running servers locally via `npx` or `uvx`. Discovery is limited to the npm registry.
-
-### 3. Use it
-
-```
-search("web search")          → find servers
-morph("exa/exa")              → take the form of Exa
-web_search_exa(query="...")   → call the tool natively
-shed()                        → return to base form
-```
+**Without a Smithery key:** Chameleon is fully functional — you have access to the entire npm ecosystem, PyPI, and any GitHub repository. Smithery is a convenience layer, not a requirement.
 
 ---
 
@@ -70,23 +243,25 @@ Traditional MCP hubs route calls through a wrapper: `hub.call("exa", "web_search
 Before morph():
   Claude → Chameleon (search, inspect, call, morph, shed, ...)
 
-After morph("exa/exa"):
+After morph("@modelcontextprotocol/server-filesystem"):
   Claude → Chameleon (search, inspect, call, morph, shed, ...,
-                      web_search_exa, find_similar_exa, get_contents_exa)
+                      read_file, write_file, list_directory, ...)
 ```
 
-Claude sees the morphed tools exactly as if Exa were configured directly. No prompt overhead, no tool-calling indirection.
+Your AI client sees the morphed tools exactly as if the server were configured directly. No prompt overhead, no tool-calling indirection.
 
 ### Transport selection
 
-Chameleon picks the right transport automatically based on the server:
+Chameleon picks the right transport automatically:
 
-| Server type | Transport | How it runs |
+| Server source | Transport | How it runs |
 |---|---|---|
-| Smithery-hosted server | HTTP+SSE | Remote call via `server.smithery.ai` |
+| GitHub repo (npm) | Stdio | `npx github:user/repo` |
+| GitHub repo (pip) | Stdio | `uvx --from git+https://github.com/...` |
 | npm package | Stdio | Spawned locally via `npx` |
 | pip package | Stdio | Spawned locally via `uvx` |
 | Persistent server | Persistent Stdio | Long-lived process, reused across calls |
+| Smithery remote server | HTTP+SSE | Remote call via `server.smithery.ai` (requires API key) |
 
 ### Persistent connections
 
@@ -96,7 +271,7 @@ Some servers — audio pipelines, hardware interfaces, stateful services — can
 
 ## Installation Options
 
-### From PyPI (recommended)
+### From PyPI
 
 ```bash
 pip install chameleon-mcp
@@ -120,7 +295,21 @@ pip install -e .
 
 ## Configuration
 
-### mcp.json reference
+### Minimal (no API keys)
+
+```json
+{
+  "mcpServers": {
+    "chameleon": {
+      "command": "chameleon-mcp"
+    }
+  }
+}
+```
+
+Works with all npm packages, pip packages, and GitHub repositories.
+
+### With Smithery (optional)
 
 ```json
 {
@@ -139,9 +328,9 @@ pip install -e .
 
 | Variable | Required | Description |
 |---|---|---|
-| `SMITHERY_API_KEY` | Recommended | Access to 3,000+ Smithery-hosted servers. Free at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). |
+| `SMITHERY_API_KEY` | No | Access to Smithery-hosted and verified servers. Free at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). |
 
-All other API keys (for individual servers like Exa, Brave, etc.) are stored in `.env` in the working directory via the `key()` tool. They are loaded automatically on startup and passed to servers as needed.
+All other API keys (for individual servers like Exa, Brave Search, etc.) are stored in `.env` in the working directory via the `key()` tool. They are loaded automatically on startup and passed to servers as needed.
 
 ### Storing API keys at runtime
 
@@ -149,6 +338,7 @@ You don't need to pre-configure individual server keys. Use the `key()` tool fro
 
 ```
 key("EXA_API_KEY", "your-exa-key")
+key("BRAVE_API_KEY", "your-brave-key")
 ```
 
 This writes the value to `.env` and sets it in the current process immediately. No restart needed.
@@ -161,7 +351,7 @@ This writes the value to `.env` and sets it in the current process immediately. 
 
 | Tool | Description |
 |---|---|
-| `search(query, registry, limit)` | Search for MCP servers by task description. Searches Smithery and npm. Returns names, descriptions, and credential requirements. |
+| `search(query, registry, limit)` | Search for MCP servers by task description. Searches npm (always) and Smithery (if configured). `registry` can be `"npm"`, `"smithery"`, or `"all"` (default). |
 | `inspect(server_id)` | Show full details for a server: all tools with schemas, required credentials, connection type, and estimated token cost. |
 
 ### Execution
@@ -169,7 +359,7 @@ This writes the value to `.env` and sets it in the current process immediately. 
 | Tool | Description |
 |---|---|
 | `call(server_id, tool, args, config)` | Call a single tool on any server without morphing. One-shot — no process is kept alive. |
-| `run(package, tool, args)` | Run a tool from any npm or pip package directly by package name. No registry lookup needed. |
+| `run(package, tool, args)` | Run a tool from any npm or pip package by name. Supports `uvx:package-name` for pip packages. No registry lookup needed. |
 | `auto(task, tool, args)` | Full pipeline in one call: search → pick best server → call tool. |
 | `fetch(url, intent)` | Fetch a URL and return cleaned, compressed text (~17x smaller than raw HTML). |
 
@@ -184,7 +374,7 @@ This writes the value to `.env` and sets it in the current process immediately. 
 
 | Tool | Description |
 |---|---|
-| `connect(command, name, inherit_stderr)` | Start a persistent MCP server process. The process stays alive between calls. Probes for missing credentials and prints a setup guide if needed. |
+| `connect(command, name, inherit_stderr)` | Start a persistent MCP server process from any command. The process stays alive between calls. Probes for missing credentials and prints a setup guide if needed. |
 | `release(name)` | Kill a persistent connection and free its resources. |
 | `setup(name)` | Step-by-step configuration wizard for a connected server. Shows exactly what is missing and how to fix it. Call repeatedly until all requirements are satisfied. |
 
@@ -200,7 +390,7 @@ This writes the value to `.env` and sets it in the current process immediately. 
 | Tool | Description |
 |---|---|
 | `key(env_var, value)` | Save an API key to `.env` permanently and load it into the current session immediately. |
-| `skill(qualified_name)` | Fetch a server's Smithery skill prompt and inject it into the conversation context. |
+| `skill(qualified_name)` | Fetch a Smithery skill prompt and inject it into context (requires Smithery key). |
 
 ### Status
 
@@ -212,28 +402,56 @@ This writes the value to `.env` and sets it in the current process immediately. 
 
 ## Usage Examples
 
-### Discover and use a web search server
+### Official MCP servers (no API key needed)
 
 ```
-search("web search")
-morph("exa/exa")
-key("EXA_API_KEY", "your-key")   ← only needed once, saved to .env
-web_search_exa(query="MCP protocol 2025")
-shed()
-```
-
-### Use a filesystem server from npm
-
-```
+# Filesystem access
 morph("@modelcontextprotocol/server-filesystem")
 read_file(path="/tmp/notes.txt")
 shed()
+
+# Git operations
+morph("@modelcontextprotocol/server-git")
+git_log(repo_path="/path/to/repo", max_count=10)
+shed()
+
+# SQLite database
+morph("mcp-server-sqlite")
+read_query(query="SELECT * FROM users LIMIT 10")
+shed()
 ```
 
-### Run a tool without morphing
+### From a GitHub repository
 
 ```
-call("exa/exa", "web_search_exa", {"query": "latest AI news"})
+# Run a server directly from GitHub (pip-based)
+connect("uvx --from git+https://github.com/user/my-mcp-server my-server", name="dev")
+setup("dev")            ← check for missing config
+call("dev", "tool_name", {"arg": "value"})
+release("dev")
+
+# npm-based GitHub server
+connect("npx github:user/my-npm-mcp-server", name="dev")
+```
+
+### Using the npm registry
+
+```
+search("web search", registry="npm")
+morph("mcp-server-brave-search")
+key("BRAVE_API_KEY", "your-key")    ← saved to .env, never needed again
+brave_web_search(query="MCP protocol 2025")
+shed()
+```
+
+### With Smithery (optional)
+
+```
+search("web search")          ← includes Smithery results when key is set
+morph("exa/exa")
+key("EXA_API_KEY", "your-key")
+web_search_exa(query="MCP protocol 2025")
+shed()
 ```
 
 ### Persistent server with setup guidance
@@ -255,10 +473,11 @@ shed()
 release("voice")
 ```
 
-### Full auto pipeline
+### Run without morphing
 
 ```
-auto("summarize the content at https://example.com/article", "fetch", {"url": "..."})
+call("@modelcontextprotocol/server-filesystem", "read_file", {"path": "/tmp/test.txt"})
+run("uvx:mcp-server-time", "get_current_time", {})
 ```
 
 ---
@@ -272,22 +491,24 @@ Claude / AI Agent
   Chameleon MCP (server.py — entry point)
        │
        ├── chameleon_mcp/
-       │     ├── registry.py    ── SmitheryRegistry + NpmRegistry
+       │     ├── registry.py    ── MultiRegistry → NpmRegistry, SmitheryRegistry
        │     ├── transport.py   ── HTTPSSETransport, StdioTransport, PersistentStdioTransport
        │     ├── morph.py       ── live tool registration via FastMCP.add_tool / remove_tool
        │     ├── probe.py       ── env var detection, OAuth, schema creds, setup guide generation
        │     ├── credentials.py ── .env I/O, config resolution
        │     └── tools.py       ── all 16 @mcp.tool() definitions
        │
-       ├── SmitheryRegistry  ──► registry.smithery.ai  (3,000+ servers)
-       └── NpmRegistry       ──► registry.npmjs.org
+       ├── GitHub repos   ──► npx github:user/repo  /  uvx --from git+https://...
+       ├── NpmRegistry    ──► registry.npmjs.org  (no auth required)
+       ├── PyPI / uvx     ──► pypi.org  (no auth required)
+       └── SmitheryRegistry ──► registry.smithery.ai  (optional, requires API key)
 ```
 
 ---
 
 ## Roadmap
 
-- [x] Search across Smithery + npm
+- [x] Search across npm + Smithery
 - [x] morph() / shed() — live tool registration
 - [x] HTTP+SSE transport for Smithery-hosted servers
 - [x] Stdio transport for local npm/pip servers
@@ -296,9 +517,11 @@ Claude / AI Agent
 - [x] bench() latency benchmarking
 - [x] setup() step-by-step configuration wizard
 - [x] Readiness probe: env vars, OAuth, schema credentials, local URL reachability
+- [ ] GitHub repo as a first-class `server_id` (`github:user/repo`)
+- [ ] PyPI registry search (`search(registry="pypi")`)
 - [ ] WebSocket transport
 - [ ] Server health monitoring in status()
-- [ ] Smithery registry listing
+- [ ] Official MCP registry integration ([modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers))
 
 ---
 
@@ -318,4 +541,4 @@ Issues and PRs: [github.com/kaiser-data/chameleon-mcp](https://github.com/kaiser
 
 ---
 
-*MIT License · Python 3.12+ · Powered by [FastMCP](https://github.com/jlowin/fastmcp) and [Smithery](https://smithery.ai)*
+*MIT License · Python 3.12+ · Built on [FastMCP](https://github.com/jlowin/fastmcp)*
