@@ -1,7 +1,10 @@
 import asyncio
+import ipaddress
 import json
+import shlex
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 
 import httpx
 import certifi
@@ -196,6 +199,25 @@ async def fetch(url: str, intent: str = "") -> str:
     return f"{header}\n\n{result}"
 
 
+def _is_safe_url(url: str) -> bool:
+    """Return True only for public HTTPS URLs — blocks SSRF to private/loopback addresses."""
+    try:
+        p = urlparse(url)
+        if p.scheme != "https":
+            return False
+        host = p.hostname or ""
+        if not host or host == "localhost":
+            return False
+        try:
+            addr = ipaddress.ip_address(host)
+            return addr.is_global
+        except ValueError:
+            pass  # hostname, not a bare IP — allow it
+        return True
+    except Exception:
+        return False
+
+
 @mcp.tool()
 async def skill(qualified_name: str) -> str:
     """Inject a Smithery skill into context. Requires API key."""
@@ -224,7 +246,7 @@ async def skill(qualified_name: str) -> str:
     content = None
     content_url = (skill_meta.get("contentUrl") or skill_meta.get("url")
                    or skill_meta.get("content_url"))
-    if content_url:
+    if content_url and _is_safe_url(content_url):
         try:
             async with httpx.AsyncClient() as client:
                 rc = await client.get(content_url, timeout=TIMEOUT_FETCH_URL)
@@ -481,7 +503,7 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
     timeout: startup timeout in seconds (default 60)
     inherit_stderr: forward subprocess stderr to terminal (default True)
     """
-    install_cmd = command.split()
+    install_cmd = shlex.split(command)
     pool_key = json.dumps(install_cmd, sort_keys=True)
     friendly = name or install_cmd[0]
 

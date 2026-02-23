@@ -5,7 +5,9 @@ from chameleon_mcp.utils import _estimate_tokens
 
 # Read at import time (load_dotenv() must be called by entry point first)
 SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
-ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+# Write .env to the user's working directory (same location load_dotenv() reads from).
+# Using the package install directory was incorrect for installed packages.
+ENV_PATH = os.path.join(os.getcwd(), ".env")
 
 
 def _registry_headers():
