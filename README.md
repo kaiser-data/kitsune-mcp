@@ -388,18 +388,41 @@ Works with all npm packages, pip packages, and GitHub repositories.
 |---|---|---|
 | `SMITHERY_API_KEY` | No | Access to Smithery-hosted and verified servers. Free at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). |
 
-API keys you want available in **all** projects should go in the `env` block of your global config (see above). Keys only needed in one project can be saved with `key()` and will be written to `.env` in that project's directory.
+### Managing API keys safely
 
-### Storing API keys at runtime
+MCP servers run as subprocesses launched by your AI client — they don't inherit your interactive shell environment. This means `~/.zshrc` exports alone won't reach Chameleon. Here's the recommended setup:
 
-You don't need to pre-configure individual server keys. Use the `key()` tool from inside your AI session:
+**Keys needed at Chameleon startup** (e.g. `SMITHERY_API_KEY`) go in the `env` block of your MCP config — this is the only reliable way to pass them to the subprocess.
+
+**All other keys** are best kept in a `~/.secrets` file and sourced from `~/.zshrc`:
+
+```bash
+# ~/.secrets  (chmod 600 — never commit this file)
+export SMITHERY_API_KEY="your-key"
+export OPENAI_API_KEY="your-key"
+export ANTHROPIC_API_KEY="your-key"
+```
+
+```bash
+# ~/.zshrc
+[ -f ~/.secrets ] && source ~/.secrets
+```
+
+Add a global gitignore so secrets never accidentally get committed:
+
+```bash
+echo '.secrets\n.env\n.envrc' >> ~/.gitignore_global
+git config --global core.excludesfile ~/.gitignore_global
+```
+
+**Keys for individual MCP servers** (Brave, Exa, etc.) don't need to be pre-configured at all — use the `key()` tool from inside your session:
 
 ```
 key("EXA_API_KEY", "your-exa-key")
 key("BRAVE_API_KEY", "your-brave-key")
 ```
 
-This writes the value to `.env` in the current directory and loads it immediately. No restart needed.
+This writes the value to `.env` in the current directory and loads it into the running process immediately. No restart needed. On the next session in the same project folder, Chameleon picks it up automatically.
 
 ---
 
