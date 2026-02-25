@@ -109,7 +109,9 @@ pip install chameleon-mcp
 
 ### 2. Configure your MCP client
 
-Add Chameleon to your `mcp.json` (Claude Desktop, Claude Code, or any MCP-compatible client):
+Add Chameleon **once, globally** — it will be available in every project and every session.
+
+**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -121,7 +123,21 @@ Add Chameleon to your `mcp.json` (Claude Desktop, Claude Code, or any MCP-compat
 }
 ```
 
-That's it — no API keys needed to start. You can now run any MCP server from npm, PyPI, or GitHub.
+**Claude Code** — edit `~/.claude/mcp.json` for global access across all projects:
+
+```json
+{
+  "mcpServers": {
+    "chameleon": {
+      "command": "chameleon-mcp"
+    }
+  }
+}
+```
+
+**Other clients** (Cursor, Continue.dev, Zed): add the same block to their respective MCP config file.
+
+That's it — no API keys needed to start. Chameleon is now available in every session, in every project folder.
 
 ### 3. Use it
 
@@ -323,6 +339,20 @@ pip install -e .
 
 ## Configuration
 
+### Where to put the config
+
+Configure Chameleon **globally** so it's available in every project — you only need to do this once.
+
+| Client | Global config file |
+|---|---|
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Claude Code | `~/.claude/mcp.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Continue.dev | `~/.continue/config.json` |
+
+For project-specific overrides, place `mcp.json` inside your project's `.claude/` folder — it takes precedence over the global config for that project only.
+
 ### Minimal (no API keys)
 
 ```json
@@ -358,7 +388,7 @@ Works with all npm packages, pip packages, and GitHub repositories.
 |---|---|---|
 | `SMITHERY_API_KEY` | No | Access to Smithery-hosted and verified servers. Free at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). |
 
-All other API keys (for individual servers like Exa, Brave Search, etc.) are stored in `.env` in the working directory via the `key()` tool. They are loaded automatically on startup and passed to servers as needed.
+API keys you want available in **all** projects should go in the `env` block of your global config (see above). Keys only needed in one project can be saved with `key()` and will be written to `.env` in that project's directory.
 
 ### Storing API keys at runtime
 
@@ -369,7 +399,7 @@ key("EXA_API_KEY", "your-exa-key")
 key("BRAVE_API_KEY", "your-brave-key")
 ```
 
-This writes the value to `.env` and sets it in the current process immediately. No restart needed.
+This writes the value to `.env` in the current directory and loads it immediately. No restart needed.
 
 ---
 
