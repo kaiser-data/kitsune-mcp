@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 456" width="820" height="456"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" width="820" height="420"
      font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 
   <defs>
@@ -14,7 +14,7 @@
   </defs>
 
   <!-- Background -->
-  <rect width="820" height="456" fill="#f8fafc" rx="14"/>
+  <rect width="820" height="420" fill="#f8fafc" rx="14"/>
 
   <!-- ── AI CLIENT ──────────────────────────────────────── -->
   <rect x="235" y="22" width="350" height="62" rx="10"
@@ -41,31 +41,24 @@
   </text>
 
   <!-- Tool pills -->
-  <!-- morph() x=167 w=70 -->
   <rect x="167" y="186" width="70" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="202" y="202" text-anchor="middle" fill="#15803d" font-size="11">morph()</text>
 
-  <!-- shed() x=245 w=58 -->
   <rect x="245" y="186" width="58" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="274" y="202" text-anchor="middle" fill="#15803d" font-size="11">shed()</text>
 
-  <!-- search() x=311 w=72 -->
   <rect x="311" y="186" width="72" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="347" y="202" text-anchor="middle" fill="#15803d" font-size="11">search()</text>
 
-  <!-- call() x=391 w=52 -->
   <rect x="391" y="186" width="52" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="417" y="202" text-anchor="middle" fill="#15803d" font-size="11">call()</text>
 
-  <!-- run() x=451 w=48 -->
   <rect x="451" y="186" width="48" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="475" y="202" text-anchor="middle" fill="#15803d" font-size="11">run()</text>
 
-  <!-- connect() x=507 w=76 -->
   <rect x="507" y="186" width="76" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="545" y="202" text-anchor="middle" fill="#15803d" font-size="11">connect()</text>
 
-  <!-- inspect() x=591 w=68 -->
   <rect x="591" y="186" width="68" height="23" rx="11.5" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
   <text x="625" y="202" text-anchor="middle" fill="#15803d" font-size="11">inspect()</text>
 
@@ -76,75 +69,59 @@
     after morph() &#x2192;&#xA0;&#xA0;read_file&#xA0;&#xA0;&#x2022;&#xA0;&#xA0;git_log&#xA0;&#xA0;&#x2022;&#xA0;&#xA0;brave_web_search&#xA0;&#xA0;&#x2022;&#xA0;&#xA0;get_current_time&#xA0;&#xA0;&#x2022;&#xA0;&#xA0;&#x2026;
   </text>
 
-  <!-- ── ARROWS DOWN ── Chameleon bottom = y 268 ─────────── -->
-  <!-- Source box tops = y 316 -->
-  <!-- Box centers: GitHub=119, npm=313, PyPI=507, Smithery=701 -->
-
+  <!-- ── ARROWS DOWN ── -->
   <!-- → GitHub -->
-  <line x1="155" y1="268" x2="119" y2="316"
+  <line x1="155" y1="268" x2="119" y2="300"
         stroke="#22c55e" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
 
   <!-- → npm -->
-  <line x1="315" y1="268" x2="313" y2="316"
+  <line x1="315" y1="268" x2="313" y2="300"
         stroke="#22c55e" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
 
   <!-- → PyPI -->
-  <line x1="505" y1="268" x2="507" y2="316"
+  <line x1="505" y1="268" x2="507" y2="300"
         stroke="#22c55e" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
 
   <!-- → Smithery (dashed = optional) -->
-  <line x1="665" y1="268" x2="701" y2="316"
+  <line x1="665" y1="268" x2="701" y2="300"
         stroke="#94a3b8" stroke-width="1.8" stroke-dasharray="5 3"
         marker-end="url(#arrowGray)"/>
 
   <!-- ── SOURCE BOXES ─────────────────────────────────────── -->
-  <!-- Layout: 4 × 150 + 5 × 44 gaps = 820 -->
 
   <!-- GitHub: x=44 -->
-  <rect x="44" y="316" width="150" height="106" rx="10"
+  <rect x="44" y="300" width="150" height="80" rx="10"
         fill="#f6f8fa" stroke="#334155" stroke-width="1.8"/>
-  <text x="119" y="342" text-anchor="middle" fill="#1e293b"
+  <text x="119" y="327" text-anchor="middle" fill="#1e293b"
         font-size="14" font-weight="600">GitHub</text>
-  <text x="119" y="360" text-anchor="middle" fill="#64748b" font-size="10">github:user/repo</text>
-  <text x="119" y="376" text-anchor="middle" fill="#64748b" font-size="10">npx / uvx --from git+&#x2026;</text>
-  <rect x="64" y="388" width="110" height="18" rx="9" fill="#dcfce7"/>
-  <text x="119" y="401" text-anchor="middle" fill="#16a34a"
-        font-size="9" font-weight="600">no auth required</text>
+  <text x="119" y="346" text-anchor="middle" fill="#64748b" font-size="10">github:user/repo</text>
+  <text x="119" y="363" text-anchor="middle" fill="#64748b" font-size="10">npx / uvx --from git+&#x2026;</text>
 
   <!-- npm: x=238 -->
-  <rect x="238" y="316" width="150" height="106" rx="10"
+  <rect x="238" y="300" width="150" height="80" rx="10"
         fill="#fff1f2" stroke="#e11d48" stroke-width="1.8"/>
-  <text x="313" y="342" text-anchor="middle" fill="#be123c"
+  <text x="313" y="327" text-anchor="middle" fill="#be123c"
         font-size="14" font-weight="600">npm</text>
-  <text x="313" y="360" text-anchor="middle" fill="#64748b" font-size="10">registry.npmjs.org</text>
-  <text x="313" y="376" text-anchor="middle" fill="#64748b" font-size="10">npx -y &lt;package&gt;</text>
-  <rect x="258" y="388" width="110" height="18" rx="9" fill="#dcfce7"/>
-  <text x="313" y="401" text-anchor="middle" fill="#16a34a"
-        font-size="9" font-weight="600">no auth required</text>
+  <text x="313" y="346" text-anchor="middle" fill="#64748b" font-size="10">registry.npmjs.org</text>
+  <text x="313" y="363" text-anchor="middle" fill="#64748b" font-size="10">npx -y &lt;package&gt;</text>
 
   <!-- PyPI: x=432 -->
-  <rect x="432" y="316" width="150" height="106" rx="10"
+  <rect x="432" y="300" width="150" height="80" rx="10"
         fill="#eff6ff" stroke="#3b82f6" stroke-width="1.8"/>
-  <text x="507" y="342" text-anchor="middle" fill="#1d4ed8"
+  <text x="507" y="327" text-anchor="middle" fill="#1d4ed8"
         font-size="14" font-weight="600">PyPI</text>
-  <text x="507" y="360" text-anchor="middle" fill="#64748b" font-size="10">pypi.org</text>
-  <text x="507" y="376" text-anchor="middle" fill="#64748b" font-size="10">uvx &lt;package&gt;</text>
-  <rect x="452" y="388" width="110" height="18" rx="9" fill="#dcfce7"/>
-  <text x="507" y="401" text-anchor="middle" fill="#16a34a"
-        font-size="9" font-weight="600">no auth required</text>
+  <text x="507" y="346" text-anchor="middle" fill="#64748b" font-size="10">pypi.org</text>
+  <text x="507" y="363" text-anchor="middle" fill="#64748b" font-size="10">uvx &lt;package&gt;</text>
 
   <!-- Smithery: x=626 (optional, dashed) -->
-  <rect x="626" y="316" width="150" height="106" rx="10"
+  <rect x="626" y="300" width="150" height="80" rx="10"
         fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 3"/>
-  <text x="701" y="342" text-anchor="middle" fill="#64748b"
+  <text x="701" y="327" text-anchor="middle" fill="#64748b"
         font-size="14" font-weight="600">Smithery</text>
-  <text x="701" y="360" text-anchor="middle" fill="#94a3b8" font-size="10">3,000+ servers</text>
-  <text x="701" y="376" text-anchor="middle" fill="#94a3b8" font-size="10">HTTP + SSE</text>
-  <rect x="646" y="388" width="110" height="18" rx="9" fill="#f1f5f9"/>
-  <text x="701" y="401" text-anchor="middle" fill="#94a3b8"
-        font-size="9" font-weight="600">optional API key</text>
+  <text x="701" y="346" text-anchor="middle" fill="#94a3b8" font-size="10">3,000+ servers</text>
+  <text x="701" y="363" text-anchor="middle" fill="#94a3b8" font-size="10">HTTP + SSE</text>
 
   <!-- "optional" label on Smithery arrow -->
-  <text x="710" y="300" fill="#94a3b8" font-size="9" font-style="italic">optional</text>
+  <text x="710" y="292" fill="#94a3b8" font-size="9" font-style="italic">optional</text>
 
 </svg>

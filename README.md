@@ -1,7 +1,7 @@
 <div align="center">
   <img src="chameleon-logo.png" alt="Chameleon MCP" width="200" />
   <h1>🦎 Chameleon MCP</h1>
-  <p><strong>A single MCP server that becomes any other MCP server on demand.</strong></p>
+  <p><strong>Find, try, and benchmark any MCP server in 2 minutes — without touching a config file.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/chameleon-mcp?color=blue)](https://pypi.org/project/chameleon-mcp/)
@@ -14,36 +14,30 @@
 
 ## The Problem
 
-The [Model Context Protocol](https://modelcontextprotocol.io) is a great standard — but the day-to-day experience of using MCP servers is still painful:
+There are thousands of MCP servers. You have no idea which ones are worth using.
 
-- **You need to know the exact server name** before you can use it
-- **Every new server requires editing a config file** (`mcp.json`) and restarting your AI client
-- **You can only have servers you've pre-configured** — there's no way to discover or try a new one mid-session
-- **Running multiple servers at once bloats your tool list** — your AI sees hundreds of tools it rarely needs, hurting response quality and token efficiency
-- **There's no standard way to run a server from a GitHub repo** — you have to figure out install commands yourself
+Trying even one means: find it, figure out the install command, edit `mcp.json`, restart your client, use it for five minutes, then edit `mcp.json` again to remove it. One server. One at a time. No way to compare, measure, or discover alternatives mid-session.
 
-The result: most people configure 2–3 servers once and never explore further. The ecosystem has thousands of servers, but the tooling makes them inaccessible.
+So most people configure 2–3 servers once and never explore further. The ecosystem has thousands of servers, but the tooling makes evaluation impossible.
 
 ---
 
 ## What Chameleon MCP Does
 
-Chameleon is a **dynamic MCP proxy** — one server you configure once, which can become any other MCP server on demand.
-
-Instead of managing a list of pre-configured servers, you work interactively:
+Chameleon is a **single MCP server you configure once** that can become any other server on demand — and gives you tools to evaluate them properly.
 
 ```
-search("web search")                         → discover what's available
-morph("@modelcontextprotocol/server-brave")  → instantly add those tools
-brave_web_search(query="MCP 2025")           → use them natively
-shed()                                       → remove them when done
+search("web scraping")                            # find candidates across GitHub, npm, PyPI, Smithery
+inspect("@modelcontextprotocol/server-puppeteer") # see tools + schema before committing
+morph("@modelcontextprotocol/server-puppeteer")   # inject those tools live — no restart
+puppeteer_navigate(url="https://example.com")     # use them exactly like native tools
+bench("@modelcontextprotocol/server-puppeteer")   # measure p50/p95 latency and token cost
+shed()                                            # clean removal when done
 ```
 
-No config file edits. No restarts. Your tool list only contains what you're using right now.
+No config edits. No restarts. Search before you install, benchmark before you commit, swap without friction.
 
-The key primitive is `morph()`: it downloads a server's tool definitions and registers them **directly onto Chameleon** via FastMCP's live tool API. After morphing, Claude sees those tools exactly as if the server were configured natively — no wrapper, no extra indirection. `shed()` removes them cleanly.
-
-Chameleon works with servers from any source — GitHub repositories, npm packages, PyPI packages — with no API key required to get started.
+The key primitive is `morph()`: it downloads a server's tool definitions and registers them **directly onto Chameleon** via FastMCP's live tool API. Claude sees those tools exactly as if the server were configured natively — no wrapper, no indirection. `shed()` removes them cleanly.
 
 ---
 
