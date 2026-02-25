@@ -68,34 +68,44 @@ Things I'm uncertain about stylistically:
 
 The project's fundamental design is that it executes arbitrary npm/pip packages. `morph("some-package")` runs `npx -y some-package` as a subprocess. This is intentional and the core value proposition — but it means I need to be honest about the threat model.
 
-**Issues I've already identified:**
+**Fixed before this review:**
 
-### a) Credentials in URL query string (medium)
-`HTTPSSETransport` sends the server config (which may contain API keys) base64-encoded in the URL:
+### ~~b) SSRF in `skill()`~~ — fixed
+`skill()` previously fetched from a `content_url` returned by the Smithery registry API without validation. A tampered registry response could have pointed to internal services. Fixed by adding `_is_safe_url()` which rejects non-HTTPS schemes and private/loopback IPs (`127.x`, `10.x`, `192.168.x`, `169.254.x`, `::1`, `localhost`) before fetching.
+
+### ~~c) `command.split()` in `connect()`~~ — fixed
 ```python
-# transport.py:66-72
-config_b64 = base64.urlsafe_b64encode(json.dumps(config).encode()).decode().rstrip("=")
+# was:
+install_cmd = command.split()
+# now:
+install_cmd = shlex.split(command)
+```
+Handles quoted arguments and paths with spaces correctly.
+
+### ~~`.env` written to package install directory~~ — fixed
+`ENV_PATH` previously resolved relative to the package install location (`site-packages/.env`), meaning `key()` silently wrote credentials to the wrong place on installed builds. Fixed to use `os.getcwd()`, consistent with where `load_dotenv()` reads from.
+
+---
+
+**One remaining known issue (third-party constraint):**
+
+### a) Credentials in URL query string (medium) — cannot fix
+`HTTPSSETransport` sends server config base64-encoded in the URL query string:
+```python
 base_url = f"https://server.smithery.ai/{self.qualified_name}?config={config_b64}"
 ```
-Credentials end up in server access logs, CDN logs, and browser history. Should be in POST body.
+This puts credentials (e.g. `brave_api_key`) in server access logs and CDN logs. However, this is **Smithery's own API protocol** — their server reads configuration from query params by design. We can't move it to the POST body without breaking their transport. Worth flagging to Smithery, but not something we can fix on our side.
 
-### b) SSRF in `skill()` (low-medium)
-`skill()` fetches from a `content_url` field returned by the Smithery registry API. If the registry response is tampered with or a malicious registry is added, the URL could point to internal services.
+---
 
-### c) Naive `command.split()` (low)
-```python
-# tools.py: connect() tool
-install_cmd = command.split()
-```
-Doesn't handle quoted strings or paths with spaces. Should be `shlex.split(command)`.
+**Design-level consideration (not a bug, needs documentation):**
 
-### d) Spawned process privileges (design-level, document not fix)
-Subprocess inherits the full parent environment (all env vars), unrestricted filesystem access, and network access. This is the correct tradeoff for an MCP proxy but needs clear documentation so users understand they're running code from the internet.
+### b) Spawned process privileges
+Subprocesses inherit the full parent environment (all env vars), unrestricted filesystem access, and network access. This is the correct tradeoff for an MCP proxy — it's literally the point — but it needs a clear security model section in the README so users understand they're running code from the internet.
 
 **Questions for the reviewer:**
 - Are there additional attack vectors I'm missing, given that the entry point is an AI model calling tools?
-- Is the SSRF risk in `skill()` actually exploitable given the fetch goes to a fixed trusted registry?
-- Any thoughts on whether spawned processes should be sandboxed (e.g., `firejail`, no-network flag)?
+- Any thoughts on whether spawned processes should be sandboxed (e.g., `firejail`, no-network flag) as an opt-in?
 
 ---
 
