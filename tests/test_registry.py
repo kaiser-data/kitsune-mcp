@@ -475,3 +475,89 @@ class TestPyPIRegistry:
             reg = PyPIRegistry()
             result = await reg.get_server("nonexistent-mcp-pkg")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# GitHubRegistry tests
+# ---------------------------------------------------------------------------
+
+class TestGitHubRegistry:
+    """GitHubRegistry resolves github:owner/repo IDs."""
+
+    async def test_non_github_id_returns_none(self):
+        from server import GitHubRegistry
+        reg = GitHubRegistry()
+        result = await reg.get_server("mcp-server-filesystem")
+        assert result is None
+
+    async def test_invalid_slug_returns_none(self):
+        from server import GitHubRegistry
+        reg = GitHubRegistry()
+        result = await reg.get_server("github:no-slash-here")
+        assert result is None
+
+    async def test_search_always_returns_empty(self):
+        from server import GitHubRegistry
+        reg = GitHubRegistry()
+        results = await reg.search("anything", 10)
+        assert results == []
+
+    async def test_npm_repo_detected_via_package_json(self):
+        from server import GitHubRegistry
+        with respx.mock:
+            respx.get("https://api.github.com/repos/user/my-mcp").mock(
+                return_value=httpx.Response(200, json={"name": "my-mcp", "description": "A test server"})
+            )
+            respx.get("https://api.github.com/repos/user/my-mcp/contents/package.json").mock(
+                return_value=httpx.Response(200, json={"content": ""})
+            )
+            reg = GitHubRegistry()
+            result = await reg.get_server("github:user/my-mcp")
+
+        assert result is not None
+        assert result.source == "github"
+        assert result.transport == "stdio"
+        assert result.install_cmd == ["npx", "github:user/my-mcp"]
+        assert result.name == "my-mcp"
+
+    async def test_pip_repo_detected_via_pyproject_toml(self):
+        import base64
+
+        from server import GitHubRegistry
+        pyproject_content = b"[project.scripts]\nmy-server = \"my_package:main\"\n"
+        encoded = base64.b64encode(pyproject_content).decode()
+        with respx.mock:
+            respx.get("https://api.github.com/repos/user/my-pip-mcp").mock(
+                return_value=httpx.Response(200, json={"name": "my-pip-mcp", "description": "pip server"})
+            )
+            respx.get("https://api.github.com/repos/user/my-pip-mcp/contents/package.json").mock(
+                return_value=httpx.Response(404, text="Not Found")
+            )
+            respx.get("https://api.github.com/repos/user/my-pip-mcp/contents/pyproject.toml").mock(
+                return_value=httpx.Response(200, json={"content": encoded})
+            )
+            reg = GitHubRegistry()
+            result = await reg.get_server("github:user/my-pip-mcp")
+
+        assert result is not None
+        assert result.install_cmd[0] == "uvx"
+        assert "git+https://github.com/user/my-pip-mcp" in result.install_cmd
+        assert "my-server" in result.install_cmd
+
+    async def test_fallback_to_npm_when_no_manifest(self):
+        from server import GitHubRegistry
+        with respx.mock:
+            respx.get("https://api.github.com/repos/user/unknown-mcp").mock(
+                return_value=httpx.Response(200, json={"name": "unknown-mcp", "description": ""})
+            )
+            respx.get("https://api.github.com/repos/user/unknown-mcp/contents/package.json").mock(
+                return_value=httpx.Response(404, text="Not Found")
+            )
+            respx.get("https://api.github.com/repos/user/unknown-mcp/contents/pyproject.toml").mock(
+                return_value=httpx.Response(404, text="Not Found")
+            )
+            reg = GitHubRegistry()
+            result = await reg.get_server("github:user/unknown-mcp")
+
+        assert result is not None
+        assert result.install_cmd == ["npx", "github:user/unknown-mcp"]

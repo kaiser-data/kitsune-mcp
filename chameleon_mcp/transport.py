@@ -494,3 +494,63 @@ class PersistentStdioTransport(BaseTransport):
             session["stats"]["total_calls"] += 1
             session["stats"]["tokens_received"] += tokens_in
             return _truncate(_clean_response(raw))
+
+
+class WebSocketTransport(BaseTransport):
+    """One-shot MCP tool call over WebSocket (ws:// or wss://).
+
+    Requires the 'websockets' package: pip install websockets
+    """
+
+    def __init__(self, url: str):
+        self.url = url
+
+    async def execute(self, tool: str, args: dict, config: dict) -> str:
+        try:
+            import websockets  # type: ignore[import]
+        except ImportError:
+            return "WebSocket transport requires 'websockets': pip install websockets"
+
+        try:
+            async with websockets.connect(self.url, open_timeout=TIMEOUT_STDIO_INIT) as ws:
+                # Initialize handshake
+                await ws.send(json.dumps({
+                    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                    "params": {
+                        "protocolVersion": MCP_PROTOCOL_VERSION,
+                        "clientInfo": MCP_CLIENT_INFO,
+                        "capabilities": {},
+                    },
+                }))
+                await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_STDIO_INIT)
+
+                # Initialized notification
+                await ws.send(json.dumps({
+                    "jsonrpc": "2.0", "method": "notifications/initialized", "params": {},
+                }))
+
+                # Tool call
+                await ws.send(json.dumps({
+                    "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                    "params": {"name": tool, "arguments": args},
+                }))
+                raw = await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_HTTP_TOOL)
+        except Exception as e:
+            return f"WebSocket error ({self.url}): {e}"
+
+        try:
+            msg = json.loads(raw)
+        except Exception:
+            return str(raw)
+
+        if "error" in msg:
+            err = msg["error"]
+            return f"Error {err.get('code', '')}: {err.get('message', str(err))}"
+
+        result = msg.get("result", {})
+        raw_text = _extract_content(result)
+
+        tokens_in = _estimate_tokens(raw_text)
+        session["stats"]["total_calls"] += 1
+        session["stats"]["tokens_received"] += tokens_in
+        return _truncate(_clean_response(raw_text))

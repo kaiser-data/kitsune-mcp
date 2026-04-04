@@ -243,16 +243,93 @@ class PyPIRegistry(BaseRegistry):
         )
 
 
+async def _detect_github_install_cmd(owner: str, repo: str) -> list[str]:
+    """Probe a GitHub repo for package.json vs pyproject.toml to pick npx vs uvx."""
+    import base64 as _b64
+    base_url = f"https://api.github.com/repos/{owner}/{repo}/contents"
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    client = _get_http_client()
+
+    # Check package.json → npm
+    try:
+        r = await client.get(f"{base_url}/package.json", headers=headers, timeout=TIMEOUT_FETCH_URL)
+        if r.status_code == 200:
+            return ["npx", f"github:{owner}/{repo}"]
+    except Exception:
+        pass
+
+    # Check pyproject.toml → pip/uvx; try to extract script name
+    try:
+        r = await client.get(f"{base_url}/pyproject.toml", headers=headers, timeout=TIMEOUT_FETCH_URL)
+        if r.status_code == 200:
+            content = _b64.b64decode(r.json().get("content", "")).decode(errors="replace")
+            m = re.search(r'\[project\.scripts\][^\[]*?\n(\S+)\s*=', content)
+            script = m.group(1).strip("\"'") if m else repo
+            return ["uvx", "--from", f"git+https://github.com/{owner}/{repo}", script]
+    except Exception:
+        pass
+
+    # Fallback: assume npm
+    return ["npx", f"github:{owner}/{repo}"]
+
+
+class GitHubRegistry(BaseRegistry):
+    """Resolve github:owner/repo IDs to installable ServerInfo — no registry search needed."""
+
+    async def search(self, query: str, limit: int) -> list:
+        return []
+
+    async def get_server(self, id: str) -> ServerInfo | None:
+        if not id.startswith("github:"):
+            return None
+        slug = id[len("github:"):]
+        if slug.count("/") != 1:
+            return None
+        owner, repo = slug.split("/", 1)
+        if not owner or not repo:
+            return None
+
+        async def _fetch_meta() -> dict:
+            try:
+                r = await _get_http_client().get(
+                    f"https://api.github.com/repos/{owner}/{repo}",
+                    headers={"Accept": "application/vnd.github.v3+json"},
+                    timeout=TIMEOUT_FETCH_URL,
+                )
+                r.raise_for_status()
+                return r.json()
+            except Exception:
+                return {}
+
+        meta, install_cmd = await asyncio.gather(
+            _fetch_meta(),
+            _detect_github_install_cmd(owner, repo),
+        )
+
+        return ServerInfo(
+            id=id,
+            name=meta.get("name") or repo,
+            description=(meta.get("description") or "").strip()[:MAX_EXPLORE_DESC],
+            source="github",
+            transport="stdio",
+            url="",
+            install_cmd=install_cmd,
+            credentials={},
+            tools=[],
+            token_cost=0,
+        )
+
+
 _CACHE_TTL_SERVER = 300.0   # 5 minutes — server metadata rarely changes
 _CACHE_TTL_SEARCH = 60.0    # 1 minute — search results can shift
 
 
 class MultiRegistry(BaseRegistry):
-    """Fan out to all registries, dedup by name, Official → Smithery → npm priority."""
+    """Fan out to all registries, dedup by name, Official → GitHub → Smithery → npm priority."""
 
     def __init__(self):
         from chameleon_mcp.official_registry import OfficialMCPRegistry
-        self._registries = [OfficialMCPRegistry(), SmitheryRegistry(), NpmRegistry()]
+        self._registries = [OfficialMCPRegistry(), GitHubRegistry(), SmitheryRegistry(), NpmRegistry()]
         self._server_cache: dict[str, tuple] = {}   # id → (ServerInfo|None, expires_at)
         self._search_cache: dict[tuple, tuple] = {} # (query, limit) → (list, expires_at)
 

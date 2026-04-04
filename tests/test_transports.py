@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from server import HTTPSSETransport, StdioTransport
+from server import HTTPSSETransport, StdioTransport, WebSocketTransport
 
 # ---------------------------------------------------------------------------
 # StdioTransport tests
@@ -93,3 +93,67 @@ class TestHTTPSSETransport:
             with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
                 result = await transport.execute("tool", {}, {})
         assert "Timeout" in result or "timeout" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# WebSocketTransport tests
+# ---------------------------------------------------------------------------
+
+class TestWebSocketTransport:
+    """WebSocketTransport sends MCP handshake and tool call over WebSocket."""
+
+    def _make_ws_mock(self, tool_response: dict):
+        """Return an async context manager mock that yields a ws with preset recv() replies."""
+        ws = AsyncMock()
+        init_reply = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "test"}}})
+        tool_reply = json.dumps(tool_response)
+        ws.recv = AsyncMock(side_effect=[init_reply, tool_reply])
+        ws.send = AsyncMock()
+
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=ws)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    async def test_missing_websockets_package_returns_helpful_message(self):
+        transport = WebSocketTransport("ws://localhost:9999")
+        with patch.dict("sys.modules", {"websockets": None}):
+            result = await transport.execute("some_tool", {}, {})
+        assert "websockets" in result.lower()
+
+    async def test_successful_text_response(self):
+        import sys
+        ws_mock_module = MagicMock()
+        tool_resp = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "hello from ws"}]}}
+        cm = self._make_ws_mock(tool_resp)
+        ws_mock_module.connect = MagicMock(return_value=cm)
+
+        transport = WebSocketTransport("ws://localhost:9999")
+        with patch.dict(sys.modules, {"websockets": ws_mock_module}):
+            result = await transport.execute("my_tool", {"arg": "val"}, {})
+
+        assert "hello from ws" in result
+
+    async def test_error_response_returns_error_message(self):
+        import sys
+        ws_mock_module = MagicMock()
+        tool_resp = {"jsonrpc": "2.0", "id": 2, "error": {"code": -32601, "message": "Method not found"}}
+        cm = self._make_ws_mock(tool_resp)
+        ws_mock_module.connect = MagicMock(return_value=cm)
+
+        transport = WebSocketTransport("ws://localhost:9999")
+        with patch.dict(sys.modules, {"websockets": ws_mock_module}):
+            result = await transport.execute("bad_tool", {}, {})
+
+        assert "Method not found" in result
+
+    async def test_connection_error_returns_friendly_message(self):
+        import sys
+        ws_mock_module = MagicMock()
+        ws_mock_module.connect = MagicMock(side_effect=ConnectionRefusedError("refused"))
+
+        transport = WebSocketTransport("ws://localhost:9999")
+        with patch.dict(sys.modules, {"websockets": ws_mock_module}):
+            result = await transport.execute("tool", {}, {})
+
+        assert "WebSocket error" in result

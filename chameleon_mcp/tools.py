@@ -45,6 +45,7 @@ from chameleon_mcp.transport import (
     HTTPSSETransport,
     PersistentStdioTransport,
     StdioTransport,
+    WebSocketTransport,
     _ping,
     _process_pool,
 )
@@ -142,7 +143,7 @@ async def call(
     arguments: dict | None = None,
     config: dict | None = None,
 ) -> str:
-    """Call a tool on an MCP server (remote HTTP or local stdio). Creds auto-loaded from env."""
+    """Call a tool on an MCP server (remote HTTP/WS or local stdio). Creds auto-loaded from env."""
     if arguments is None:
         arguments = {}
     if config is None:
@@ -154,9 +155,13 @@ async def call(
     if missing:
         return _credentials_guide(server_id, credentials, resolved_config)
 
-    if srv and srv.transport == "stdio":
+    if server_id.startswith(("ws://", "wss://")):
+        transport: BaseTransport = WebSocketTransport(server_id)
+    elif srv and srv.transport == "websocket":
+        transport = WebSocketTransport(srv.url)
+    elif srv and srv.transport == "stdio":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport: BaseTransport = StdioTransport(cmd)
+        transport = StdioTransport(cmd)
     else:
         transport = HTTPSSETransport(server_id)
 

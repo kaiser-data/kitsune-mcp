@@ -613,8 +613,8 @@ Claude / AI Agent
 - [x] Official MCP registry integration ([modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers))
 - [x] PyPI registry search (`search(registry="pypi")`)
 - [x] Server health monitoring in `status()` (ping + token savings vs always-on)
-- [ ] GitHub repo as a first-class `server_id` (`github:user/repo`)
-- [ ] WebSocket transport
+- [x] GitHub repo as a first-class `server_id` (`github:owner/repo`)
+- [x] WebSocket transport (`ws://` / `wss://`)
 
 ---
 
