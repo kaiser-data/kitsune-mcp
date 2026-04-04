@@ -138,3 +138,43 @@ class TestCollisionDetection:
         for unique_name in ["unique_tool_xyz", "get_weather", "list_files"]:
             proxy_name = f"{sanitized}_{unique_name}" if unique_name in _BASE_TOOL_NAMES else unique_name
             assert proxy_name == unique_name
+
+
+class TestMorphUsesPersistentTransport:
+    """morph() for stdio servers must use PersistentStdioTransport so processes are pooled."""
+
+    async def test_list_tools_called_on_persistent_transport(self):
+        """_register_proxy_tools receives a PersistentStdioTransport, not StdioTransport."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from server import PersistentStdioTransport, ServerInfo, _registry, morph
+
+        srv = ServerInfo(
+            id="test-org/pool-server", name="pool-server", description="",
+            source="npm", transport="stdio", url="",
+            install_cmd=["npx", "-y", "pool-server"],
+            credentials={}, tools=[], token_cost=0,
+        )
+
+        captured = {}
+
+        def fake_register(server_id, tools, transport, config, base_names=None):
+            captured["transport_type"] = type(transport).__name__
+            return ["pool_tool"]
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
+             patch("chameleon_mcp.tools._register_proxy_tools", side_effect=fake_register), \
+             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockPersistent:
+            mock_transport = MagicMock()
+            mock_transport.list_tools = AsyncMock(return_value=[
+                {"name": "pool_tool", "description": "a tool", "inputSchema": {}}
+            ])
+            MockPersistent.return_value = mock_transport
+
+            await morph("test-org/pool-server", ctx)
+
+        MockPersistent.assert_called_once_with(["npx", "-y", "pool-server"])
+        mock_transport.list_tools.assert_called_once()

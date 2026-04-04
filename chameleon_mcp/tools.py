@@ -492,34 +492,34 @@ async def morph(server_id: str, ctx: Context) -> str:
         ]
         return "\n".join(lines)
 
-    # 2. Get tool list — use registry data if available, else fetch via stdio
-    tools = srv.tools or []
-    if not tools:
-        if srv.transport == "stdio":
-            cmd = srv.install_cmd or ["npx", "-y", server_id]
-            tools = await _fetch_tools_list(cmd)
-        if not tools:
-            return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
-
-    # 3. Drop previous form
+    # 2. Drop previous form early so pool slot is freed before we potentially start a new one
     _do_shed()
 
-    # 4. Resolve credentials
+    # 3. Resolve credentials
     resolved_config, missing = _resolve_config(srv.credentials, {})
     if missing:
         creds_msg = _credentials_guide(server_id, srv.credentials, resolved_config)
         return f"Cannot morph into '{server_id}' — missing credentials:\n\n{creds_msg}"
 
-    # 5. Build transport — use persistent if process already in pool
+    # 4. Build transport and fetch tool list
     if srv.transport == "stdio":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
-        pool_key = json.dumps(cmd, sort_keys=True)
-        if pool_key in _process_pool and _process_pool[pool_key].is_alive():
-            transport = PersistentStdioTransport(cmd)
-        else:
-            transport = StdioTransport(cmd)
+        # Always use PersistentStdioTransport so the process stays alive for subsequent calls.
+        # list_tools() starts the process (or reuses the pool entry) and fetches schemas in one boot.
+        transport: BaseTransport = PersistentStdioTransport(cmd)
+        tools = srv.tools or []
+        if not tools:
+            try:
+                tools = await transport.list_tools()
+            except Exception:
+                tools = []
+        if not tools:
+            return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
     else:
         transport = HTTPSSETransport(server_id)
+        tools = srv.tools or []
+        if not tools:
+            return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
 
     # 6. Register proxy tools, handling name collisions with base tools
     registered = _register_proxy_tools(server_id, tools, transport, resolved_config, _BASE_TOOL_NAMES)
@@ -803,7 +803,7 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
 
     if srv.transport == "stdio":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport_obj: BaseTransport = StdioTransport(cmd)
+        transport_obj: BaseTransport = PersistentStdioTransport(cmd)
     else:
         transport_obj = HTTPSSETransport(server_id)
 
@@ -813,6 +813,7 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
 
     latencies: list[float] = []
     errors: list[str] = []
+    boot_ms: float | None = None  # first call includes process boot — reported separately
 
     for i in range(iterations):
         t0 = time.monotonic()
@@ -824,6 +825,8 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
             _r = result.lower()
             if any(kw in _r for kw in ("error", "auth failed", "failed to connect", "timeout connecting")):
                 errors.append(f"call {i + 1}: tool returned error")
+            elif i == 0 and isinstance(transport_obj, PersistentStdioTransport):
+                boot_ms = elapsed_ms  # exclude boot from latency stats
             else:
                 latencies.append(elapsed_ms)
         except TimeoutError:
@@ -831,8 +834,13 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
         except Exception as e:
             errors.append(f"call {i + 1}: {e!s:.60}")
 
-    if not latencies:
+    if not latencies and boot_ms is None:
         return f"All {iterations} calls failed:\n" + "\n".join(errors)
+
+    # If all calls were boot or only one iteration, fall back to including boot_ms
+    if not latencies and boot_ms is not None:
+        latencies = [boot_ms]
+        boot_ms = None
 
     latencies.sort()
     n = len(latencies)
@@ -842,6 +850,10 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
 
     lines = [
         f"Benchmark: {server_id}/{tool_name} ({n}/{iterations} succeeded)",
+    ]
+    if boot_ms is not None:
+        lines.append(f"  boot:  {boot_ms:.0f}ms (process start, excluded from stats)")
+    lines += [
         f"  p50: {p50:.0f}ms",
         f"  p95: {p95:.0f}ms",
         f"  min: {latencies[0]:.0f}ms",
