@@ -94,7 +94,11 @@ async def search(query: str, registry: str = "all", limit: int = 5) -> str:
 
 @mcp.tool()
 async def inspect(server_id: str) -> str:
-    """Show a server's tools, credentials, and token cost."""
+    """Show a server's tools, credentials, and token cost.
+
+    For stdio servers, fetches live tool schemas from the running process
+    (reuses pool entry if already started, otherwise starts one).
+    """
     srv = await _registry.get_server(server_id)
     if srv is None:
         return f"Server '{server_id}' not found. Use search() to find servers."
@@ -118,21 +122,39 @@ async def inspect(server_id: str) -> str:
         cmd_str = " ".join(srv.install_cmd) if srv.install_cmd else f"npx -y {srv.id}"
         lines += [f"RUN: {cmd_str}", ""]
 
-    if srv.tools:
-        lines.append(f"TOOLS ({len(srv.tools)})")
-        for t in srv.tools:
+    # For stdio: prefer live tool schemas over (potentially stale) registry data
+    tools = srv.tools or []
+    live_source = False
+    if srv.transport == "stdio":
+        cmd = srv.install_cmd or ["npx", "-y", srv.id]
+        try:
+            live_tools = await asyncio.wait_for(
+                PersistentStdioTransport(cmd).list_tools(), timeout=TIMEOUT_STDIO_INIT
+            )
+            if live_tools:
+                tools = live_tools
+                live_source = True
+        except Exception:
+            pass
+
+    if tools:
+        label = "TOOLS (live)" if live_source else "TOOLS"
+        lines.append(f"{label} ({len(tools)})")
+        for t in tools:
             tname = t.get("name", "?")
             tdesc = (t.get("description") or "")[:MAX_INSPECT_DESC]
             params = list((t.get("inputSchema") or {}).get("properties", {}).keys())
             pstr = f"({', '.join(params)})" if params else ""
             lines.append(f"  {tname}{pstr} — {tdesc}")
-        lines.append(f"\nToken cost: ~{srv.token_cost} tokens")
+        token_cost = srv.token_cost or len(json.dumps(tools)) // 4
+        lines.append(f"\nToken cost: ~{token_cost} tokens")
     else:
         lines.append("TOOLS: not listed in registry")
+        token_cost = srv.token_cost
 
     session["explored"][srv.id] = {
         "name": srv.name, "desc": srv.description,
-        "status": "inspected", "token_cost": srv.token_cost,
+        "status": "inspected", "token_cost": token_cost,
     }
     return "\n".join(lines)
 
@@ -164,7 +186,7 @@ async def call(
         transport = WebSocketTransport(srv.url)
     elif srv and srv.transport == "stdio":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport = StdioTransport(cmd)
+        transport = PersistentStdioTransport(cmd)
     else:
         transport = HTTPSSETransport(server_id)
 
@@ -193,7 +215,7 @@ async def run(
         arguments = {}
     cmd = ["uvx", package[4:]] if package.startswith("uvx:") else ["npx", "-y", package]
 
-    transport = StdioTransport(cmd)
+    transport = PersistentStdioTransport(cmd)
     result = await transport.execute(tool_name, arguments, {})
 
     prior = session["grown"].get(package, {"calls": 0})
@@ -425,7 +447,7 @@ async def auto(
     srv = await _registry.get_server(server_id)
     if srv and srv.transport == "stdio":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport: BaseTransport = StdioTransport(cmd)
+        transport: BaseTransport = PersistentStdioTransport(cmd)
     else:
         transport = HTTPSSETransport(server_id)
 
@@ -544,14 +566,34 @@ async def morph(server_id: str, ctx: Context) -> str:
 
 
 @mcp.tool()
-async def shed(ctx: Context) -> str:
-    """Drop current form and remove morphed tools. NOTE: Does NOT kill persistent connections. Use release(name) for that."""
+async def shed(ctx: Context, release: bool = False) -> str:
+    """Drop current form and remove morphed tools.
+
+    release: if True, also kill the underlying process and free RAM immediately.
+             Default False keeps the process pooled for fast re-morph.
+    """
     if not session["morphed_tools"]:
         return "Already in base form."
     form = session["current_form"]
     removed = _do_shed()
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
+
+    if release and form:
+        # Find and kill the pool entry whose install_cmd matches the current form's server
+        killed = []
+        for pool_key, entry in list(_process_pool.items()):
+            # Match by name set during connect(), or by server_id appearing in the command
+            cmd_str = " ".join(entry.install_cmd)
+            if entry.name == form or form in cmd_str or pool_key == form:
+                with contextlib.suppress(Exception):
+                    entry.proc.kill()
+                    await asyncio.wait_for(entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
+                _process_pool.pop(pool_key, None)
+                killed.append(entry.name or entry.install_cmd[0])
+        if killed:
+            return f"Shed '{form}'. Removed: {', '.join(removed)}. Released: {', '.join(killed)}"
+
     return f"Shed '{form}'. Removed: {', '.join(removed)}"
 
 
