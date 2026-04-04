@@ -508,3 +508,104 @@ class TestPoolEviction:
         _evict_stale_pool_entries()
 
         assert len(_process_pool) == POOL_MAX_PROCESSES
+
+
+class TestMidCallReconnect:
+    """PersistentStdioTransport retries once if process dies during a call."""
+
+    def _pool_entry(self, proc):
+        from server import _PoolEntry
+        import asyncio
+        import time
+        return _PoolEntry(proc=proc, install_cmd=["echo"], started_at=time.monotonic())
+
+    async def test_broken_pipe_triggers_reconnect_and_succeeds(self):
+        """BrokenPipeError on stdin.drain() causes transparent reconnect + retry."""
+        import json as _json
+        from unittest.mock import AsyncMock, MagicMock, patch, call as _call
+        from server import PersistentStdioTransport, _process_pool
+
+        # Dead process (raises BrokenPipeError on drain)
+        dead_proc = MagicMock()
+        dead_proc.stdin = MagicMock()
+        dead_proc.stdin.write = MagicMock()
+        dead_proc.stdin.drain = AsyncMock(side_effect=BrokenPipeError)
+        dead_proc.returncode = 1
+        dead_proc.kill = MagicMock()
+        dead_proc.wait = AsyncMock(return_value=1)
+
+        # Fresh process returns a valid tool response
+        tool_msg = _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {
+            "content": [{"type": "text", "text": "recovered"}]
+        }}).encode() + b"\n"
+        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
+            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}
+        }}).encode() + b"\n"
+
+        fresh_proc = MagicMock()
+        fresh_proc.stdin = MagicMock()
+        fresh_proc.stdin.write = MagicMock()
+        fresh_proc.stdin.drain = AsyncMock()
+        fresh_proc.stdin.close = MagicMock()
+        fresh_proc.stdout = MagicMock()
+        fresh_proc.stdout.readline = AsyncMock(side_effect=[init_msg, b"\n", tool_msg, b""])
+        fresh_proc.returncode = None
+        fresh_proc.kill = MagicMock()
+        fresh_proc.wait = AsyncMock(return_value=0)
+
+        cmd = ["test-reconnect-cmd"]
+        transport = PersistentStdioTransport(cmd)
+
+        # Seed pool with dead entry
+        dead_entry = self._pool_entry(dead_proc)
+        _process_pool[transport._pool_key] = dead_entry
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=fresh_proc)):
+            result = await transport.execute("my_tool", {}, {})
+
+        assert "recovered" in result
+
+    async def test_no_response_dead_process_reconnects(self):
+        """None response + dead process triggers reconnect."""
+        import json as _json
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from server import PersistentStdioTransport, _process_pool
+
+        # Proc dies after write (returncode set before read completes)
+        dying_proc = MagicMock()
+        dying_proc.stdin = MagicMock()
+        dying_proc.stdin.write = MagicMock()
+        dying_proc.stdin.drain = AsyncMock()
+        dying_proc.stdin.close = MagicMock()
+        dying_proc.stdout = MagicMock()
+        dying_proc.stdout.readline = AsyncMock(return_value=b"")  # EOF immediately
+        dying_proc.returncode = 1  # already dead
+        dying_proc.kill = MagicMock()
+        dying_proc.wait = AsyncMock(return_value=1)
+
+        tool_msg = _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {
+            "content": [{"type": "text", "text": "after reconnect"}]
+        }}).encode() + b"\n"
+        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
+            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}
+        }}).encode() + b"\n"
+
+        fresh_proc = MagicMock()
+        fresh_proc.stdin = MagicMock()
+        fresh_proc.stdin.write = MagicMock()
+        fresh_proc.stdin.drain = AsyncMock()
+        fresh_proc.stdin.close = MagicMock()
+        fresh_proc.stdout = MagicMock()
+        fresh_proc.stdout.readline = AsyncMock(side_effect=[init_msg, b"\n", tool_msg, b""])
+        fresh_proc.returncode = None
+        fresh_proc.kill = MagicMock()
+        fresh_proc.wait = AsyncMock(return_value=0)
+
+        cmd = ["test-reconnect-noresp"]
+        transport = PersistentStdioTransport(cmd)
+        _process_pool[transport._pool_key] = self._pool_entry(dying_proc)
+
+        with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=fresh_proc)):
+            result = await transport.execute("tool", {}, {})
+
+        assert "after reconnect" in result

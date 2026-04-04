@@ -559,12 +559,27 @@ async def shed(ctx: Context) -> str:
 async def connect(command: str, name: str = "", timeout: int = 60, inherit_stderr: bool = True) -> str:
     """Connect a persistent MCP server. Process stays alive between calls.
 
-    command: shell command string, e.g. 'uvx voice-mode' or 'npx -y mcp-server-xyz'
-    name: friendly name for release(), e.g. 'voice'
+    command: server_id (e.g. 'filesystem', '@modelcontextprotocol/server-filesystem')
+             OR shell command string (e.g. 'uvx voice-mode', 'npx -y mcp-server-xyz')
+    name: friendly name for release(), e.g. 'voice' (defaults to server name or first token)
     timeout: startup timeout in seconds (default 60)
     inherit_stderr: forward subprocess stderr to terminal (default True)
     """
-    install_cmd = shlex.split(command)
+    # Detect server_id vs shell command: if it has no spaces and doesn't start with a
+    # known executor, try registry lookup first.
+    _EXECUTORS = ("npx", "uvx", "node", "python", "python3", "uv", "deno", "docker")
+    looks_like_cmd = " " in command or command.split()[0] in _EXECUTORS
+    install_cmd: list[str] | None = None
+
+    if not looks_like_cmd:
+        srv = await _registry.get_server(command)
+        if srv and srv.install_cmd:
+            install_cmd = srv.install_cmd
+            if not name:
+                name = srv.name or command
+
+    if install_cmd is None:
+        install_cmd = shlex.split(command)
     pool_key = json.dumps(install_cmd, sort_keys=True)
     friendly = name or install_cmd[0]
 

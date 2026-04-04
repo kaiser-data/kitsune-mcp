@@ -213,3 +213,60 @@ class TestSkillPersistence:
         session["skills"].clear()
         _load_skills()  # should not raise
         assert session["skills"] == {}
+
+
+class TestConnectServerIdResolution:
+    """connect() resolves server_id via registry when no spaces/executor prefix."""
+
+    async def test_server_id_resolves_install_cmd(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+        import json as _json
+        from server import ServerInfo, _registry, connect, _process_pool
+
+        srv = ServerInfo(
+            id="filesystem", name="filesystem", description="",
+            source="official", transport="stdio", url="",
+            install_cmd=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+            credentials={}, tools=[], token_cost=0,
+        )
+
+        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
+            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "fs", "version": "1"}
+        }}).encode() + b"\n"
+
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.write = MagicMock()
+        mock_proc.stdin.drain = AsyncMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.readline = AsyncMock(side_effect=[
+            init_msg,
+            _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {"tools": []}}).encode() + b"\n",
+            _json.dumps({"jsonrpc": "2.0", "id": 4, "result": {"resources": []}}).encode() + b"\n",
+            b"",
+        ])
+        mock_proc.returncode = None
+        mock_proc.kill = MagicMock()
+        mock_proc.wait = AsyncMock(return_value=0)
+
+        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
+             patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+            result = await connect("filesystem", name="fs")
+
+        assert "Connected" in result or "Already" in result
+        # The resolved install_cmd must have been used — pool key reflects it
+        import json
+        expected_key = json.dumps(["npx", "-y", "@modelcontextprotocol/server-filesystem"], sort_keys=True)
+        assert expected_key in _process_pool
+
+    async def test_shell_command_bypasses_registry(self):
+        """'npx -y something' should NOT hit the registry."""
+        from unittest.mock import AsyncMock, patch
+        from server import _registry, connect
+
+        with patch.object(_registry, "get_server", AsyncMock()) as mock_get, \
+             patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
+            await connect("npx -y some-package")
+
+        mock_get.assert_not_called()

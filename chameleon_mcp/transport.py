@@ -456,44 +456,66 @@ class PersistentStdioTransport(BaseTransport):
         except RuntimeError as e:
             return str(e)
 
-        async with entry.lock:
-            if not entry.is_alive():
-                # Auto-reconnect once
+        for attempt in range(2):  # one retry on mid-call process death
+            async with entry.lock:
+                if not entry.is_alive():
+                    try:
+                        entry = await self._start_process()
+                    except RuntimeError as e:
+                        return f"Reconnect failed: {e}"
+
+                msg_id = entry.next_id
+                entry.next_id += 1
+
                 try:
-                    entry = await self._start_process()
-                except RuntimeError as e:
-                    return f"Reconnect failed: {e}"
+                    entry.proc.stdin.write(self._frame({
+                        "jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
+                        "params": {"name": tool, "arguments": args},
+                    }))
+                    await entry.proc.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    if attempt == 0:
+                        # Process died mid-write — evict and retry
+                        with contextlib.suppress(Exception):
+                            entry.proc.kill()
+                        _process_pool.pop(self._pool_key, None)
+                        try:
+                            entry = await self._start_process()
+                        except RuntimeError as e:
+                            return f"Reconnect failed: {e}"
+                        continue
+                    return f"Failed to send to {self.install_cmd[0]} after reconnect"
+                except Exception as e:
+                    return f"Failed to send to {self.install_cmd[0]}: {e}"
 
-            msg_id = entry.next_id
-            entry.next_id += 1
+                tool_resp = await StdioTransport._read_response(
+                    entry.proc.stdout, expected_id=msg_id, timeout=TIMEOUT_STDIO_TOOL
+                )
+                if tool_resp is None:
+                    if attempt == 0 and not entry.is_alive():
+                        # Process died while we were waiting — retry once
+                        _process_pool.pop(self._pool_key, None)
+                        try:
+                            entry = await self._start_process()
+                        except RuntimeError as e:
+                            return f"Reconnect failed: {e}"
+                        continue
+                    return f"No response from {self.install_cmd[0]} for tool '{tool}'"
+                if "error" in tool_resp:
+                    err = tool_resp["error"]
+                    return f"Tool error: {err.get('message', json.dumps(err))}"
 
-            try:
-                entry.proc.stdin.write(self._frame({
-                    "jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
-                    "params": {"name": tool, "arguments": args},
-                }))
-                await entry.proc.stdin.drain()
-            except Exception as e:
-                return f"Failed to send to {self.install_cmd[0]}: {e}"
+                entry.call_count += 1
+                entry.last_used_at = time.monotonic()
+                result = tool_resp.get("result", {})
+                raw = _extract_content(result)
 
-            tool_resp = await StdioTransport._read_response(
-                entry.proc.stdout, expected_id=msg_id, timeout=TIMEOUT_STDIO_TOOL
-            )
-            if tool_resp is None:
-                return f"No response from {self.install_cmd[0]} for tool '{tool}'"
-            if "error" in tool_resp:
-                err = tool_resp["error"]
-                return f"Tool error: {err.get('message', json.dumps(err))}"
+                tokens_in = _estimate_tokens(raw)
+                session["stats"]["total_calls"] += 1
+                session["stats"]["tokens_received"] += tokens_in
+                return _truncate(_clean_response(raw))
 
-            entry.call_count += 1
-            entry.last_used_at = time.monotonic()
-            result = tool_resp.get("result", {})
-            raw = _extract_content(result)
-
-            tokens_in = _estimate_tokens(raw)
-            session["stats"]["total_calls"] += 1
-            session["stats"]["tokens_received"] += tokens_in
-            return _truncate(_clean_response(raw))
+        return f"Failed to call '{tool}' after reconnect"  # unreachable but satisfies type checker
 
 
 class WebSocketTransport(BaseTransport):
