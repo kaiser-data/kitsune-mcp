@@ -347,7 +347,7 @@ FastMCP provides the right primitives — `mcp.add_tool()`, `mcp.remove_tool()`,
 |---|:---:|:---:|
 | Proxy a known HTTP/SSE server | ✅ | ✅ |
 | Mount another server's tools at runtime | ✅ (write code) | ✅ `morph()` |
-| Search registries to discover servers | ❌ | ✅ npm + Smithery |
+| Search registries to discover servers | ❌ | ✅ npm · official · Glama · Smithery |
 | Install npm / PyPI / GitHub packages on demand | ❌ | ✅ |
 | Atomic shed — retract all morphed tools at once | ❌ | ✅ `shed()` |
 | Persistent stdio process pool | ❌ | ✅ |
