@@ -9,7 +9,7 @@ from chameleon_mcp.constants import (
     OFFICIAL_REGISTRY_CACHE_TTL,
     TIMEOUT_FETCH_URL,
 )
-from chameleon_mcp.registry import BaseRegistry, ServerInfo
+from chameleon_mcp.registry import BaseRegistry, ServerInfo, TTLCache, _simple_search
 from chameleon_mcp.utils import _get_http_client
 
 # ---------------------------------------------------------------------------
@@ -74,8 +74,7 @@ _SEED_BY_ID: dict[str, dict] = {s["id"]: s for s in _SEED_SERVERS}
 # Live fetch cache — GitHub directory listing to pick up new servers
 # ---------------------------------------------------------------------------
 
-_live_cache: list[ServerInfo] | None = None
-_live_cache_expires: float = 0.0
+_live_cache: TTLCache[list[ServerInfo]] = TTLCache(OFFICIAL_REGISTRY_CACHE_TTL)
 
 _GITHUB_SRC_API = "https://api.github.com/repos/modelcontextprotocol/servers/contents/src"
 
@@ -97,10 +96,9 @@ def _server_from_seed(entry: dict) -> ServerInfo:
 
 async def _fetch_live_servers() -> list[ServerInfo]:
     """Try to fetch the src/ directory listing from GitHub and extend the seed list."""
-    global _live_cache, _live_cache_expires
-    now = time.monotonic()
-    if _live_cache is not None and now < _live_cache_expires:
-        return _live_cache
+    cached = _live_cache.get()
+    if cached is not None:
+        return cached
 
     try:
         r = await _get_http_client().get(
@@ -152,8 +150,7 @@ async def _fetch_live_servers() -> list[ServerInfo]:
         ))
         seen_ids.add(pkg_id)
 
-    _live_cache = servers
-    _live_cache_expires = now + OFFICIAL_REGISTRY_CACHE_TTL
+    _live_cache.set(servers)
     return servers
 
 
@@ -161,14 +158,7 @@ class OfficialMCPRegistry(BaseRegistry):
     """Registry of reference servers from github.com/modelcontextprotocol/servers."""
 
     async def search(self, query: str, limit: int) -> list[ServerInfo]:
-        servers = await _fetch_live_servers()
-        if not query:
-            return servers[:limit]
-        q = query.lower()
-        return [
-            s for s in servers
-            if q in s.name.lower() or q in s.description.lower() or q in s.id.lower()
-        ][:limit]
+        return _simple_search(await _fetch_live_servers(), query, limit)
 
     async def get_server(self, id: str) -> ServerInfo | None:
         # Check seed list first (instant, no network)

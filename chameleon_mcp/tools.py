@@ -59,6 +59,52 @@ from chameleon_mcp.utils import (
     _try_axonmcp,
 )
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _get_transport(server_id: str, srv) -> "BaseTransport":
+    """Select the right transport for a server_id + optional ServerInfo."""
+    if server_id.startswith("docker:"):
+        return DockerTransport(server_id[len("docker:"):])
+    if server_id.startswith(("ws://", "wss://")):
+        return WebSocketTransport(server_id)
+    if srv is not None and getattr(srv, "transport", None) == "websocket":
+        return WebSocketTransport(srv.url)
+    if srv is not None and getattr(srv, "transport", None) == "stdio":
+        cmd = srv.install_cmd or ["npx", "-y", server_id]
+        return PersistentStdioTransport(cmd)
+    if srv is not None and getattr(srv, "transport", None) == "http":
+        return HTTPSSETransport(srv.url or server_id)
+    return HTTPSSETransport(server_id)
+
+
+def _extract_tool_schema(tool: dict) -> tuple[dict, set]:
+    """Return (properties, required_set) from a tool's inputSchema."""
+    schema = tool.get("inputSchema") or {}
+    return schema.get("properties") or {}, set(schema.get("required") or [])
+
+
+async def _fetch_resource_docs(transport: "BaseTransport") -> str:
+    """Fetch high-priority resource docs from a transport (best-effort)."""
+    try:
+        resources = await asyncio.wait_for(
+            transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST
+        )
+        all_uris = [r["uri"] for r in resources]
+        doc_uris = sorted(
+            (u for u in all_uris if _doc_uri_priority(u) < len(RESOURCE_PRIORITY_KEYWORDS)),
+            key=_doc_uri_priority,
+        )[:MAX_RESOURCE_DOCS]
+        parts = await asyncio.gather(
+            *[asyncio.wait_for(transport.read_resource(u), timeout=TIMEOUT_RESOURCE_READ) for u in doc_uris],
+            return_exceptions=True,
+        )
+        return "\n".join(p for p in parts if isinstance(p, str))
+    except Exception:
+        return ""
+
+
 # Base tool names — used for collision detection in morph()
 _BASE_TOOL_NAMES = {
     "search", "inspect", "call", "run", "fetch",
@@ -193,18 +239,7 @@ async def call(
     if missing:
         return _credentials_guide(server_id, credentials, resolved_config)
 
-    if server_id.startswith("docker:"):
-        transport: BaseTransport = DockerTransport(server_id[len("docker:"):])
-    elif server_id.startswith(("ws://", "wss://")):
-        transport = WebSocketTransport(server_id)
-    elif srv and srv.transport == "websocket":
-        transport = WebSocketTransport(srv.url)
-    elif srv and srv.transport == "stdio":
-        cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport = PersistentStdioTransport(cmd)
-    else:
-        transport = HTTPSSETransport(server_id)
-
+    transport: BaseTransport = _get_transport(server_id, srv)
     result = await transport.execute(tool_name, arguments, resolved_config)
 
     prior = session["grown"].get(server_id, {"calls": 0})
@@ -489,12 +524,7 @@ async def auto(
                 ])
 
     srv = await _registry.get_server(server_id)
-    if srv and srv.transport == "stdio":
-        cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport: BaseTransport = PersistentStdioTransport(cmd)
-    else:
-        transport = HTTPSSETransport(server_id)
-
+    transport: BaseTransport = _get_transport(server_id, srv)
     result = await transport.execute(tool_name, arguments, resolved_config)
 
     prior = session["grown"].get(server_id, {"calls": 0})
@@ -698,22 +728,7 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
     tools = await transport.list_tools()
     tool_names = [t.get("name", "?") for t in tools]
 
-    # Fetch resource docs to enrich requirement probing (best-effort, short timeout)
-    resource_text = ""
-    try:
-        resources = await asyncio.wait_for(transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST)
-        all_doc_uris = [r["uri"] for r in resources]
-        doc_uris = sorted(
-            (u for u in all_doc_uris if _doc_uri_priority(u) < len(RESOURCE_PRIORITY_KEYWORDS)),
-            key=_doc_uri_priority,
-        )[:MAX_RESOURCE_DOCS]
-        parts = await asyncio.gather(
-            *[asyncio.wait_for(transport.read_resource(u), timeout=TIMEOUT_RESOURCE_READ) for u in doc_uris],
-            return_exceptions=True,
-        )
-        resource_text = "\n".join(p for p in parts if isinstance(p, str))
-    except Exception:
-        pass
+    resource_text = await _fetch_resource_docs(transport)
 
     # Update session connections
     session["connections"][pool_key] = {
@@ -849,21 +864,17 @@ async def test(server_id: str, level: str = "basic") -> str:
         call_score = 0
         resolved_config, _ = _resolve_config(srv.credentials, {})
         # Build one transport for the full-mode run — reuse pool entry across all tool calls
-        if srv.transport == "stdio":
-            cmd = srv.install_cmd or ["npx", "-y", server_id]
-            transport_obj: BaseTransport = PersistentStdioTransport(cmd)
-        else:
-            transport_obj = HTTPSSETransport(server_id)
+        transport_obj: BaseTransport = _get_transport(server_id, srv)
         for t in tools[:5]:
             tname = t.get("name", "")
-            # Build minimal dummy args
-            props = (t.get("inputSchema") or {}).get("properties", {})
-            required = set((t.get("inputSchema") or {}).get("required", []))
-            dummy_args = {}
-            for pname, pschema in props.items():
-                if pname in required:
-                    ptype = pschema.get("type", "string")
-                    dummy_args[pname] = {"string": "test", "integer": 0, "boolean": False, "number": 0.0}.get(ptype, "test")
+            props, required = _extract_tool_schema(t)
+            dummy_args = {
+                pname: {"string": "test", "integer": 0, "boolean": False, "number": 0.0}.get(
+                    pschema.get("type", "string"), "test"
+                )
+                for pname, pschema in props.items()
+                if pname in required
+            }
 
             try:
                 result = await asyncio.wait_for(
@@ -907,12 +918,7 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
     if srv is None:
         return f"Server '{server_id}' not found. Use search() to find servers."
 
-    if srv.transport == "stdio":
-        cmd = srv.install_cmd or ["npx", "-y", server_id]
-        transport_obj: BaseTransport = PersistentStdioTransport(cmd)
-    else:
-        transport_obj = HTTPSSETransport(server_id)
-
+    transport_obj: BaseTransport = _get_transport(server_id, srv)
     resolved_config, missing = _resolve_config(srv.credentials, {})
     if missing:
         return _credentials_guide(server_id, srv.credentials, resolved_config)
@@ -1082,22 +1088,7 @@ async def setup(name: str) -> str:
     transport = PersistentStdioTransport(install_cmd)
     tools = await transport.list_tools()
 
-    resource_text = ""
-    try:
-        resources = await asyncio.wait_for(transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST)
-        all_doc_uris = [r["uri"] for r in resources]
-        doc_uris = sorted(
-            (u for u in all_doc_uris if _doc_uri_priority(u) < len(RESOURCE_PRIORITY_KEYWORDS)),
-            key=_doc_uri_priority,
-        )[:MAX_RESOURCE_DOCS]
-        parts = await asyncio.gather(
-            *[asyncio.wait_for(transport.read_resource(u), timeout=TIMEOUT_RESOURCE_READ) for u in doc_uris],
-            return_exceptions=True,
-        )
-        resource_text = "\n".join(p for p in parts if isinstance(p, str))
-    except Exception:
-        pass
-
+    resource_text = await _fetch_resource_docs(transport)
     reqs = _probe_requirements(tools, resource_text)
     guide = _format_setup_guide(reqs, name, tools=tools)
 

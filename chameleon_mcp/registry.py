@@ -3,6 +3,9 @@ import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Any, Generic, TypeVar
+
+_T = TypeVar("_T")
 
 from chameleon_mcp.constants import (
     GLAMA_REGISTRY_TTL,
@@ -16,6 +19,39 @@ from chameleon_mcp.credentials import _registry_headers, _smithery_available
 from chameleon_mcp.utils import _estimate_tokens, _get_http_client
 
 REGISTRY_BASE = "https://registry.smithery.ai"
+
+
+class TTLCache(Generic[_T]):
+    """Simple time-to-live cache for a single value."""
+
+    __slots__ = ("_ttl", "_data", "_expires")
+
+    def __init__(self, ttl: float) -> None:
+        self._ttl = ttl
+        self._data: _T | None = None
+        self._expires: float = 0.0
+
+    def get(self) -> _T | None:
+        return self._data if time.monotonic() < self._expires else None
+
+    def set(self, data: _T) -> None:
+        self._data = data
+        self._expires = time.monotonic() + self._ttl
+
+    def clear(self) -> None:
+        self._data = None
+        self._expires = 0.0
+
+
+def _simple_search(servers: list["ServerInfo"], query: str, limit: int) -> list["ServerInfo"]:
+    """Substring filter across name/description/id — used by registries that lack server-side search."""
+    if not query:
+        return servers[:limit]
+    q = query.lower()
+    return [
+        s for s in servers
+        if q in s.name.lower() or q in s.description.lower() or q in s.id.lower()
+    ][:limit]
 
 
 @dataclass
@@ -459,8 +495,7 @@ def _relevance_score(srv: ServerInfo, query: str) -> float:
 class McpRegistryIO(BaseRegistry):
     """Official MCP Protocol registry at registry.modelcontextprotocol.io — no auth required."""
 
-    _cache: list[ServerInfo] | None = None
-    _cache_expires: float = 0.0
+    _cache: TTLCache[list[ServerInfo]] = TTLCache(MCP_REGISTRY_IO_TTL)
 
     @classmethod
     def _install_cmd(cls, server: dict) -> list[str]:
@@ -512,9 +547,9 @@ class McpRegistryIO(BaseRegistry):
         )
 
     async def _all_servers(self) -> list[ServerInfo]:
-        now = time.monotonic()
-        if self._cache is not None and now < self._cache_expires:
-            return self._cache
+        cached = self._cache.get()
+        if cached is not None:
+            return cached
 
         servers: list[ServerInfo] = []
         cursor: str | None = None
@@ -537,19 +572,11 @@ class McpRegistryIO(BaseRegistry):
             if not cursor:
                 break
 
-        McpRegistryIO._cache = servers
-        McpRegistryIO._cache_expires = now + MCP_REGISTRY_IO_TTL
+        McpRegistryIO._cache.set(servers)
         return servers
 
     async def search(self, query: str, limit: int) -> list[ServerInfo]:
-        servers = await self._all_servers()
-        if not query:
-            return servers[:limit]
-        q = query.lower()
-        return [
-            s for s in servers
-            if q in s.name.lower() or q in s.description.lower() or q in s.id.lower()
-        ][:limit]
+        return _simple_search(await self._all_servers(), query, limit)
 
     async def get_server(self, id: str) -> ServerInfo | None:
         servers = await self._all_servers()
@@ -559,8 +586,7 @@ class McpRegistryIO(BaseRegistry):
 class GlamaRegistry(BaseRegistry):
     """Glama MCP server directory — no auth required."""
 
-    _cache: list[ServerInfo] | None = None
-    _cache_expires: float = 0.0
+    _cache: TTLCache[list[ServerInfo]] = TTLCache(GLAMA_REGISTRY_TTL)
 
     @classmethod
     def _to_server_info(cls, entry: dict) -> ServerInfo | None:
@@ -599,9 +625,9 @@ class GlamaRegistry(BaseRegistry):
         )
 
     async def _all_servers(self) -> list[ServerInfo]:
-        now = time.monotonic()
-        if self._cache is not None and now < self._cache_expires:
-            return self._cache
+        cached = self._cache.get()
+        if cached is not None:
+            return cached
 
         servers: list[ServerInfo] = []
         cursor: str | None = None
@@ -627,8 +653,7 @@ class GlamaRegistry(BaseRegistry):
             if not cursor:
                 break
 
-        GlamaRegistry._cache = servers
-        GlamaRegistry._cache_expires = now + GLAMA_REGISTRY_TTL
+        GlamaRegistry._cache.set(servers)
         return servers
 
     async def search(self, query: str, limit: int) -> list[ServerInfo]:

@@ -384,8 +384,7 @@ class TestOfficialMCPRegistry:
         import chameleon_mcp.official_registry as oreg
         from server import OfficialMCPRegistry
         # Reset cache so the live fetch runs
-        oreg._live_cache = None
-        oreg._live_cache_expires = 0.0
+        oreg._live_cache.clear()
         reg = OfficialMCPRegistry()
         with respx.mock:
             respx.get("https://api.github.com/repos/modelcontextprotocol/servers/contents/src").mock(
@@ -720,8 +719,7 @@ class TestMcpRegistryIO:
     async def test_search_returns_servers(self):
         import chameleon_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache = None
-        reg_mod.McpRegistryIO._cache_expires = 0.0
+        reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -734,8 +732,7 @@ class TestMcpRegistryIO:
     async def test_npm_package_gets_npx_install_cmd(self):
         import chameleon_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache = None
-        reg_mod.McpRegistryIO._cache_expires = 0.0
+        reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -748,8 +745,7 @@ class TestMcpRegistryIO:
     async def test_pypi_package_gets_uvx_install_cmd(self):
         import chameleon_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache = None
-        reg_mod.McpRegistryIO._cache_expires = 0.0
+        reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -762,8 +758,7 @@ class TestMcpRegistryIO:
     async def test_credentials_extracted_from_env_vars(self):
         import chameleon_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache = None
-        reg_mod.McpRegistryIO._cache_expires = 0.0
+        reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -776,8 +771,7 @@ class TestMcpRegistryIO:
     async def test_http_error_returns_empty(self):
         import chameleon_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache = None
-        reg_mod.McpRegistryIO._cache_expires = 0.0
+        reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(503, text="Unavailable")
