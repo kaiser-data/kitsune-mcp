@@ -479,8 +479,9 @@ This writes the value to `.env` in the current directory and loads it into the r
 
 | Tool | Description |
 |---|---|
-| `morph(server_id, config)` | Take the form of a server — its tools are registered directly on Chameleon and callable by name. Replaces the current form if one is active. |
+| `morph(server_id, tools)` | Take the form of a server — its tools are registered directly on Chameleon and callable by name. Replaces the current form if one is active. Pass `tools=["read_file", "write_file"]` to register only those tools (lean morph — keeps token count low). |
 | `shed(release)` | Drop the current form and remove its tools. `release=True` also kills the underlying process and frees RAM immediately; default `False` keeps it pooled for fast re-morph. |
+| `craft(name, description, params, url, method, headers)` | Define a custom tool backed by your own HTTP endpoint — it appears live in the session immediately. POST sends args as JSON body; GET sends as query string. Optional `headers` for auth. `shed()` removes crafted tools. |
 
 ### Persistent connections
 
@@ -616,6 +617,35 @@ puppeteer_navigate(url="https://example.com")
 shed(release=True)   ← kills the Chromium process immediately, frees ~200MB
 ```
 
+### Lean morph — only the tools you need
+
+```
+# A filesystem server has 10+ tools. You only need two.
+morph("@modelcontextprotocol/server-filesystem", tools=["read_file", "list_directory"])
+# Only those two tools appear — token overhead stays minimal
+read_file(path="/tmp/notes.txt")
+shed()
+```
+
+### craft() — prototype a tool against your own endpoint
+
+```
+# Define a tool that calls your local ranking service
+craft(
+    name="my_ranker",
+    description="Rank search results by relevance",
+    params={
+        "results": {"type": "array", "description": "list of results"},
+        "query":   {"type": "string", "description": "original query"}
+    },
+    url="http://localhost:8080/rank"
+)
+# my_ranker now appears live — call it directly
+my_ranker(results=[...], query="MCP servers")
+# Iterate on your endpoint, re-craft to hot-swap, shed() when done
+shed()
+```
+
 ---
 
 ## Architecture
@@ -627,21 +657,22 @@ Claude / AI Agent
   Chameleon MCP (server.py — entry point)
        │
        ├── chameleon_mcp/
-       │     ├── registry.py         ── MultiRegistry → OfficialMCPRegistry, SmitheryRegistry, NpmRegistry, PyPIRegistry
+       │     ├── registry.py         ── MultiRegistry → OfficialMCPRegistry, McpRegistryIO, GlamaRegistry, SmitheryRegistry, NpmRegistry, PyPIRegistry
        │     ├── official_registry.py── reference servers from modelcontextprotocol/servers (seed + GitHub API)
-       │     ├── transport.py        ── HTTPSSETransport, StdioTransport, PersistentStdioTransport, DockerTransport
+       │     ├── transport.py        ── HTTPSSETransport, StdioTransport, PersistentStdioTransport, DockerTransport, WebSocketTransport
        │     ├── morph.py            ── live tool registration via FastMCP.add_tool / remove_tool
        │     ├── probe.py            ── env var detection, OAuth, schema creds, setup guide generation
        │     ├── credentials.py      ── .env I/O, config resolution
-       │     └── tools.py            ── all 16 @mcp.tool() definitions
+       │     └── tools.py            ── all 17 @mcp.tool() definitions
        │
        ├── OfficialMCPRegistry ──► github.com/modelcontextprotocol/servers  (no auth, 24h cache)
        ├── McpRegistryIO       ──► registry.modelcontextprotocol.io  (no auth, 1h cache)
+       ├── GlamaRegistry       ──► glama.ai/mcp/servers  (no auth, 1h cache)
        ├── GitHub repos        ──► npx github:user/repo  /  uvx --from git+https://...
        ├── SmitheryRegistry    ──► registry.smithery.ai  (optional, requires API key)
-       ├── GlamaRegistry       ──► glama.ai/mcp/servers  (no auth, 1h cache)
        ├── NpmRegistry         ──► registry.npmjs.org  (no auth required)
-       └── PyPIRegistry        ──► pypi.org  (no auth required)
+       ├── PyPIRegistry        ──► pypi.org  (no auth required)
+       └── craft()             ──► any HTTP/HTTPS endpoint you control (POST or GET)
 ```
 
 ---
@@ -669,6 +700,8 @@ Claude / AI Agent
 - [x] auto() smart tool selection — search → pick server → pick tool → call in one step
 - [x] shed(release=True) — precise pool key tracking, instant RAM release
 - [x] inspect() shows live tool schemas from running processes
+- [x] craft() — endpoint-backed custom tools, live prototype against any HTTP server
+- [x] morph(tools=[...]) — lean morph, register only the tools you need
 
 ---
 
