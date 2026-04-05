@@ -115,17 +115,7 @@ _BASE_TOOL_NAMES = {
 
 @mcp.tool()
 async def search(query: str, registry: str = "all", limit: int = 5) -> str:
-    """Search for MCP servers.
-
-    registry: 'all' (default) | 'official' | 'mcpregistry' | 'smithery' | 'glama' | 'npm' | 'pypi'
-      all         — fan-out across all registries, deduplicated and ranked
-      official    — modelcontextprotocol/servers reference implementations (no auth)
-      mcpregistry — registry.modelcontextprotocol.io (official MCP protocol registry, no auth)
-      smithery    — smithery.ai (requires SMITHERY_API_KEY)
-      glama       — glama.ai community directory (no auth)
-      npm         — npmjs.com packages
-      pypi        — PyPI packages (installed via uvx)
-    """
+    """Search MCP servers. registry: all|official|mcpregistry|glama|npm|smithery|pypi"""
     if registry == "smithery":
         reg = SmitheryRegistry()
     elif registry == "npm":
@@ -155,11 +145,7 @@ async def search(query: str, registry: str = "all", limit: int = 5) -> str:
 
 @mcp.tool()
 async def inspect(server_id: str) -> str:
-    """Show a server's tools, credentials, and token cost.
-
-    For stdio servers, fetches live tool schemas from the running process
-    (reuses pool entry if already started, otherwise starts one).
-    """
+    """Show server tools, schemas, and required credentials."""
     srv = await _registry.get_server(server_id)
     if srv is None:
         return f"Server '{server_id}' not found. Use search() to find servers."
@@ -257,10 +243,7 @@ async def run(
     tool_name: str,
     arguments: dict | None = None,
 ) -> str:
-    """Run a tool from a local npm/pip package directly (no registry lookup).
-
-    package: npm name (npx) or 'uvx:package-name' for Python uv packages.
-    """
+    """Run a tool from npm/pip. package: 'pkg-name' (npx) or 'uvx:pkg-name' (Python)."""
     if arguments is None:
         arguments = {}
     cmd = ["uvx", package[4:]] if package.startswith("uvx:") else ["npx", "-y", package]
@@ -328,11 +311,7 @@ def _is_safe_url(url: str) -> bool:
 
 @mcp.tool()
 async def skill(qualified_name: str, forget: bool = False) -> str:
-    """Inject a Smithery skill into context. Skills are persisted across sessions.
-
-    qualified_name: Smithery skill ID (e.g. 'org/skill-name')
-    forget: if True, remove the skill from context and disk instead of injecting it
-    """
+    """Load a Smithery skill into context. forget=True removes it."""
     # --- forget / uninstall ---
     if forget:
         if qualified_name in session["skills"]:
@@ -436,7 +415,7 @@ async def auto(
     server_hint: str = "",
     keys: dict | None = None,
 ) -> str:
-    """Auto-discover and call the best server for a task. Full pipeline in one call."""
+    """Search → pick best server → call tool in one step."""
     if arguments is None:
         arguments = {}
     if keys is None:
@@ -538,12 +517,7 @@ async def auto(
 
 @mcp.tool()
 async def morph(server_id: str, ctx: Context, tools: list[str] | None = None) -> str:
-    """Take a server's form — register its tools directly.
-
-    tools: optional list of tool names to register (lean morph).
-           e.g. tools=["read_file", "write_file"] — only those two appear.
-           Omit to register all tools.
-    """
+    """Become a server — inject its tools live. tools=[...] for lean morph (fewer tokens)."""
     # 1. Check pool connections first (friendly names from connect() take priority)
     pool_conn = None
     for _pk, conn in session["connections"].items():
@@ -652,11 +626,7 @@ async def morph(server_id: str, ctx: Context, tools: list[str] | None = None) ->
 
 @mcp.tool()
 async def shed(ctx: Context, release: bool = False) -> str:
-    """Drop current form and remove morphed tools.
-
-    release: if True, also kill the underlying process and free RAM immediately.
-             Default False keeps the process pooled for fast re-morph.
-    """
+    """Remove morphed tools. release=True kills the process and frees RAM immediately."""
     if not session["morphed_tools"]:
         return "Already in base form."
     form = session["current_form"]
@@ -694,19 +664,7 @@ async def craft(
     method: str = "POST",
     headers: dict | None = None,
 ) -> str:
-    """Define a custom tool backed by your own HTTP endpoint — appears live immediately.
-
-    name:        tool name (e.g. "my_ranker")
-    description: what the tool does
-    params:      JSON Schema properties dict, e.g.
-                 {"query": {"type": "string", "description": "search query"},
-                  "limit": {"type": "integer", "description": "max results"}}
-    url:         your endpoint (e.g. "http://localhost:8080/rank")
-    method:      HTTP method — POST (default, args as JSON body) or GET (args as query string)
-    headers:     optional dict of request headers, e.g. {"Authorization": "Bearer sk-..."}
-
-    shed() removes crafted tools alongside morphed ones.
-    """
+    """Register a custom tool backed by your HTTP endpoint — live immediately. POST=JSON body, GET=query params. shed() removes it."""
     import inspect as _inspect
 
     if not name or not name.replace("_", "").isalnum():
@@ -777,14 +735,7 @@ async def craft(
 
 @mcp.tool()
 async def connect(command: str, name: str = "", timeout: int = 60, inherit_stderr: bool = True) -> str:
-    """Connect a persistent MCP server. Process stays alive between calls.
-
-    command: server_id (e.g. 'filesystem', '@modelcontextprotocol/server-filesystem')
-             OR shell command string (e.g. 'uvx voice-mode', 'npx -y mcp-server-xyz')
-    name: friendly name for release(), e.g. 'voice' (defaults to server name or first token)
-    timeout: startup timeout in seconds (default 60)
-    inherit_stderr: forward subprocess stderr to terminal (default True)
-    """
+    """Start a persistent server. command: server_id or shell cmd (e.g. 'uvx voice-mode'). name: alias for release()."""
     # Detect server_id vs shell command: if it has no spaces and doesn't start with a
     # known executor, try registry lookup first.
     _EXECUTORS = ("npx", "uvx", "node", "python", "python3", "uv", "deno", "docker")
@@ -854,10 +805,7 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
 
 @mcp.tool()
 async def release(name: str) -> str:
-    """Kill a persistent connection and remove it from the pool.
-
-    name: friendly name passed to connect(), or the pool key
-    """
+    """Kill a persistent connection by name."""
     # Find entry by name or pool_key
     found_key = None
     found_entry = None
@@ -893,10 +841,7 @@ async def release(name: str) -> str:
 
 @mcp.tool()
 async def test(server_id: str, level: str = "basic") -> str:
-    """Validate an MCP server and return a quality score 0-100.
-
-    level: 'basic' (registry + schema checks) or 'full' (includes live tool calls)
-    """
+    """Quality-score a server 0–100. level: 'basic' (schema checks) or 'full' (live calls)."""
     score = 0
     checks = []
 
@@ -1006,10 +951,7 @@ async def test(server_id: str, level: str = "basic") -> str:
 
 @mcp.tool()
 async def bench(server_id: str, tool_name: str, args: dict | None = None, iterations: int = 5) -> str:
-    """Benchmark a tool's latency. Returns p50, p95, min, max, avg in ms.
-
-    iterations: number of calls (1-20, default 5)
-    """
+    """Benchmark tool latency — p50, p95, min, max ms. iterations: 1–20."""
     if args is None:
         args = {}
     iterations = max(1, min(20, iterations))
@@ -1172,11 +1114,7 @@ async def status() -> str:
 
 @mcp.tool()
 async def setup(name: str) -> str:
-    """Step-by-step setup wizard for a connected server. Call repeatedly until all requirements are met.
-
-    name: friendly name used in connect(), e.g. 'voice'
-    Probes current state and shows the next unresolved step.
-    """
+    """Setup wizard for a connected server. Call repeatedly until all requirements are met."""
     conn = next((c for c in session["connections"].values() if c.get("name") == name), None)
     if conn is None:
         connected = [c.get("name", "?") for c in session["connections"].values()]

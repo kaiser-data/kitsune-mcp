@@ -3,8 +3,16 @@
 All logic lives in the chameleon_mcp package. This file:
   1. Loads .env before any chameleon_mcp imports read os.getenv() at module level.
   2. Imports all modules so their @mcp.tool() decorators register with the shared mcp instance.
-  3. Re-exports public names so existing tests (from server import ...) continue to work.
+  3. Prunes tools based on CHAMELEON_TOOLS env var (default: lean 6-tool profile).
+  4. Re-exports public names so existing tests (from server import ...) continue to work.
+
+CHAMELEON_TOOLS env var controls which tools are registered:
+  (not set)                    — lean profile: morph, shed, search, inspect, key, status
+  CHAMELEON_TOOLS=all          — all 17 tools (forge / evaluator mode)
+  CHAMELEON_TOOLS=morph,shed   — exactly those tools
 """
+
+import os
 
 from dotenv import load_dotenv
 
@@ -107,6 +115,25 @@ from chameleon_mcp.utils import (  # noqa: E402, F401
     _truncate,
     _try_axonmcp,
 )
+
+# ── Tool profile selection ────────────────────────────────────────────────────
+# All tools registered above via @mcp.tool(). Prune to the requested profile.
+
+_LEAN_TOOLS = {"morph", "shed", "search", "inspect", "key", "status"}
+_CHAMELEON_TOOLS_ENV = os.getenv("CHAMELEON_TOOLS", "")
+
+if _CHAMELEON_TOOLS_ENV.lower() == "all":
+    _active_tools = _BASE_TOOL_NAMES
+elif _CHAMELEON_TOOLS_ENV:
+    _active_tools = {t.strip() for t in _CHAMELEON_TOOLS_ENV.split(",")} & _BASE_TOOL_NAMES
+else:
+    _active_tools = _LEAN_TOOLS
+
+for _t in _BASE_TOOL_NAMES - _active_tools:
+    try:
+        mcp.remove_tool(_t)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     mcp.run()

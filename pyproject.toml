@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chameleon-mcp"
-version = "0.5.7"
+version = "0.5.8"
 description = "The shape-shifting MCP hub — morph() into any server at runtime. 3,000+ servers. No config. No restart."
 readme = "README.md"
 license = { text = "MIT" }
@@ -48,6 +48,7 @@ dev = [
 
 [project.scripts]
 chameleon-mcp = "server:mcp.run"
+chameleon-forge = "server_forge:mcp.run"
 
 [project.urls]
 Homepage = "https://github.com/kaiser-data/chameleon-mcp"
@@ -57,7 +58,7 @@ Documentation = "https://github.com/kaiser-data/chameleon-mcp/tree/main/docs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-include = ["server.py", "chameleon_mcp/*.py"]
+include = ["server.py", "server_forge.py", "chameleon_mcp/*.py"]
 
 [tool.ruff]
 line-length = 100
