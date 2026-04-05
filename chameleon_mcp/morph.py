@@ -131,14 +131,20 @@ def _do_shed() -> list[str]:
 def _register_proxy_tools(
     server_id: str, tools: list, transport: "BaseTransport", config: dict,
     base_tool_names: set = None,
+    only: set[str] | None = None,
 ) -> list[str]:
-    """Register proxy tools for a server, handling name collisions with base tools."""
+    """Register proxy tools for a server, handling name collisions with base tools.
+
+    only: if provided, only register tools whose names are in this set (lean morph).
+    """
     import re
     sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())
     registered = []
     for tool_schema in tools:
         raw_name = tool_schema.get("name", "")
         if not raw_name:
+            continue
+        if only is not None and raw_name not in only:
             continue
         if base_tool_names and raw_name in base_tool_names:
             proxy_name = f"{sanitized}_{raw_name}"

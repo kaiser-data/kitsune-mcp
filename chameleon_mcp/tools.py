@@ -108,7 +108,7 @@ async def _fetch_resource_docs(transport: "BaseTransport") -> str:
 # Base tool names — used for collision detection in morph()
 _BASE_TOOL_NAMES = {
     "search", "inspect", "call", "run", "fetch",
-    "skill", "key", "auto", "status", "morph", "shed",
+    "skill", "key", "auto", "status", "morph", "shed", "craft",
     "connect", "release", "test", "bench", "setup",
 }
 
@@ -537,8 +537,13 @@ async def auto(
 
 
 @mcp.tool()
-async def morph(server_id: str, ctx: Context) -> str:
-    """Take a server's form — register its tools directly."""
+async def morph(server_id: str, ctx: Context, tools: list[str] | None = None) -> str:
+    """Take a server's form — register its tools directly.
+
+    tools: optional list of tool names to register (lean morph).
+           e.g. tools=["read_file", "write_file"] — only those two appear.
+           Omit to register all tools.
+    """
     # 1. Check pool connections first (friendly names from connect() take priority)
     pool_conn = None
     for _pk, conn in session["connections"].items():
@@ -569,7 +574,8 @@ async def morph(server_id: str, ctx: Context) -> str:
         if not raw_tools and tool_names:
             raw_tools = [{"name": n, "description": "", "inputSchema": {}} for n in tool_names]
 
-        registered = _register_proxy_tools(server_id, raw_tools, transport, {}, _BASE_TOOL_NAMES)
+        only = set(tools) if tools else None
+        registered = _register_proxy_tools(server_id, raw_tools, transport, {}, _BASE_TOOL_NAMES, only)
 
         if not registered:
             return f"No tools could be registered from '{server_id}'."
@@ -581,8 +587,9 @@ async def morph(server_id: str, ctx: Context) -> str:
         with contextlib.suppress(Exception):
             await ctx.session.send_tool_list_changed()
 
+        lean = f" (lean: {', '.join(tools)})" if tools else ""
         lines = [
-            f"Morphed into '{server_id}' (pool connection) — {len(registered)} tool(s) registered:",
+            f"Morphed into '{server_id}' (pool connection){lean} — {len(registered)} tool(s) registered:",
             *[f"  {t}" for t in registered],
             "",
             "Call them directly, or use shed() to return to base form.",
@@ -604,22 +611,23 @@ async def morph(server_id: str, ctx: Context) -> str:
         # Always use PersistentStdioTransport so the process stays alive for subsequent calls.
         # list_tools() starts the process (or reuses the pool entry) and fetches schemas in one boot.
         transport: BaseTransport = PersistentStdioTransport(cmd)
-        tools = srv.tools or []
-        if not tools:
+        tool_schemas = srv.tools or []
+        if not tool_schemas:
             try:
-                tools = await transport.list_tools()
+                tool_schemas = await transport.list_tools()
             except Exception:
-                tools = []
-        if not tools:
+                tool_schemas = []
+        if not tool_schemas:
             return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
     else:
         transport = HTTPSSETransport(server_id)
-        tools = srv.tools or []
-        if not tools:
+        tool_schemas = srv.tools or []
+        if not tool_schemas:
             return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
 
     # 6. Register proxy tools, handling name collisions with base tools
-    registered = _register_proxy_tools(server_id, tools, transport, resolved_config, _BASE_TOOL_NAMES)
+    only = set(tools) if tools else None
+    registered = _register_proxy_tools(server_id, tool_schemas, transport, resolved_config, _BASE_TOOL_NAMES, only)
 
     if not registered:
         return f"No tools could be registered from '{server_id}'."
@@ -632,8 +640,9 @@ async def morph(server_id: str, ctx: Context) -> str:
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
 
+    lean = f" (lean: {', '.join(tools)})" if tools else ""
     lines = [
-        f"Morphed into '{server_id}' — {len(registered)} tool(s) registered:",
+        f"Morphed into '{server_id}'{lean} — {len(registered)} tool(s) registered:",
         *[f"  {t}" for t in registered],
         "",
         "Call them directly, or use shed() to return to base form.",
@@ -673,6 +682,97 @@ async def shed(ctx: Context, release: bool = False) -> str:
             return f"Shed '{form}'. Removed: {', '.join(removed)}. Released: {', '.join(killed)}"
 
     return f"Shed '{form}'. Removed: {', '.join(removed)}"
+
+
+@mcp.tool()
+async def craft(
+    ctx: Context,
+    name: str,
+    description: str,
+    params: dict,
+    url: str,
+    method: str = "POST",
+    headers: dict | None = None,
+) -> str:
+    """Define a custom tool backed by your own HTTP endpoint — appears live immediately.
+
+    name:        tool name (e.g. "my_ranker")
+    description: what the tool does
+    params:      JSON Schema properties dict, e.g.
+                 {"query": {"type": "string", "description": "search query"},
+                  "limit": {"type": "integer", "description": "max results"}}
+    url:         your endpoint (e.g. "http://localhost:8080/rank")
+    method:      HTTP method — POST (default, args as JSON body) or GET (args as query string)
+    headers:     optional dict of request headers, e.g. {"Authorization": "Bearer sk-..."}
+
+    shed() removes crafted tools alongside morphed ones.
+    """
+    import inspect as _inspect
+
+    if not name or not name.replace("_", "").isalnum():
+        return "name must be alphanumeric (underscores allowed)."
+    if not url.startswith(("http://", "https://")):
+        return "url must start with http:// or https://"
+
+    _url = url
+    _method = method.upper()
+    _headers = headers or {}
+
+    # Build Python parameters from JSON Schema properties
+    py_params = []
+    for pname, pschema in (params or {}).items():
+        json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
+        from chameleon_mcp.morph import _json_type_to_py
+        ptype = _json_type_to_py(json_type)
+        py_params.append(_inspect.Parameter(
+            pname, _inspect.Parameter.KEYWORD_ONLY,
+            default=_inspect.Parameter.empty, annotation=ptype,
+        ))
+
+    async def _endpoint_proxy(**kwargs) -> str:
+        try:
+            client = _get_http_client()
+            if _method == "GET":
+                r = await client.get(_url, params=kwargs, headers=_headers, timeout=30.0)
+            else:
+                r = await client.request(_method, _url, json=kwargs, headers=_headers, timeout=30.0)
+            r.raise_for_status()
+            return r.text
+        except httpx.HTTPStatusError as e:
+            return f"HTTP {e.response.status_code} from {_url}: {e.response.text[:200]}"
+        except Exception as e:
+            return f"Error calling {_url}: {e}"
+
+    _endpoint_proxy.__name__ = name
+    _endpoint_proxy.__doc__ = description[:120]
+    _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)
+
+    # Remove previous registration if re-crafting the same name
+    if name in session["crafted_tools"]:
+        with contextlib.suppress(Exception):
+            mcp.remove_tool(name)
+        session["morphed_tools"] = [t for t in session["morphed_tools"] if t != name]
+
+    try:
+        mcp.add_tool(_endpoint_proxy)
+    except Exception as e:
+        return f"Failed to register tool '{name}': {e}"
+
+    session["crafted_tools"][name] = {
+        "url": url, "method": _method, "description": description, "params": params or {},
+    }
+    if name not in session["morphed_tools"]:
+        session["morphed_tools"].append(name)
+
+    with contextlib.suppress(Exception):
+        await ctx.session.send_tool_list_changed()
+
+    param_list = ", ".join(params.keys()) if params else "(none)"
+    return (
+        f"✓ Tool '{name}' registered — {_method} {url}\n"
+        f"Params: {param_list}\n\n"
+        f"Call it directly, or shed() to remove it."
+    )
 
 
 @mcp.tool()

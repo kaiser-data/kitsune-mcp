@@ -70,6 +70,7 @@ from chameleon_mcp.tools import (  # noqa: E402, F401
     bench,
     call,
     connect,
+    craft,
     fetch,
     inspect,
     key,

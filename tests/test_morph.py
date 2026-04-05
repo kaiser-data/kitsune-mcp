@@ -157,7 +157,7 @@ class TestMorphUsesPersistentTransport:
 
         captured = {}
 
-        def fake_register(server_id, tools, transport, config, base_names=None):
+        def fake_register(server_id, tools, transport, config, base_names=None, only=None):
             captured["transport_type"] = type(transport).__name__
             return ["pool_tool"]
 

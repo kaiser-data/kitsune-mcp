@@ -270,3 +270,269 @@ class TestConnectServerIdResolution:
             await connect("npx -y some-package")
 
         mock_get.assert_not_called()
+
+
+class TestCraftTool:
+    """Tests for the craft() endpoint-backed custom tool."""
+
+    def setup_method(self):
+        from server import mcp, session
+        # Clean up any crafted tools from previous tests
+        for name in list(session.get("crafted_tools", {}).keys()):
+            try:
+                mcp.remove_tool(name)
+            except Exception:
+                pass
+        session["crafted_tools"] = {}
+        session["morphed_tools"] = [t for t in session.get("morphed_tools", [])
+                                     if t not in session.get("crafted_tools", {})]
+
+    async def test_craft_registers_tool_post(self):
+        """craft() with POST registers the tool and records it in session."""
+        import respx
+        import httpx
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft, session
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with respx.mock:
+            respx.post("http://localhost:9999/rank").mock(
+                return_value=httpx.Response(200, text="ranked!")
+            )
+            result = await craft(
+                ctx=ctx,
+                name="my_ranker",
+                description="rank results",
+                params={"query": {"type": "string", "description": "search query"}},
+                url="http://localhost:9999/rank",
+            )
+
+        assert "my_ranker" in result
+        assert "my_ranker" in session["crafted_tools"]
+        assert "my_ranker" in session["morphed_tools"]
+
+    async def test_craft_tool_calls_endpoint(self):
+        """Registered proxy actually POSTs to the endpoint."""
+        import respx
+        import httpx
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft, mcp, session
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with respx.mock:
+            route = respx.post("http://localhost:9999/echo").mock(
+                return_value=httpx.Response(200, text="pong")
+            )
+            await craft(
+                ctx=ctx,
+                name="echo_tool",
+                description="echo",
+                params={"msg": {"type": "string", "description": "message"}},
+                url="http://localhost:9999/echo",
+            )
+
+            # Call the registered tool directly
+            tool_fn = next(t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "echo_tool")
+            response = await tool_fn(msg="hello")
+
+        assert response == "pong"
+        assert route.called
+        import json as _json2
+        body = _json2.loads(route.calls[0].request.content)
+        assert body == {"msg": "hello"}
+
+    async def test_craft_get_uses_query_params(self):
+        """craft() with GET sends args as query string, not body."""
+        import respx
+        import httpx
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft, mcp
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with respx.mock:
+            route = respx.get("http://localhost:9999/search").mock(
+                return_value=httpx.Response(200, text="results")
+            )
+            await craft(
+                ctx=ctx,
+                name="get_searcher",
+                description="search via GET",
+                params={"q": {"type": "string", "description": "query"}},
+                url="http://localhost:9999/search",
+                method="GET",
+            )
+
+            tool_fn = next(t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "get_searcher")
+            await tool_fn(q="mcp")
+
+        assert route.called
+        assert "q=mcp" in str(route.calls[0].request.url)
+
+    async def test_craft_endpoint_error_returns_message(self):
+        """HTTP errors from the endpoint are returned as strings, not raised."""
+        import respx
+        import httpx
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft, mcp
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with respx.mock:
+            respx.post("http://localhost:9999/fail").mock(
+                return_value=httpx.Response(500, text="Internal Error")
+            )
+            await craft(
+                ctx=ctx,
+                name="fail_tool",
+                description="always fails",
+                params={"x": {"type": "string", "description": "input"}},
+                url="http://localhost:9999/fail",
+            )
+
+            tool_fn = next(t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "fail_tool")
+            result = await tool_fn(x="anything")
+
+        assert "500" in result
+
+    async def test_craft_shed_removes_tool(self):
+        """shed() removes crafted tools."""
+        import respx
+        import httpx
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft, shed, mcp, session
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with respx.mock:
+            respx.post("http://localhost:9999/tmp").mock(return_value=httpx.Response(200, text="ok"))
+            await craft(
+                ctx=ctx,
+                name="tmp_tool",
+                description="temp",
+                params={"v": {"type": "string", "description": "val"}},
+                url="http://localhost:9999/tmp",
+            )
+
+        assert "tmp_tool" in session["morphed_tools"]
+        await shed(ctx)
+        assert "tmp_tool" not in session["morphed_tools"]
+
+    async def test_craft_invalid_name_rejected(self):
+        """Names with special characters are rejected."""
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        result = await craft(
+            ctx=ctx,
+            name="bad name!",
+            description="x",
+            params={},
+            url="http://localhost:9999/x",
+        )
+        assert "alphanumeric" in result.lower()
+
+    async def test_craft_invalid_url_rejected(self):
+        """Non-HTTP URLs are rejected."""
+        from unittest.mock import MagicMock, AsyncMock
+        from server import craft
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        result = await craft(
+            ctx=ctx,
+            name="bad_url",
+            description="x",
+            params={},
+            url="ftp://example.com/tool",
+        )
+        assert "http" in result.lower()
+
+
+class TestLeanMorph:
+    """Tests for morph(tools=[...]) — lean morph filter."""
+
+    async def test_lean_morph_filters_tools(self):
+        """morph(tools=['read_file']) only registers the specified tool."""
+        from unittest.mock import MagicMock, AsyncMock, patch
+        from server import _registry, morph, session, mcp, ServerInfo
+
+        srv = ServerInfo(
+            id="filesystem", name="Filesystem", description="fs",
+            source="official", transport="stdio", url="",
+            install_cmd=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+            credentials={}, tools=[], token_cost=0,
+        )
+
+        all_tools = [
+            {"name": "read_file", "description": "read", "inputSchema": {"properties": {}, "required": []}},
+            {"name": "write_file", "description": "write", "inputSchema": {"properties": {}, "required": []}},
+            {"name": "list_directory", "description": "list", "inputSchema": {"properties": {}, "required": []}},
+        ]
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
+             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockTransport:
+            mock_t = MagicMock()
+            mock_t.list_tools = AsyncMock(return_value=all_tools)
+            MockTransport.return_value = mock_t
+
+            result = await morph("filesystem", ctx, tools=["read_file"])
+
+        assert "read_file" in session["morphed_tools"]
+        assert "write_file" not in session["morphed_tools"]
+        assert "list_directory" not in session["morphed_tools"]
+        assert "lean" in result
+
+    async def test_full_morph_registers_all_tools(self):
+        """morph() with no tools filter registers everything."""
+        from unittest.mock import MagicMock, AsyncMock, patch
+        from server import _registry, morph, session, ServerInfo
+
+        srv = ServerInfo(
+            id="filesystem", name="Filesystem", description="fs",
+            source="official", transport="stdio", url="",
+            install_cmd=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+            credentials={}, tools=[], token_cost=0,
+        )
+
+        all_tools = [
+            {"name": "read_file", "description": "read", "inputSchema": {}},
+            {"name": "write_file", "description": "write", "inputSchema": {}},
+        ]
+
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+
+        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
+             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockTransport:
+            mock_t = MagicMock()
+            mock_t.list_tools = AsyncMock(return_value=all_tools)
+            MockTransport.return_value = mock_t
+
+            await morph("filesystem", ctx)
+
+        assert "read_file" in session["morphed_tools"]
+        assert "write_file" in session["morphed_tools"]

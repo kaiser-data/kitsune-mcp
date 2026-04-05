@@ -8,6 +8,7 @@ _session: dict = {
     "skills": {},
     "grown": {},
     "morphed_tools": [],      # names of dynamically registered proxy tools
+    "crafted_tools": {},      # name -> {url, method, description, params, headers}
     "current_form": None,     # server_id currently morphed into
     "current_form_pool_key": None,  # exact _process_pool key for shed(release=True)
     "connections": {},        # persistent connections: {pool_key: {name, command, pid, ...}}
