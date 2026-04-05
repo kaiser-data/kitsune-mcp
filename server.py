@@ -99,6 +99,7 @@ from chameleon_mcp.utils import (  # noqa: E402, F401
     _estimate_tokens,
     _extract_content,
     _get_http_client,
+    _rss_mb,
     _strip_html,
     _truncate,
     _try_axonmcp,

@@ -279,6 +279,7 @@ Chameleon picks the right transport automatically:
 | npm package | Stdio | Spawned locally via `npx` |
 | pip package | Stdio | Spawned locally via `uvx` |
 | Persistent server | Persistent Stdio | Long-lived process, reused across calls |
+| Docker image | Docker (Persistent Stdio) | `docker run --rm -i --memory 512m <image>` — RAM-capped, easy to destroy |
 | Smithery remote server | HTTP+SSE | Remote call via `server.smithery.ai` (requires API key) |
 
 ### Persistent connections
@@ -442,7 +443,7 @@ This writes the value to `.env` in the current directory and loads it into the r
 
 | Tool | Description |
 |---|---|
-| `search(query, registry, limit)` | Search for MCP servers by task description. `registry` can be `"all"` (default), `"official"`, `"npm"`, `"smithery"`, or `"pypi"`. |
+| `search(query, registry, limit)` | Search for MCP servers by task description. `registry` can be `"all"` (default), `"official"`, `"npm"`, `"smithery"`, or `"pypi"`. Results are deduplicated across registries and ranked by relevance. |
 | `inspect(server_id)` | Show full details for a server: all tools with schemas, required credentials, connection type, and estimated token cost. |
 
 ### Execution
@@ -459,13 +460,13 @@ This writes the value to `.env` in the current directory and loads it into the r
 | Tool | Description |
 |---|---|
 | `morph(server_id, config)` | Take the form of a server — its tools are registered directly on Chameleon and callable by name. Replaces the current form if one is active. |
-| `shed()` | Drop the current form and remove its tools. Returns to base Chameleon. |
+| `shed(release)` | Drop the current form and remove its tools. `release=True` also kills the underlying process and frees RAM immediately; default `False` keeps it pooled for fast re-morph. |
 
 ### Persistent connections
 
 | Tool | Description |
 |---|---|
-| `connect(command, name, inherit_stderr)` | Start a persistent MCP server process from any command. The process stays alive between calls. Probes for missing credentials and prints a setup guide if needed. |
+| `connect(command, name, inherit_stderr)` | Start a persistent MCP server process. `command` can be a registry server ID (e.g. `"filesystem"`) or a full shell command (e.g. `"npx -y @modelcontextprotocol/server-filesystem"`). The process stays alive between calls. |
 | `release(name)` | Kill a persistent connection and free its resources. |
 | `setup(name)` | Step-by-step configuration wizard for a connected server. Shows exactly what is missing and how to fix it. Call repeatedly until all requirements are satisfied. |
 
@@ -481,13 +482,13 @@ This writes the value to `.env` in the current directory and loads it into the r
 | Tool | Description |
 |---|---|
 | `key(env_var, value)` | Save an API key to `.env` permanently and load it into the current session immediately. |
-| `skill(qualified_name)` | Fetch a Smithery skill prompt and inject it into context (requires Smithery key). |
+| `skill(qualified_name)` | Fetch a Smithery skill prompt and inject it into context (requires Smithery key). Skills are persisted to `~/.chameleon/skills.json` and available across sessions. |
 
 ### Status
 
 | Tool | Description |
 |---|---|
-| `status()` | Show current form, active persistent connections, morphed tools, and token usage statistics. |
+| `status()` | Show current form, active persistent connections (with PID and RAM usage), morphed tools, and token usage statistics. |
 
 ---
 
@@ -571,6 +572,30 @@ call("@modelcontextprotocol/server-filesystem", "read_file", {"path": "/tmp/test
 run("uvx:mcp-server-time", "get_current_time", {})
 ```
 
+### Connect by server ID (no install command needed)
+
+```
+# Registry ID resolved automatically — no npx/uvx command required
+connect("filesystem", name="fs")
+connect("@modelcontextprotocol/server-git", name="git")
+```
+
+### Docker server (RAM-bounded, easy to destroy)
+
+```
+connect("docker run --rm -i --memory 256m mcp-server-image", name="sandboxed")
+call("sandboxed", "tool_name", {"arg": "value"})
+release("sandboxed")    ← container is killed and removed
+```
+
+### shed() with immediate RAM release
+
+```
+morph("@modelcontextprotocol/server-puppeteer")
+puppeteer_navigate(url="https://example.com")
+shed(release=True)   ← kills the Chromium process immediately, frees ~200MB
+```
+
 ---
 
 ## Architecture
@@ -584,7 +609,7 @@ Claude / AI Agent
        ├── chameleon_mcp/
        │     ├── registry.py         ── MultiRegistry → OfficialMCPRegistry, SmitheryRegistry, NpmRegistry, PyPIRegistry
        │     ├── official_registry.py── reference servers from modelcontextprotocol/servers (seed + GitHub API)
-       │     ├── transport.py        ── HTTPSSETransport, StdioTransport, PersistentStdioTransport
+       │     ├── transport.py        ── HTTPSSETransport, StdioTransport, PersistentStdioTransport, DockerTransport
        │     ├── morph.py            ── live tool registration via FastMCP.add_tool / remove_tool
        │     ├── probe.py            ── env var detection, OAuth, schema creds, setup guide generation
        │     ├── credentials.py      ── .env I/O, config resolution
@@ -607,14 +632,21 @@ Claude / AI Agent
 - [x] Stdio transport for local npm/pip servers
 - [x] Persistent process pool — connect() / release()
 - [x] test() quality scoring (0–100)
-- [x] bench() latency benchmarking
+- [x] bench() latency benchmarking (p50/p95, boot time excluded)
 - [x] setup() step-by-step configuration wizard
 - [x] Readiness probe: env vars, OAuth, schema credentials, local URL reachability
 - [x] Official MCP registry integration ([modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers))
 - [x] PyPI registry search (`search(registry="pypi")`)
-- [x] Server health monitoring in `status()` (ping + token savings vs always-on)
+- [x] Server health monitoring in `status()` (ping + RAM per process)
 - [x] GitHub repo as a first-class `server_id` (`github:owner/repo`)
 - [x] WebSocket transport (`ws://` / `wss://`)
+- [x] Docker transport — RAM-bounded containers, auto-destroyed on release
+- [x] connect() accepts registry server IDs (not just shell commands)
+- [x] Skill persistence — `skill()` saved to `~/.chameleon/skills.json` across sessions
+- [x] Search dedup + relevance ranking across registries
+- [x] auto() smart tool selection — search → pick server → pick tool → call in one step
+- [x] shed(release=True) — precise pool key tracking, instant RAM release
+- [x] inspect() shows live tool schemas from running processes
 
 ---
 

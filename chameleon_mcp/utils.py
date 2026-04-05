@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import shutil
 
@@ -59,6 +60,29 @@ def _extract_content(result: dict) -> str:
         text_parts = [c.get("text", "") for c in content if c.get("type") == "text"]
         return "\n".join(text_parts) if text_parts else json.dumps(content, indent=2)
     return json.dumps(result, indent=2)
+
+
+def _rss_mb(pid: int | None) -> str:
+    """Return resident memory of a process as a human-readable string, or '' on failure."""
+    if pid is None:
+        return ""
+    try:
+        # Linux: read /proc/<pid>/status
+        with open(f"/proc/{pid}/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    kb = int(line.split()[1])
+                    return f"{kb // 1024}MB"
+    except OSError:
+        pass
+    try:
+        # macOS / BSD: use ps
+        result = os.popen(f"ps -o rss= -p {pid}").read().strip()
+        if result:
+            return f"{int(result) // 1024}MB"
+    except Exception:
+        pass
+    return ""
 
 
 async def _try_axonmcp(url: str, intent: str) -> str | None:

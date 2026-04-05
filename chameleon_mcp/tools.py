@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import ipaddress
 import json
+import re
 import shlex
 import time
 from datetime import datetime
@@ -45,7 +46,6 @@ from chameleon_mcp.transport import (
     DockerTransport,
     HTTPSSETransport,
     PersistentStdioTransport,
-    StdioTransport,
     WebSocketTransport,
     _ping,
     _process_pool,
@@ -53,6 +53,7 @@ from chameleon_mcp.transport import (
 from chameleon_mcp.utils import (
     _estimate_tokens,
     _get_http_client,
+    _rss_mb,
     _strip_html,
     _truncate,
     _try_axonmcp,
@@ -401,13 +402,9 @@ async def auto(
         else:
             server_id, server_name, credentials = server_hint, server_hint, {}
     else:
-        if _smithery_available():
-            servers = await SmitheryRegistry().search(task, limit=3)
-        else:
-            servers = await NpmRegistry().search(task, limit=3)
+        servers = await _registry.search(task, limit=3)
         if not servers:
-            note = "" if _smithery_available() else " (npm-only — set SMITHERY_API_KEY for Smithery results)"
-            return f"No servers found for '{task}'{note}. Use search() or provide server_hint."
+            return f"No servers found for '{task}'. Use search() or provide server_hint."
         best = servers[0]
         server_id, server_name, credentials = best.id, best.name, best.credentials
         session["explored"][server_id] = {
@@ -433,16 +430,49 @@ async def auto(
     if not tool_name:
         srv = await _registry.get_server(server_id)
         tools = (srv.tools if srv else []) or []
-        if tools:
-            tool_lines = [f"  {t['name']} — {(t.get('description') or '')[:80]}" for t in tools]
-            return "\n".join([
-                f"{server_name} ({server_id}) ready. Available tools:",
-                "",
-                *tool_lines,
-                "",
-                f'Call: auto("{task}", "<tool>", args, server_hint="{server_id}")',
-            ])
-        return f"{server_id} ready (no tools listed). Use call() to call tools directly."
+
+        # For stdio servers with no registry tools, fetch live schemas
+        if not tools and srv and srv.transport == "stdio":
+            cmd = srv.install_cmd or ["npx", "-y", server_id]
+            with contextlib.suppress(Exception):
+                tools = await asyncio.wait_for(
+                    PersistentStdioTransport(cmd).list_tools(), timeout=TIMEOUT_STDIO_INIT
+                )
+
+        if not tools:
+            return f"{server_id} ready (no tools listed). Use call() to call tools directly."
+
+        # Auto-select: only one tool → use it; multiple → pick best match for task
+        if len(tools) == 1:
+            tool_name = tools[0]["name"]
+        else:
+            task_lc = task.lower()
+            task_words = set(re.split(r'\W+', task_lc))
+
+            def _tool_score(t: dict) -> float:
+                n = (t.get("name") or "").lower()
+                d = (t.get("description") or "").lower()
+                score = 0.0
+                if task_lc in n:
+                    score += 10.0
+                score += sum(2.0 for w in task_words if w and w in n)
+                score += sum(1.0 for w in task_words if w and w in d)
+                return score
+
+            scored = sorted(tools, key=_tool_score, reverse=True)
+            best_score = _tool_score(scored[0])
+            if best_score > 0:
+                tool_name = scored[0]["name"]
+            else:
+                # No match — list tools and ask user to pick
+                tool_lines = [f"  {t['name']} — {(t.get('description') or '')[:80]}" for t in tools]
+                return "\n".join([
+                    f"{server_name} ({server_id}) ready. Available tools:",
+                    "",
+                    *tool_lines,
+                    "",
+                    f'Call: auto("{task}", "<tool>", args, server_hint="{server_id}")',
+                ])
 
     srv = await _registry.get_server(server_id)
     if srv and srv.transport == "stdio":
@@ -502,6 +532,7 @@ async def morph(server_id: str, ctx: Context) -> str:
 
         session["morphed_tools"] = registered
         session["current_form"] = server_id
+        session["current_form_pool_key"] = json.dumps(cmd, sort_keys=True)
 
         with contextlib.suppress(Exception):
             await ctx.session.send_tool_list_changed()
@@ -551,6 +582,7 @@ async def morph(server_id: str, ctx: Context) -> str:
 
     session["morphed_tools"] = registered
     session["current_form"] = server_id
+    session["current_form_pool_key"] = json.dumps(cmd, sort_keys=True)
 
     # 7. Notify client that tool list has changed
     with contextlib.suppress(Exception):
@@ -580,17 +612,19 @@ async def shed(ctx: Context, release: bool = False) -> str:
         await ctx.session.send_tool_list_changed()
 
     if release and form:
-        # Find and kill the pool entry whose install_cmd matches the current form's server
+        # Use the exact pool key stored at morph() time — no fragile string matching needed
+        exact_key = session.pop("current_form_pool_key", None)
         killed = []
-        for pool_key, entry in list(_process_pool.items()):
-            # Match by name set during connect(), or by server_id appearing in the command
-            cmd_str = " ".join(entry.install_cmd)
-            if entry.name == form or form in cmd_str or pool_key == form:
-                with contextlib.suppress(Exception):
-                    entry.proc.kill()
-                    await asyncio.wait_for(entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
-                _process_pool.pop(pool_key, None)
-                killed.append(entry.name or entry.install_cmd[0])
+        keys_to_check = [exact_key] if exact_key else list(_process_pool.keys())
+        for pool_key in keys_to_check:
+            entry = _process_pool.get(pool_key)
+            if entry is None:
+                continue
+            with contextlib.suppress(Exception):
+                entry.proc.kill()
+                await asyncio.wait_for(entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
+            _process_pool.pop(pool_key, None)
+            killed.append(entry.name or entry.install_cmd[0])
         if killed:
             return f"Shed '{form}'. Removed: {', '.join(removed)}. Released: {', '.join(killed)}"
 
@@ -799,6 +833,13 @@ async def test(server_id: str, level: str = "basic") -> str:
     if level == "full" and tools:
         checks.append("\n--- FULL MODE: live tool calls ---")
         call_score = 0
+        resolved_config, _ = _resolve_config(srv.credentials, {})
+        # Build one transport for the full-mode run — reuse pool entry across all tool calls
+        if srv.transport == "stdio":
+            cmd = srv.install_cmd or ["npx", "-y", server_id]
+            transport_obj: BaseTransport = PersistentStdioTransport(cmd)
+        else:
+            transport_obj = HTTPSSETransport(server_id)
         for t in tools[:5]:
             tname = t.get("name", "")
             # Build minimal dummy args
@@ -811,12 +852,6 @@ async def test(server_id: str, level: str = "basic") -> str:
                     dummy_args[pname] = {"string": "test", "integer": 0, "boolean": False, "number": 0.0}.get(ptype, "test")
 
             try:
-                if srv.transport == "stdio":
-                    cmd = srv.install_cmd or ["npx", "-y", server_id]
-                    transport_obj: BaseTransport = StdioTransport(cmd)
-                else:
-                    transport_obj = HTTPSSETransport(server_id)
-                resolved_config, _ = _resolve_config(srv.credentials, {})
                 result = await asyncio.wait_for(
                     transport_obj.execute(tname, dummy_args, resolved_config), timeout=TIMEOUT_STDIO_TOOL
                 )
@@ -958,11 +993,13 @@ async def status() -> str:
             else:
                 health = "alive+unresponsive"
             uptime = int(entry.uptime_seconds())
+            mem = _rss_mb(entry.pid())
+            mem_str = f" | mem: {mem}" if mem else ""
             conn_info = session["connections"].get(pool_key, {})
             tool_names = conn_info.get("tools", [])
             tool_str = f"Tools: {', '.join(tool_names)}" if tool_names else "Tools: none"
             lines.append(
-                f"  {label} | PID {entry.pid()} | {health} | uptime: {uptime}s | calls: {entry.call_count}"
+                f"  {label} | PID {entry.pid()} | {health} | uptime: {uptime}s | calls: {entry.call_count}{mem_str}"
             )
             lines.append(f"    {tool_str}")
         lines.append("")
