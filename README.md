@@ -50,7 +50,9 @@ So most people configure 2–3 servers once and never explore further.
 | **Purpose** | Everyday morphing | Evaluation + crafting |
 | **Tools** | 6 (morph, shed, search, inspect, key, status) | All 17 |
 | **Token overhead** | ~240 tokens | ~825 tokens |
-| **Use when** | You know what you want, just need to use it | Discovering, benchmarking, prototyping |
+| **Use when** | Switching fast between servers, running agents that morph on demand, keeping token cost minimal | Discovering new servers, benchmarking, prototyping custom tools |
+
+**Ideal for agents** — an agent running `chameleon-mcp` can switch its entire capability set with a single `morph()` call and ~240 tokens of overhead. Acquire a filesystem tool, do the work, shed it, acquire a search tool — all in one session, no config changes, no restarts. Agents that adapt their toolset per task rather than loading everything upfront.
 
 Both installed from the same package. Switch anytime with `CHAMELEON_TOOLS`:
 
