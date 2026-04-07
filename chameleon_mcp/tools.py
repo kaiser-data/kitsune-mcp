@@ -669,8 +669,11 @@ async def morph(server_id: str, ctx: Context, tools: list[str] | None = None) ->
         if not tool_schemas:
             return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
     else:
-        transport = HTTPSSETransport(server_id)
+        transport = _get_transport(server_id, srv)
         tool_schemas = srv.tools or []
+        if not tool_schemas and hasattr(transport, "list_tools"):
+            # Registry didn't cache tools — fetch live from the server.
+            tool_schemas = await transport.list_tools(resolved_config)
         if not tool_schemas:
             return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
 

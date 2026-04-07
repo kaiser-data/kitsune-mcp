@@ -263,6 +263,66 @@ class HTTPSSETransport(BaseTransport):
 
         return _truncate(_clean_response(raw))
 
+    async def list_tools(self, config: dict | None = None) -> list[dict]:
+        """Fetch the tools/list from the HTTP MCP server and return raw tool schemas."""
+        if config is None:
+            config = {}
+        api_key = os.getenv("SMITHERY_API_KEY") or SMITHERY_API_KEY
+        config_b64 = base64.urlsafe_b64encode(
+            json.dumps(config).encode()
+        ).decode().rstrip("=")
+        base_url = (
+            f"https://server.smithery.ai/{self.qualified_name}/mcp"
+            f"?config={config_b64}"
+            f"&api_key={api_key}"
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+
+        def _parse_sse(text: str) -> dict | None:
+            for line in text.splitlines():
+                if line.startswith("data:"):
+                    try:
+                        return json.loads(line[5:].strip())
+                    except json.JSONDecodeError:
+                        pass
+            return None
+
+        async def _run() -> list[dict]:
+            client = _get_http_client()
+
+            async def _post(payload, session_id=None):
+                hdrs = dict(headers)
+                if session_id:
+                    hdrs["mcp-session-id"] = session_id
+                return await client.post(
+                    base_url, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
+                )
+
+            r = await _post({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                             "params": {"protocolVersion": MCP_PROTOCOL_VERSION,
+                                        "capabilities": {}, "clientInfo": MCP_CLIENT_INFO}})
+            if r.status_code in (401, 403):
+                raise PermissionError(f"HTTP {r.status_code}")
+            r.raise_for_status()
+            session_id = r.headers.get("mcp-session-id")
+
+            await _post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session_id)
+
+            r2 = await _post({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}, session_id)
+            r2.raise_for_status()
+            msg = _parse_sse(r2.text)
+            if msg and "result" in msg:
+                return msg["result"].get("tools", [])
+            return []
+
+        try:
+            return await asyncio.wait_for(_run(), timeout=TIMEOUT_HTTP_TOOL)
+        except Exception:
+            return []
+
 
 class StdioTransport(BaseTransport):
     """Execute tool calls on local MCP servers via stdio subprocess + JSON-RPC."""
