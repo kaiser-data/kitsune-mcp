@@ -86,7 +86,10 @@ def _get_transport(server_id: str, srv) -> "BaseTransport":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
         return PersistentStdioTransport(cmd)
     if srv is not None and getattr(srv, "transport", None) == "http":
-        return HTTPSSETransport(srv.url or server_id)
+        url = srv.url or server_id
+        # srv.url is the full Smithery URL; strip the base so execute() can prepend it cleanly.
+        qname = url.removeprefix("https://server.smithery.ai/")
+        return HTTPSSETransport(qname)
     return HTTPSSETransport(server_id)
 
 
