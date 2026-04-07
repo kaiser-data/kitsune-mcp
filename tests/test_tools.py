@@ -104,8 +104,8 @@ class TestCredentialsGuide:
         resolved = {}
         result = _credentials_guide("test-server", credentials, resolved)
         assert "test-server" in result
-        assert "apiKey" in result
-        assert "API_KEY" in result  # env var conversion
+        assert "API_KEY" in result  # env var form shown
+        assert "✗" in result        # shown as missing
 
     def test_shows_key_command(self):
         credentials = {"apiKey": "API key description"}
@@ -113,12 +113,13 @@ class TestCredentialsGuide:
         result = _credentials_guide("my-server", credentials, resolved)
         assert "key(" in result
 
-    def test_shows_inline_call_example(self):
+    def test_shows_dotenv_instructions(self):
         credentials = {"token": "Auth token", "secret": "Secret value"}
         resolved = {}
         result = _credentials_guide("my-server", credentials, resolved)
-        assert "call(" in result
-        assert '"token"' in result
+        assert "Add to .env:" in result
+        assert "TOKEN=your-value" in result
+        assert "SECRET=your-value" in result
 
     def test_multiple_missing_all_shown(self):
         credentials = {
@@ -128,9 +129,9 @@ class TestCredentialsGuide:
         }
         resolved = {"apiKey": "already-set"}
         result = _credentials_guide("multi-server", credentials, resolved)
-        assert "token" in result
-        assert "secret" in result
-        # apiKey is resolved so should not appear in missing list
+        assert "TOKEN" in result
+        assert "SECRET" in result
+        assert "✓" in result   # apiKey is resolved — should show as found
 
 
 class TestExtractContent:

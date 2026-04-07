@@ -28,7 +28,9 @@ from chameleon_mcp.constants import (
 )
 from chameleon_mcp.credentials import (
     _credentials_guide,
+    _credentials_inspect_block,
     _registry_headers,
+    _reload_dotenv,
     _resolve_config,
     _save_to_env,
     _smithery_available,
@@ -166,13 +168,8 @@ async def inspect(server_id: str) -> str:
         "",
     ]
 
-    if srv.credentials:
-        lines.append("CREDENTIALS REQUIRED")
-        for cred_key, desc in srv.credentials.items():
-            lines.append(f"  {cred_key} → {_to_env_var(cred_key)}" + (f": {desc[:80]}" if desc else ""))
-        lines.append("")
-    else:
-        lines += ["CREDENTIALS: none required", ""]
+    resolved_creds, _ = _resolve_config(srv.credentials, {})
+    lines += _credentials_inspect_block(srv.credentials, resolved_creds)
 
     if srv.transport == "stdio":
         cmd_str = " ".join(srv.install_cmd) if srv.install_cmd else f"npx -y {srv.id}"
@@ -218,12 +215,18 @@ async def inspect(server_id: str) -> str:
 
 @mcp.tool()
 async def call(
-    server_id: str,
     tool_name: str,
+    server_id: str | None = None,
     arguments: dict | None = None,
     config: dict | None = None,
 ) -> str:
-    """Call a tool on an MCP server (remote HTTP/WS or local stdio). Creds auto-loaded from env."""
+    """Call a tool on an MCP server. server_id optional when morphed — current form used.
+    After morph(): call('list_directory', arguments={'path': '/tmp'})
+    Direct:        call('list_directory', '@some-server', {'path': '/tmp'})"""
+    if server_id is None:
+        server_id = session.get("current_form")
+        if not server_id:
+            return "Provide a server_id, or use morph() first to set a current form."
     if arguments is None:
         arguments = {}
     if config is None:
@@ -630,12 +633,13 @@ async def morph(server_id: str, ctx: Context, tools: list[str] | None = None) ->
         if morphed_prompts:
             shown = ", ".join(morphed_prompts[:3]) + (" ..." if len(morphed_prompts) > 3 else "")
             lines.append(f"Prompts ({len(morphed_prompts)}): {shown}")
-        lines += ["", "Call them directly, or use shed() to return to base form."]
+        lines += ["", "In this session: call('tool_name', arguments={...})"]
         lines.append("\n⚠️  Source: pool connection (local — verify command before use)")
         if missing_env:
-            lines.append("\n⚠️  Credentials may be required before calling tools:")
+            lines.append("\n⚠️  Credentials may be required — add to .env:")
             for var in missing_env:
-                lines.append(f'  key("{var}", "your-value")')
+                lines.append(f"  {var}=your-value")
+            lines.append(f'  Or: key("{missing_env[0]}", "your-value")')
         return "\n".join(lines)
 
     # 2. Drop previous form early so pool slot is freed before we potentially start a new one
@@ -744,12 +748,13 @@ async def morph(server_id: str, ctx: Context, tools: list[str] | None = None) ->
     if morphed_prompts:
         shown = ", ".join(morphed_prompts[:3]) + (" ..." if len(morphed_prompts) > 3 else "")
         lines.append(f"Prompts ({len(morphed_prompts)}): {shown}")
-    lines += ["", "Call them directly, or use shed() to return to base form."]
+    lines += ["", "In this session: call('tool_name', arguments={...})"]
     lines.append(trust_note)
     if missing_env:
-        lines.append("\n⚠️  Credentials may be required before calling tools:")
+        lines.append("\n⚠️  Credentials may be required — add to .env:")
         for var in missing_env:
-            lines.append(f'  key("{var}", "your-value")')
+            lines.append(f"  {var}=your-value")
+        lines.append(f'  Or: key("{missing_env[0]}", "your-value")')
     return "\n".join(lines)
 
 
