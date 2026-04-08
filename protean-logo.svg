@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+    <clipPath id="circle">
+      <circle cx="100" cy="100" r="88"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="92" fill="url(#bgGrad)"/>
+  <circle cx="100" cy="100" r="88" fill="none" stroke="url(#waveGrad)" stroke-width="2" opacity="0.6"/>
+
+  <!-- Wave stack — 3 fluid arcs, offset vertically -->
+  <g clip-path="url(#circle)">
+    <!-- Bottom wave (largest, most opaque) -->
+    <path d="M12 130 Q40 108 68 130 Q96 152 124 130 Q152 108 188 130 L188 200 L12 200 Z"
+          fill="url(#waveGrad)" opacity="0.25"/>
+
+    <!-- Middle wave -->
+    <path d="M12 112 Q44 88 76 112 Q108 136 140 112 Q164 94 188 112 L188 200 L12 200 Z"
+          fill="url(#waveGrad)" opacity="0.35"/>
+
+    <!-- Top wave (sharpest) -->
+    <path d="M12 96 Q42 70 72 96 Q102 122 132 96 Q158 74 188 96"
+          fill="none" stroke="url(#waveGrad)" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Accent dot — Proteus' eye / focal point -->
+    <circle cx="100" cy="72" r="6" fill="url(#waveGrad)" opacity="0.9"/>
+    <circle cx="100" cy="72" r="10" fill="none" stroke="url(#waveGrad)" stroke-width="1.5" opacity="0.4"/>
+  </g>
+</svg>

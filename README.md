@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="chameleon-logo.png" alt="Protean MCP" width="200" />
-  <h1>🦎 Protean MCP</h1>
-  <p><strong>The dynamic MCP hub — mount into any server at runtime.<br/>Built for adaptive agents and MCP developers alike.</strong></p>
+  <img src="protean-logo.svg" alt="Protean MCP" width="160" />
+  <h1>🌊 Protean MCP</h1>
+  <p><strong>The shape-shifting MCP hub — mount into any server at runtime.<br/>Fluid. Adaptive. Built for agents that change form.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/protean-mcp?color=blue)](https://pypi.org/project/protean-mcp/)
@@ -12,9 +12,9 @@
 
 ---
 
-## A new way to use MCP
+## What Protean MCP does
 
-MCP has so far been mostly static — configure servers at startup, all tools loaded forever, restart required for any change. Chameleon changes that.
+MCP servers are typically configured at startup — all tools loaded forever, restart required for any change. Protean MCP takes a different approach.
 
 **One entry in your config. Any server, on demand, at runtime.**
 
@@ -46,11 +46,11 @@ An agent that loads all tools upfront burns tokens and flexibility. An agent tha
 - Chain across multiple servers in one session without touching config
 - `mount(server_id, tools=[...])` for surgical selection — only the tools actually needed
 
-Chameleon is designed around the token budget of a real agent loop.
+Protean MCP is designed around the token budget of a real agent loop.
 
 ### MCP developers
 
-Beyond MCP Inspector's basic schema viewer, Chameleon gives you a full development workflow inside your actual AI client:
+Beyond MCP Inspector's basic schema viewer, Protean MCP gives you a full development workflow inside your actual AI client:
 
 | Need | Tool |
 |---|---|
@@ -114,7 +114,7 @@ Add to your MCP client config — **once, globally**:
 ```json
 {
   "mcpServers": {
-    "chameleon": {
+    "protean": {
       "command": "protean-mcp"
     }
   }
@@ -136,7 +136,7 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.dev, Z
 
 ## Server Sources
 
-Chameleon searches across multiple registries — no single one required.
+Protean MCP searches across multiple registries — no single one required.
 
 | Registry | Auth | `registry=` value |
 |---|---|---|
@@ -156,7 +156,7 @@ Default `search()` fans out across all no-auth registries automatically. Add a `
 
 ### The proxy model
 
-Chameleon is a **dynamic MCP proxy**. It sits between your AI client and any number of other MCP servers, connecting to them on demand:
+Protean MCP is a **dynamic MCP proxy**. It sits between your AI client and any number of other MCP servers, connecting to them on demand:
 
 ```
 Your AI client
@@ -169,7 +169,7 @@ Protean MCP          ← the one entry in your config
     └── (on mount) ──► remote HTTP server  (HTTP+SSE connection)
 ```
 
-**Nothing is copied.** When you call a mounted tool, Protean MCP forwards the call to the original server via JSON-RPC and returns the result. The server's logic always runs on the server — Chameleon only relays the schema and the call.
+**Nothing is copied.** When you call a mounted tool, Protean MCP forwards the call to the original server via JSON-RPC and returns the result. The server's logic always runs on the server — Protean MCP only relays the schema and the call.
 
 ### What mount() does, step by step
 
@@ -233,7 +233,7 @@ call("brave_web_search", arguments={"query": "MCP protocol 2025"})
 
 ## Security
 
-Chameleon introduces a trust model for servers you haven't personally audited.
+Protean MCP introduces a trust model for servers you haven't personally audited.
 
 ### Trust tiers
 
@@ -247,7 +247,7 @@ Every `mount()`, `call()`, and `connect()` result shows where the server comes f
 
 ### Install command validation
 
-Before spawning any subprocess, Chameleon validates the executable name:
+Before spawning any subprocess, Protean MCP validates the executable name:
 - Blocks shell metacharacters (`&`, `;`, `|`, `` ` ``, `$`) — prevents injection via a crafted server ID
 - Blocks path traversal (`../`) — prevents escaping to arbitrary binaries
 
@@ -265,7 +265,7 @@ Arguments are passed directly to `asyncio.create_subprocess_exec` (never a shell
 
 ### Process isolation and sandboxing
 
-- stdio servers run as separate OS processes — no shared memory with Chameleon
+- stdio servers run as separate OS processes — no shared memory with Protean MCP
 - Docker servers run with `--rm -i --memory 512m --label protean-mcp=1`
 - `fetch()` blocks private IPs, loopback, and non-HTTPS URLs (SSRF protection)
 - The process pool has a hard cap of 10 concurrent processes and evicts idle ones after 1 hour
@@ -302,12 +302,12 @@ call("create_issue", arguments={"owner": "…", "repo": "…", "title": "…"})
 
 ### Security note on `.env`
 
-Chameleon re-reads `.env` on every call — which means adding a key instantly activates it. That convenience comes with a responsibility: **`.env` is the single place all your API keys live**. A few practices worth following:
+Protean MCP re-reads `.env` on every call — which means adding a key instantly activates it. That convenience comes with a responsibility: **`.env` is the single place all your API keys live**. A few practices worth following:
 
 - Add `.env` to `.gitignore` — never commit real keys
 - Use project-level `.env` for project-specific keys; `~/.chameleon/.env` for personal global keys
 - Prefer minimal OAuth scopes and fine-grained tokens (e.g. GitHub fine-grained tokens with per-repo permissions)
-- Rotate keys that get exposed; Chameleon picks up the new value immediately without restart
+- Rotate keys that get exposed; Protean MCP picks up the new value immediately without restart
 
 ---
 
@@ -315,13 +315,13 @@ Chameleon re-reads `.env` on every call — which means adding a key instantly a
 
 **"Can't I just add more servers to `mcp.json`?"** — Every configured server starts at launch and exposes all tools constantly. You can't add or remove mid-session without a restart. With 5+ servers you're burning thousands of tokens on every request for tools rarely needed. Protean MCP keeps the tool list minimal — mount what you need, unmount it when done.
 
-**"What about MCP Inspector?"** — MCP Inspector is a standalone web UI that connects to one server and lets you inspect schemas and call tools manually. It's useful for basic debugging but isolated from real AI workflows. Chameleon tests servers inside actual Claude or Cursor sessions — how an AI really uses them. It adds `test()` scoring, `bench()` latency numbers, side-by-side server comparison, and `craft()` for live endpoint prototyping. It also discovers and installs servers on demand; Inspector requires you to already have one running.
+**"What about MCP Inspector?"** — MCP Inspector is a standalone web UI that connects to one server and lets you inspect schemas and call tools manually. It's useful for basic debugging but isolated from real AI workflows. Protean MCP tests servers inside actual Claude or Cursor sessions — how an AI really uses them. It adds `test()` scoring, `bench()` latency numbers, side-by-side server comparison, and `craft()` for live endpoint prototyping. It also discovers and installs servers on demand; Inspector requires you to already have one running.
 
-**"What about `mcp-dynamic-proxy`?"** — It hides tools behind `call_tool("brave", "web_search", {...})` — always a wrapper. After `mount("mcp-server-brave-search")`, Chameleon gives you a real native `brave_web_search` with the actual schema. It also can't discover or install packages at runtime.
+**"What about `mcp-dynamic-proxy`?"** — It hides tools behind `call_tool("brave", "web_search", {...})` — always a wrapper. After `mount("mcp-server-brave-search")`, Protean MCP gives you a real native `brave_web_search` with the actual schema. It also can't discover or install packages at runtime.
 
 **"Can FastMCP do this natively?"**
 
-| | FastMCP native | Chameleon |
+| | FastMCP native | Protean MCP |
 |---|:---:|:---:|
 | Proxy a known HTTP/SSE server | ✅ | ✅ |
 | Mount tools at runtime | ✅ (write code) | ✅ `mount()` |
@@ -358,9 +358,9 @@ Chameleon re-reads `.env` on every call — which means adding a key instantly a
 }
 ```
 
-Get a free key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, Chameleon is fully functional via npm, PyPI, official registries, and GitHub.
+Get a free key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, Protean MCP is fully functional via npm, PyPI, official registries, and GitHub.
 
-**Frictionless credentials** — Chameleon re-reads `.env` on every `inspect()`, `mount()`, and `call()`. Add a key mid-session and it takes effect immediately — no restart:
+**Frictionless credentials** — Protean MCP re-reads `.env` on every `inspect()`, `mount()`, and `call()`. Add a key mid-session and it takes effect immediately — no restart:
 
 ```
 # .env (CWD, ~/.env, or ~/.chameleon/.env — all checked, CWD wins)
@@ -482,7 +482,7 @@ setup("voice")                      # shows missing env vars
 key("DEEPGRAM_API_KEY", "your-key")
 setup("voice")                      # confirms ready
 mount("voice-mode")
-speak(text="Hello from Chameleon!")
+speak(text="Hello from Protean MCP!")
 unmount(release=True)                  # kills process, frees RAM
 ```
 
