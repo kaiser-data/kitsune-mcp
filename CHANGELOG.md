@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.7.1] — 2026-04-08
+
+### Changed
+- New logo (`logo_protean-mcp.png`) replacing placeholder SVG
+- README: removed "a new way" framing; architecture diagrams cleaned of chameleon references
+- `docs/architecture.svg`: removed 🦎 emoji from Protean MCP label
+- `docs/architecture-forge.svg`: "chameleon-forge" → "protean-forge"
+
+---
+
 ## [0.7.0] — 2026-04-08
 
 ### Breaking Changes
