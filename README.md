@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="protean-logo.svg" alt="Protean MCP" width="160" />
+  <img src="logo_protean-mcp.png" alt="Protean MCP" width="160" />
   <h1>🌊 Protean MCP</h1>
   <p><strong>The shape-shifting MCP hub — mount into any server at runtime.<br/>Fluid. Adaptive. Built for agents that change form.</strong></p>
 </div>
