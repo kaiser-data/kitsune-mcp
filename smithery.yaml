@@ -1,9 +1,9 @@
-name: Protean MCP
-qualifiedName: kaiser-data/protean-mcp
+name: Kitsune MCP
+qualifiedName: kaiser-data/kitsune-mcp
 description: >
   The shape-shifting MCP hub. mount() into any MCP server at runtime across 7 registries.
   No config files. No restarts. Search → mount → call → unmount in seconds.
-homepage: https://github.com/kaiser-data/protean-mcp
+homepage: https://github.com/kaiser-data/kitsune-mcp
 license: MIT
 transport: stdio
 

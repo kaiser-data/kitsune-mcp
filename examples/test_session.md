@@ -1,6 +1,6 @@
-# Protean MCP — Test Session
+# Kitsune MCP — Test Session
 
-Paste the prompt below into a Claude Code session that has Protean MCP configured.
+Paste the prompt below into a Claude Code session that has Kitsune MCP configured.
 Run tests in order — each one builds on the previous.
 
 ---
@@ -8,7 +8,7 @@ Run tests in order — each one builds on the previous.
 ## Prompt to paste
 
 ```
-You are running a structured test of Protean MCP v0.6.0.
+You are running a structured test of Kitsune MCP v0.6.0.
 
 Work through each test case below in order. For every test:
 1. Call the tool(s) listed
@@ -22,7 +22,7 @@ Do not skip tests. If a test fails, note why and continue to the next one.
 TEST 1 — Verify Chameleon is running
 Call: status()
 Expect:
-- Output starts with "PROTEAN MCP STATUS"
+- Output starts with "KITSUNE MCP STATUS"
 - Shows "CURRENT FORM: base (no mount active)"
 - Shows PERFORMANCE STATS section
 

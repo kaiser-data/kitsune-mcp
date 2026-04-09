@@ -5,12 +5,12 @@ optional live fetch from the GitHub API to discover newer additions (24h TTL cac
 """
 import time
 
-from chameleon_mcp.constants import (
+from kitsune_mcp.constants import (
     OFFICIAL_REGISTRY_CACHE_TTL,
     TIMEOUT_FETCH_URL,
 )
-from chameleon_mcp.registry import BaseRegistry, ServerInfo, TTLCache, _simple_search
-from chameleon_mcp.utils import _get_http_client
+from kitsune_mcp.registry import BaseRegistry, ServerInfo, TTLCache, _simple_search
+from kitsune_mcp.utils import _get_http_client
 
 # ---------------------------------------------------------------------------
 # Hardcoded seed list — always available, no network required

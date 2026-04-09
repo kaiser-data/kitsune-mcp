@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from chameleon_mcp.constants import (
+from kitsune_mcp.constants import (
     CRED_SUFFIXES,
     PROVIDER_PARAM_SUFFIXES,
     RESOURCE_PRIORITY_KEYWORDS,

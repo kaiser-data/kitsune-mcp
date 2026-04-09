@@ -169,7 +169,7 @@ class TestSkillPersistence:
         }
 
     def test_save_and_load_round_trip(self, tmp_path, monkeypatch):
-        import chameleon_mcp.session as sess_mod
+        import kitsune_mcp.session as sess_mod
 
         skills_file = tmp_path / "skills.json"
         monkeypatch.setattr(sess_mod, "SKILLS_PATH", skills_file)
@@ -183,7 +183,7 @@ class TestSkillPersistence:
         assert data["org/my-skill"]["content"] == "do the thing"
 
     def test_load_populates_session(self, tmp_path, monkeypatch):
-        import chameleon_mcp.session as sess_mod
+        import kitsune_mcp.session as sess_mod
 
         skills_file = tmp_path / "skills.json"
         skills_file.write_text(json.dumps({"org/loaded-skill": self._make_skill("loaded")}))
@@ -197,7 +197,7 @@ class TestSkillPersistence:
         assert session["skills"]["org/loaded-skill"]["name"] == "loaded"
 
     def test_load_missing_file_is_silent(self, tmp_path, monkeypatch):
-        import chameleon_mcp.session as sess_mod
+        import kitsune_mcp.session as sess_mod
 
         monkeypatch.setattr(sess_mod, "SKILLS_PATH", tmp_path / "nonexistent.json")
         session["skills"].clear()
@@ -205,7 +205,7 @@ class TestSkillPersistence:
         assert session["skills"] == {}
 
     def test_load_corrupt_file_is_silent(self, tmp_path, monkeypatch):
-        import chameleon_mcp.session as sess_mod
+        import kitsune_mcp.session as sess_mod
 
         skills_file = tmp_path / "skills.json"
         skills_file.write_text("not valid json{{{")
@@ -494,7 +494,7 @@ class TestLeanMorph:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockTransport:
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockTransport:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=all_tools)
             MockTransport.return_value = mock_t
@@ -528,7 +528,7 @@ class TestLeanMorph:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockTransport:
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockTransport:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=all_tools)
             MockTransport.return_value = mock_t
@@ -579,7 +579,7 @@ class TestMorphCredentialWarning:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=tools_with_cred)
             mock_t.list_resources = AsyncMock(return_value=[])
@@ -615,7 +615,7 @@ class TestMorphCredentialWarning:
             ctx.session.send_prompt_list_changed = AsyncMock()
 
             with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-                 patch("chameleon_mcp.tools.PersistentStdioTransport") as MockT:
+                 patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
                 mock_t = MagicMock()
                 mock_t.list_tools = AsyncMock(return_value=tools_with_cred)
                 mock_t.list_resources = AsyncMock(return_value=[])
@@ -643,8 +643,8 @@ class TestMorphCredentialWarning:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools._probe_requirements", side_effect=RuntimeError("probe failed")), \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._probe_requirements", side_effect=RuntimeError("probe failed")), \
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[
                 {"name": "simple_tool", "description": "", "inputSchema": {}}

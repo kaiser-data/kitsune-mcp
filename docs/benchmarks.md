@@ -22,7 +22,7 @@ No network access required. All measurements use actual registered tool schemas 
 token_count = len(json.dumps(schema)) // 4
 ```
 
-This matches `_estimate_tokens()` in `chameleon_mcp/utils.py` — the same heuristic used throughout the codebase. It approximates the common 4 chars/token rule of thumb used for Claude/GPT models.
+This matches `_estimate_tokens()` in `kitsune_mcp/utils.py` — the same heuristic used throughout the codebase. It approximates the common 4 chars/token rule of thumb used for Claude/GPT models.
 
 **Caveats:**
 - Actual token counts vary slightly by model and tokenizer (±10–20%)
@@ -43,7 +43,7 @@ Lean mode is more cost-effective than always-on once you have 2+ servers. Forge 
 
 ```
 ==============================================================
-  Protean MCP — Token Overhead Benchmark
+  Kitsune MCP — Token Overhead Benchmark
 ==============================================================
 
 === Profile sizes (actual registered schemas) ===

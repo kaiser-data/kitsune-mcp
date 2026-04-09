@@ -4,10 +4,31 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.8.0] — 2026-04-10
+
+### Breaking Changes
+- **Package renamed** `protean-mcp` → `kitsune-mcp` — update `pip install` and client configs
+- **Package directory renamed** `chameleon_mcp/` → `kitsune_mcp/` — update any direct imports
+- **Env var renamed** `CHAMELEON_TOOLS` → `KITSUNE_TOOLS` — update any custom tool filters
+- **FastMCP server name** `"protean"` → `"kitsune"` — affects MCP client display name
+
+### Deprecated (remove in v0.9)
+- `protean-mcp`, `protean-forge` executables (kept as aliases)
+- `chameleon-mcp`, `chameleon-forge` executables (kept as aliases)
+
+### Migration
+```bash
+pip install kitsune-mcp
+# update mcp.json: "command": "kitsune-mcp"
+# update env: KITSUNE_TOOLS=... (was CHAMELEON_TOOLS)
+```
+
+---
+
 ## [0.7.3] — 2026-04-08
 
 ### Fixed
-- `status()` output header: "CHAMELEON MCP STATUS" → "PROTEAN MCP STATUS"
+- `status()` output header: "CHAMELEON MCP STATUS" → "KITSUNE MCP STATUS"
 
 ---
 
@@ -21,10 +42,10 @@ All notable changes to this project are documented here.
 ## [0.7.1] — 2026-04-08
 
 ### Changed
-- New logo (`logo_protean-mcp.png`) replacing placeholder SVG
+- New logo (`logo_kitsune-mcp.png`) replacing placeholder SVG
 - README: removed "a new way" framing; architecture diagrams cleaned of chameleon references
-- `docs/architecture.svg`: removed 🦎 emoji from Protean MCP label
-- `docs/architecture-forge.svg`: "chameleon-forge" → "protean-forge"
+- `docs/architecture.svg`: removed 🦎 emoji from Kitsune MCP label
+- `docs/architecture-forge.svg`: "chameleon-forge" → "kitsune-forge"
 
 ---
 
@@ -34,15 +55,15 @@ All notable changes to this project are documented here.
 
 - **`morph()` renamed to `mount()`** — update any prompts or scripts that call `morph(...)`
 - **`shed()` renamed to `unmount()`** — update any prompts or scripts that call `shed()`
-- **Package renamed from `chameleon-mcp` to `protean-mcp`** — update `pip install` and `pyproject.toml` references
-- **Executables renamed**: `chameleon-mcp` → `protean-mcp`, `chameleon-forge` → `protean-forge`
+- **Package renamed from `chameleon-mcp` to `kitsune-mcp`** — update `pip install` and `pyproject.toml` references
+- **Executables renamed**: `chameleon-mcp` → `kitsune-mcp`, `chameleon-forge` → `kitsune-forge`
 
 ### Migration Guide
 
 | Before | After |
 |---|---|
-| `pip install chameleon-mcp` | `pip install protean-mcp` |
-| `"command": "chameleon-mcp"` | `"command": "protean-mcp"` |
+| `pip install chameleon-mcp` | `pip install kitsune-mcp` |
+| `"command": "chameleon-mcp"` | `"command": "kitsune-mcp"` |
 | `mount("exa")` | `mount("exa")` ← no change |
 | `morph("exa")` | `mount("exa")` |
 | `shed()` | `unmount()` |
@@ -50,7 +71,7 @@ All notable changes to this project are documented here.
 **Deprecated executables** (`chameleon-mcp`, `chameleon-forge`) are kept as aliases in v0.7.x for backward compatibility and will be removed in v0.8.0.
 
 ### Added
-- `protean-mcp` and `protean-forge` as primary entry point executables
+- `kitsune-mcp` and `kitsune-forge` as primary entry point executables
 - `chameleon-mcp` and `chameleon-forge` kept as deprecated backward-compat aliases
 
 ### Changed
@@ -97,7 +118,7 @@ All notable changes to this project are documented here.
 ## [0.5.9] — 2026-04-06
 
 ### Added
-- Refactored into `chameleon_mcp/` package structure
+- Refactored into `kitsune_mcp/` package structure
 - `OfficialMCPRegistry` — seeds from `modelcontextprotocol/servers` GitHub repo
 - `inspect()` stores measured `token_cost` from actual tool schemas
 - `status()` sums measured costs for inspected-but-not-mounted servers

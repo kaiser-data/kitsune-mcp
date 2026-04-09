@@ -1,6 +1,6 @@
 # Tools Reference
 
-All 15 Protean MCP tools with parameters, return format, and examples.
+All 15 Kitsune MCP tools with parameters, return format, and examples.
 
 ---
 
@@ -106,7 +106,7 @@ web_search_exa(query="MCP servers")
 
 ### `unmount()`
 
-Drop current form, remove all mounted tools, return to base Protean MCP.
+Drop current form, remove all mounted tools, return to base Kitsune MCP.
 
 ```python
 unmount()

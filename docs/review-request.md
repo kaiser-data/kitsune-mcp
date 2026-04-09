@@ -1,10 +1,10 @@
-# Code Review Request — Protean MCP
+# Code Review Request — Kitsune MCP
 
 Hi,
 
-I'd love a review of a small open source Python project I've been building called **Protean MCP**. It's an MIT-licensed MCP proxy server.
+I'd love a review of a small open source Python project I've been building called **Kitsune MCP**. It's an MIT-licensed MCP proxy server.
 
-**Repo**: https://github.com/your-org/protean-mcp
+**Repo**: https://github.com/your-org/kitsune-mcp
 **Language**: Python 3.11+, uses FastMCP
 **Size**: ~1,500 lines across 7 modules
 
@@ -14,7 +14,7 @@ I'm specifically interested in feedback on three things: **novelty**, **code sty
 
 ## What it does (30-second summary)
 
-Most AI clients (Claude Desktop, Cursor, etc.) require you to list MCP servers statically in a config file and restart to add new ones. Protean MCP is a single server you register once, and from there you can discover, install, and use any other MCP server at runtime — without touching config files.
+Most AI clients (Claude Desktop, Cursor, etc.) require you to list MCP servers statically in a config file and restart to add new ones. Kitsune MCP is a single server you register once, and from there you can discover, install, and use any other MCP server at runtime — without touching config files.
 
 ```
 # From within Claude or any MCP client:
@@ -48,12 +48,12 @@ Key files:
 
 | File | What it does |
 |------|-------------|
-| `chameleon_mcp/tools.py` | All MCP tool definitions (~900 lines) |
-| `chameleon_mcp/transport.py` | StdioTransport, PersistentStdioTransport, HTTPSSETransport |
-| `chameleon_mcp/registry.py` | SmitheryRegistry, NpmRegistry, MultiRegistry |
-| `chameleon_mcp/credentials.py` | .env read/write, credential resolution |
-| `chameleon_mcp/session.py` | Module-level session state dict |
-| `chameleon_mcp/utils.py` | Token estimation, content extraction helpers |
+| `kitsune_mcp/tools.py` | All MCP tool definitions (~900 lines) |
+| `kitsune_mcp/transport.py` | StdioTransport, PersistentStdioTransport, HTTPSSETransport |
+| `kitsune_mcp/registry.py` | SmitheryRegistry, NpmRegistry, MultiRegistry |
+| `kitsune_mcp/credentials.py` | .env read/write, credential resolution |
+| `kitsune_mcp/session.py` | Module-level session state dict |
+| `kitsune_mcp/utils.py` | Token estimation, content extraction helpers |
 
 Things I'm uncertain about stylistically:
 
@@ -119,16 +119,16 @@ Subprocesses inherit the full parent environment (all env vars), unrestricted fi
 ## How to run it
 
 ```bash
-pip install protean-mcp
+pip install kitsune-mcp
 # Add to your MCP client config, no API keys required
 ```
 
 Or clone and run from source:
 ```bash
-git clone https://github.com/your-org/protean-mcp
-cd protean-mcp
+git clone https://github.com/your-org/kitsune-mcp
+cd kitsune-mcp
 pip install -e .
-protean-mcp
+kitsune-mcp
 ```
 
 Thanks for any time you can give it.

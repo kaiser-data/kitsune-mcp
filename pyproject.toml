@@ -3,12 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "protean-mcp"
-version = "0.7.3"
+name = "kitsune-mcp"
+version = "0.8.0"
 description = "The shape-shifting MCP hub — mount() into any MCP server at runtime. 7 registries. No restart."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "Chameleon MCP Contributors" }]
+authors = [{ name = "Kitsune MCP Contributors" }]
 keywords = [
     "mcp",
     "model-context-protocol",
@@ -47,20 +47,22 @@ dev = [
 ]
 
 [project.scripts]
-protean-mcp = "server:mcp.run"
-protean-forge = "server_forge:mcp.run"
-chameleon-mcp = "server:mcp.run"
-chameleon-forge = "server_forge:mcp.run"
+kitsune-mcp = "server:mcp.run"
+kitsune-forge = "server_forge:mcp.run"
+protean-mcp = "server:mcp.run"       # deprecated alias, remove in v0.9
+protean-forge = "server_forge:mcp.run"  # deprecated alias, remove in v0.9
+chameleon-mcp = "server:mcp.run"     # deprecated alias, remove in v0.9
+chameleon-forge = "server_forge:mcp.run"  # deprecated alias, remove in v0.9
 
 [project.urls]
-Homepage = "https://github.com/kaiser-data/protean-mcp"
-Repository = "https://github.com/kaiser-data/protean-mcp"
-Issues = "https://github.com/kaiser-data/protean-mcp/issues"
-Documentation = "https://github.com/kaiser-data/protean-mcp/tree/main/docs"
+Homepage = "https://github.com/kaiser-data/kitsune-mcp"
+Repository = "https://github.com/kaiser-data/kitsune-mcp"
+Issues = "https://github.com/kaiser-data/kitsune-mcp/issues"
+Documentation = "https://github.com/kaiser-data/kitsune-mcp/tree/main/docs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-include = ["server.py", "server_forge.py", "chameleon_mcp/*.py"]
+include = ["server.py", "server_forge.py", "kitsune_mcp/*.py"]
 
 [tool.ruff]
 line-length = 100

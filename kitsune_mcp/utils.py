@@ -6,7 +6,7 @@ import shutil
 
 import httpx
 
-from chameleon_mcp.constants import MAX_RESPONSE_TOKENS
+from kitsune_mcp.constants import MAX_RESPONSE_TOKENS
 
 # ---------------------------------------------------------------------------
 # Shared HTTP client — reused across registry lookups, skill fetches, URL fetch

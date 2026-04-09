@@ -62,12 +62,12 @@ await ctx.session.send_prompt_list_changed()
 
 **Files to change:**
 
-`chameleon_mcp/constants.py`
+`kitsune_mcp/constants.py`
 ```python
 TIMEOUT_PROMPT_LIST = 5.0
 ```
 
-`chameleon_mcp/transport.py` — add to `PersistentStdioTransport` (after `read_resource()`, line ~451):
+`kitsune_mcp/transport.py` — add to `PersistentStdioTransport` (after `read_resource()`, line ~451):
 ```python
 async def list_prompts(self) -> list[dict]:
     entry = await self._get_or_start()
@@ -97,13 +97,13 @@ async def get_prompt(self, name: str, arguments: dict) -> list[dict]:
         return resp.get("result", {}).get("messages", [])
 ```
 
-`chameleon_mcp/session.py` — add after `"morphed_tools"`:
+`kitsune_mcp/session.py` — add after `"morphed_tools"`:
 ```python
 "morphed_resources": [],    # normalized URI strings
 "morphed_prompts": [],      # prompt names
 ```
 
-`chameleon_mcp/morph.py` — new imports + two new functions + extend `_do_shed()`:
+`kitsune_mcp/morph.py` — new imports + two new functions + extend `_do_shed()`:
 
 ```python
 from fastmcp.resources import FunctionResource
@@ -200,7 +200,7 @@ for pname in session.get("morphed_prompts", []):
 session["morphed_prompts"] = []
 ```
 
-`chameleon_mcp/tools.py` — update import + both morph() paths + shed():
+`kitsune_mcp/tools.py` — update import + both morph() paths + shed():
 
 Add to import: `_register_proxy_resources, _register_proxy_prompts`
 
@@ -276,14 +276,14 @@ if n_prompts:
 
 **Files to change:**
 
-`chameleon_mcp/constants.py`:
+`kitsune_mcp/constants.py`:
 ```python
 TRUST_HIGH   = {"official"}
 TRUST_MEDIUM = {"mcpregistry", "glama", "smithery"}
 TRUST_LOW    = {"npm", "pypi", "github"}
 ```
 
-`chameleon_mcp/transport.py` — add before any subprocess spawn:
+`kitsune_mcp/transport.py` — add before any subprocess spawn:
 ```python
 _SHELL_METACHAR_RE = re.compile(r'[&;|$`\n]')
 _PATH_TRAVERSAL_RE = re.compile(r'\.\.[/\\]')
@@ -300,9 +300,9 @@ def _validate_install_cmd(cmd: list[str]) -> None:
 
 Call `_validate_install_cmd(install_cmd)` in `StdioTransport.execute()`, `PersistentStdioTransport._get_or_start()`, and `DockerTransport.execute()` before subprocess creation.
 
-`chameleon_mcp/tools.py` — in `morph()`, `call()`, `connect()` output: append trust note:
+`kitsune_mcp/tools.py` — in `morph()`, `call()`, `connect()` output: append trust note:
 ```python
-from chameleon_mcp.constants import TRUST_HIGH, TRUST_MEDIUM
+from kitsune_mcp.constants import TRUST_HIGH, TRUST_MEDIUM
 source = srv.source if srv else "unknown"
 if source not in TRUST_HIGH and source not in TRUST_MEDIUM:
     trust_note = f"\n⚠️  Source: {source} (community — not verified by official MCP registry)"
@@ -324,7 +324,7 @@ else:
 
 **Files to change:**
 
-`chameleon_mcp/tools.py` — in morph(), after tool registration (best-effort, non-blocking):
+`kitsune_mcp/tools.py` — in morph(), after tool registration (best-effort, non-blocking):
 ```python
 try:
     reqs = _probe_requirements(raw_tools, resource_text or "")
@@ -406,7 +406,7 @@ Include manual test protocol so contributors can fill in rows.
 
 **Why it matters:** Users need to know where a server comes from before running it.
 
-**Files to change (`chameleon_mcp/tools.py` output formatting only):**
+**Files to change (`kitsune_mcp/tools.py` output formatting only):**
 - `search()`: ensure `source:` appears on every result line (audit current format)
 - `inspect()`: add `Source: {srv.source}` as first line of output
 - `morph()`: source note already added in step 2 — verify it appears
@@ -551,11 +551,11 @@ The permission boundary is structural — a code review agent with this profile 
 
 | File | Changes |
 |------|---------|
-| `chameleon_mcp/constants.py` | `TIMEOUT_PROMPT_LIST`, trust tier sets |
-| `chameleon_mcp/transport.py` | `list_prompts()`, `get_prompt()`, `_validate_install_cmd()` |
-| `chameleon_mcp/morph.py` | `_register_proxy_resources()`, `_register_proxy_prompts()`, extend `_do_shed()` |
-| `chameleon_mcp/tools.py` | morph() + shed() resource/prompt blocks, trust warning, cred warning, provenance |
-| `chameleon_mcp/session.py` | `morphed_resources`, `morphed_prompts` keys |
+| `kitsune_mcp/constants.py` | `TIMEOUT_PROMPT_LIST`, trust tier sets |
+| `kitsune_mcp/transport.py` | `list_prompts()`, `get_prompt()`, `_validate_install_cmd()` |
+| `kitsune_mcp/morph.py` | `_register_proxy_resources()`, `_register_proxy_prompts()`, extend `_do_shed()` |
+| `kitsune_mcp/tools.py` | morph() + shed() resource/prompt blocks, trust warning, cred warning, provenance |
+| `kitsune_mcp/session.py` | `morphed_resources`, `morphed_prompts` keys |
 | `server.py` | re-export new functions |
 | `examples/benchmark.py` | new — reproducible token/latency measurements |
 | `docs/benchmarks.md` | new — benchmark methodology + reference output |

@@ -166,8 +166,8 @@ class TestMorphUsesPersistentTransport:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools._register_proxy_tools", side_effect=fake_register), \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockPersistent:
+             patch("kitsune_mcp.tools._register_proxy_tools", side_effect=fake_register), \
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockPersistent:
             mock_transport = MagicMock()
             mock_transport.list_tools = AsyncMock(return_value=[
                 {"name": "pool_tool", "description": "a tool", "inputSchema": {}}
@@ -219,7 +219,7 @@ class TestRegisterProxyResources:
     async def test_proxy_calls_transport_read_resource(self):
         """The registered proxy function calls transport.read_resource with the correct URI."""
         from server import _register_proxy_resources
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         transport = self._make_transport()
         uri = "config://proxy-test-srv/doc"
         resources = [{"uri": uri, "name": "doc", "description": "docs"}]
@@ -241,7 +241,7 @@ class TestRegisterProxyResources:
         """Proxy returns an error string instead of raising on transport failure."""
         from unittest.mock import AsyncMock, MagicMock
         from server import _register_proxy_resources
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         transport = MagicMock()
         transport.read_resource = AsyncMock(side_effect=RuntimeError("server died"))
         uri = "config://error-test/settings"
@@ -275,7 +275,7 @@ class TestRegisterProxyPrompts:
 
     async def test_registers_prompt(self):
         from server import _register_proxy_prompts
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         transport = self._make_transport()
         prompts = [{"name": "greet_user", "description": "greet the user", "arguments": []}]
         registered = _register_proxy_prompts(transport, prompts)
@@ -295,7 +295,7 @@ class TestRegisterProxyPrompts:
         """Proxy function signature must include all declared arguments."""
         import inspect as _i
         from server import _register_proxy_prompts
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         transport = self._make_transport()
         prompts = [{
             "name": "test_sig_prompt",
@@ -321,7 +321,7 @@ class TestRegisterProxyPrompts:
     async def test_proxy_calls_transport_get_prompt(self):
         """Proxy function forwards call to transport.get_prompt."""
         from server import _register_proxy_prompts
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         transport = self._make_transport()
         prompts = [{"name": "forward_test_prompt", "description": "fwd", "arguments": []}]
         registered = _register_proxy_prompts(transport, prompts)
@@ -338,7 +338,7 @@ class TestRegisterProxyPrompts:
         """Proxy formats messages as [role]: text lines joined by ---."""
         from unittest.mock import AsyncMock, MagicMock
         from server import _register_proxy_prompts
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         transport = MagicMock()
         transport.get_prompt = AsyncMock(return_value=[
             {"role": "user", "content": {"text": "What is X?"}},
@@ -387,7 +387,7 @@ class TestDoShedAll:
 
         _do_shed()
 
-        from chameleon_mcp.app import mcp
+        from kitsune_mcp.app import mcp
         for uri in reg_res:
             assert uri not in mcp._resource_manager._resources
         for pname in reg_prom:
@@ -437,10 +437,10 @@ class TestMorphRegistersAll:
             return []
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools._register_proxy_tools", return_value=["a_tool"]), \
-             patch("chameleon_mcp.tools._register_proxy_resources", side_effect=fake_reg_resources) as mock_rr, \
-             patch("chameleon_mcp.tools._register_proxy_prompts", return_value=[]) as mock_rp, \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockPST:
+             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["a_tool"]), \
+             patch("kitsune_mcp.tools._register_proxy_resources", side_effect=fake_reg_resources) as mock_rr, \
+             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]) as mock_rp, \
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockPST:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[{"name": "a_tool", "description": "", "inputSchema": {}}])
             mock_t.list_resources = AsyncMock(return_value=[{"uri": "config://org/cfg", "name": "cfg"}])
@@ -472,10 +472,10 @@ class TestMorphRegistersAll:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools._register_proxy_tools", return_value=["http_tool"]), \
-             patch("chameleon_mcp.tools._register_proxy_resources") as mock_rr, \
-             patch("chameleon_mcp.tools._register_proxy_prompts") as mock_rp, \
-             patch("chameleon_mcp.tools.HTTPSSETransport"):
+             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["http_tool"]), \
+             patch("kitsune_mcp.tools._register_proxy_resources") as mock_rr, \
+             patch("kitsune_mcp.tools._register_proxy_prompts") as mock_rp, \
+             patch("kitsune_mcp.tools.HTTPSSETransport"):
             await mount("http-org/http-server", ctx)
 
         mock_rr.assert_not_called()
@@ -500,8 +500,8 @@ class TestMorphRegistersAll:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("chameleon_mcp.tools._register_proxy_tools", return_value=["exc_tool"]), \
-             patch("chameleon_mcp.tools.PersistentStdioTransport") as MockPST:
+             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["exc_tool"]), \
+             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockPST:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[{"name": "exc_tool", "description": "", "inputSchema": {}}])
             mock_t.list_resources = AsyncMock(side_effect=RuntimeError("timeout"))

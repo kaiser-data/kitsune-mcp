@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Protean MCP — Token Overhead Benchmark
+"""Kitsune MCP — Token Overhead Benchmark
 
 Measures actual token costs from registered schemas. No network access required.
 
@@ -12,13 +12,13 @@ import os
 import sys
 
 # Must be set before server.py imports — controls which tools are registered.
-os.environ.setdefault("CHAMELEON_TOOLS", "all")
+os.environ.setdefault("KITSUNE_TOOLS", "all")
 os.environ.setdefault("SMITHERY_API_KEY", "")  # suppress key-not-set warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server import _BASE_TOOL_NAMES, _LEAN_TOOLS, mcp
-from chameleon_mcp.utils import _estimate_tokens
+from kitsune_mcp.utils import _estimate_tokens
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ def run_benchmark():
 
     w = 62
     print("=" * w)
-    print("  Protean MCP — Token Overhead Benchmark")
+    print("  Kitsune MCP — Token Overhead Benchmark")
     print("=" * w)
     print()
 
@@ -88,7 +88,7 @@ def run_benchmark():
 
     for n_servers in (2, 5, 10):
         baseline   = n_servers * _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
-        # Protean MCP exposes itself (lean or forge) + 1 mounted server at a time
+        # Kitsune MCP exposes itself (lean or forge) + 1 mounted server at a time
         with_lean  = lean_tokens  + _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
         with_forge = forge_tokens + _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
 

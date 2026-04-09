@@ -26,10 +26,10 @@
         stroke="#3b82f6" stroke-width="2" marker-end="url(#arrowBlue)"/>
   <text x="365" y="97" fill="#93c5fd" font-size="10">stdio</text>
 
-  <!-- Protean MCP box -->
+  <!-- Kitsune MCP box -->
   <rect x="20" y="112" width="660" height="122" rx="12"
         fill="#f0fdf4" stroke="#22c55e" stroke-width="2.5"/>
-  <text x="350" y="138" text-anchor="middle" fill="#15803d" font-size="16" font-weight="700">Protean MCP</text>
+  <text x="350" y="138" text-anchor="middle" fill="#15803d" font-size="16" font-weight="700">Kitsune MCP</text>
 
   <!-- 6 core tool pills -->
   <rect x="129" y="150" width="70" height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>

@@ -6,16 +6,16 @@ from collections.abc import Callable
 from mcp.server.fastmcp.prompts.base import Prompt as _Prompt
 from mcp.server.fastmcp.resources.types import FunctionResource as _FunctionResource
 
-from chameleon_mcp.app import mcp
-from chameleon_mcp.constants import (
+from kitsune_mcp.app import mcp
+from kitsune_mcp.constants import (
     MCP_CLIENT_INFO,
     MCP_PROTOCOL_VERSION,
     TIMEOUT_RESOURCE_LIST,
     TIMEOUT_STDIO_INIT,
     TIMEOUT_STDIO_TOOL,
 )
-from chameleon_mcp.session import session
-from chameleon_mcp.transport import BaseTransport, StdioTransport
+from kitsune_mcp.session import session
+from kitsune_mcp.transport import BaseTransport, StdioTransport
 
 # Matches URI template parameters like {path} or {file_name}
 _URI_TEMPLATE_RE = re.compile(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}')

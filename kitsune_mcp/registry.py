@@ -7,7 +7,7 @@ from typing import Any, Generic, TypeVar
 
 _T = TypeVar("_T")
 
-from chameleon_mcp.constants import (
+from kitsune_mcp.constants import (
     GLAMA_REGISTRY_TTL,
     GLAMA_REGISTRY_URL,
     MAX_EXPLORE_DESC,
@@ -15,8 +15,8 @@ from chameleon_mcp.constants import (
     MCP_REGISTRY_IO_URL,
     TIMEOUT_FETCH_URL,
 )
-from chameleon_mcp.credentials import _registry_headers, _smithery_available
-from chameleon_mcp.utils import _estimate_tokens, _get_http_client
+from kitsune_mcp.credentials import _registry_headers, _smithery_available
+from kitsune_mcp.utils import _estimate_tokens, _get_http_client
 
 REGISTRY_BASE = "https://registry.smithery.ai"
 
@@ -371,7 +371,7 @@ class MultiRegistry(BaseRegistry):
     """Fan out to all registries, dedup by name, Official → GitHub → Smithery → npm priority."""
 
     def __init__(self):
-        from chameleon_mcp.official_registry import OfficialMCPRegistry
+        from kitsune_mcp.official_registry import OfficialMCPRegistry
         self._registries = [
             OfficialMCPRegistry(),
             McpRegistryIO(),

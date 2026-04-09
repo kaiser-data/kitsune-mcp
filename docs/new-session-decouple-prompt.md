@@ -1,16 +1,16 @@
 # New Session Prompt: Decouple from Smithery / Open Source Hardening
 
-Copy and paste this into a new Claude Code session opened in the `Protean MCP` project directory.
+Copy and paste this into a new Claude Code session opened in the `Kitsune MCP` project directory.
 
 ---
 
 ## Prompt
 
 ```
-I need you to review the Protean MCP codebase and README, then produce a concrete implementation plan to make this open source project less dependent on Smithery (a commercial platform).
+I need you to review the Kitsune MCP codebase and README, then produce a concrete implementation plan to make this open source project less dependent on Smithery (a commercial platform).
 
 Context:
-- Protean MCP is an open source MIT-licensed MCP proxy tool
+- Kitsune MCP is an open source MIT-licensed MCP proxy tool
 - It currently treats Smithery as the primary registry, but that's a commercial service
 - The goal: GitHub repos and npm/PyPI packages should be the primary path, Smithery is one optional registry among several
 - The project should work fully without any commercial API keys
@@ -18,10 +18,10 @@ Context:
 Please:
 
 1. Read the README.md and understand the current state
-2. Read chameleon_mcp/registry.py — especially MultiRegistry
-3. Read chameleon_mcp/tools.py — find every place that hard-requires or prioritizes Smithery
-4. Read chameleon_mcp/transport.py — understand current transports
-5. Read chameleon_mcp/credentials.py — understand _smithery_available()
+2. Read kitsune_mcp/registry.py — especially MultiRegistry
+3. Read kitsune_mcp/tools.py — find every place that hard-requires or prioritizes Smithery
+4. Read kitsune_mcp/transport.py — understand current transports
+5. Read kitsune_mcp/credentials.py — understand _smithery_available()
 
 Then produce a prioritized plan covering:
 

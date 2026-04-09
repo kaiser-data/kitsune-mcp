@@ -15,7 +15,7 @@ from server import NpmRegistry, SmitheryRegistry
 
 class TestSmitheryRegistryNoKey:
     async def test_search_without_api_key_returns_empty(self, monkeypatch):
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", "")
         reg = SmitheryRegistry()
@@ -23,7 +23,7 @@ class TestSmitheryRegistryNoKey:
         assert results == []
 
     async def test_get_server_without_api_key_returns_none(self, monkeypatch):
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", "")
         reg = SmitheryRegistry()
@@ -229,7 +229,7 @@ class TestMultiRegistryGetServerParallel:
 
     async def test_falls_back_to_npm_when_smithery_unavailable(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_detail = {
             "name": "mcp-server-brave-search",
@@ -250,7 +250,7 @@ class TestMultiRegistryGetServerParallel:
 
     async def test_returns_none_when_all_fail(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         with respx.mock:
             respx.get("https://registry.npmjs.org/totally-unknown-pkg-xyz").mock(
@@ -268,7 +268,7 @@ class TestMultiRegistryCaching:
 
     async def test_get_server_returns_cached_result(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_detail = {
             "name": "mcp-server-cached",
@@ -292,7 +292,7 @@ class TestMultiRegistryCaching:
 
     async def test_bust_cache_clears_all(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_detail = {
             "name": "mcp-server-bustable",
@@ -315,7 +315,7 @@ class TestMultiRegistryCaching:
 
     async def test_search_returns_cached_result(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
-        import chameleon_mcp.credentials as creds
+        import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_search = {
             "objects": [
@@ -381,7 +381,7 @@ class TestOfficialMCPRegistry:
         assert result.install_cmd[0] == "uvx"
 
     async def test_get_server_unknown_returns_none(self):
-        import chameleon_mcp.official_registry as oreg
+        import kitsune_mcp.official_registry as oreg
         from server import OfficialMCPRegistry
         # Reset cache so the live fetch runs
         oreg._live_cache.clear()
@@ -717,7 +717,7 @@ class TestMcpRegistryIO:
     }
 
     async def test_search_returns_servers(self):
-        import chameleon_mcp.registry as reg_mod
+        import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
         reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
@@ -730,7 +730,7 @@ class TestMcpRegistryIO:
         assert results[0].source == "mcpregistry"
 
     async def test_npm_package_gets_npx_install_cmd(self):
-        import chameleon_mcp.registry as reg_mod
+        import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
         reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
@@ -743,7 +743,7 @@ class TestMcpRegistryIO:
         assert npm_srv.install_cmd == ["npx", "-y", "@owner/my-mcp-server"]
 
     async def test_pypi_package_gets_uvx_install_cmd(self):
-        import chameleon_mcp.registry as reg_mod
+        import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
         reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
@@ -756,7 +756,7 @@ class TestMcpRegistryIO:
         assert pip_srv.install_cmd == ["uvx", "pip-mcp-server"]
 
     async def test_credentials_extracted_from_env_vars(self):
-        import chameleon_mcp.registry as reg_mod
+        import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
         reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:
@@ -769,7 +769,7 @@ class TestMcpRegistryIO:
         assert "MY_API_KEY" in result.credentials
 
     async def test_http_error_returns_empty(self):
-        import chameleon_mcp.registry as reg_mod
+        import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
         reg_mod.McpRegistryIO._cache.clear()
         with respx.mock:

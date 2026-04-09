@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0",
-  "name": "protean-mcp",
-  "display_name": "Protean MCP",
+  "name": "kitsune-mcp",
+  "display_name": "Kitsune MCP",
   "description": "The shape-shifting MCP hub. mount() into any MCP server at runtime. 7 registries. No restarts.",
   "version": "0.2.0",
   "license": "MIT",
-  "repository": "https://github.com/kaiser-data/protean-mcp",
+  "repository": "https://github.com/kaiser-data/kitsune-mcp",
   "install": {
-    "pip": "protean-mcp",
+    "pip": "kitsune-mcp",
     "source": "python server.py",
     "mcp_json": {
       "command": "python",

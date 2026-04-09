@@ -312,7 +312,7 @@ class TestListResources:
         _process_pool.pop(pool_key, None)
 
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
-            with patch("chameleon_mcp.transport.StdioTransport._read_response", AsyncMock(side_effect=[
+            with patch("kitsune_mcp.transport.StdioTransport._read_response", AsyncMock(side_effect=[
                 self._init_resp(),  # init
                 None,               # resources/list → timeout
             ])):
@@ -467,7 +467,7 @@ class TestPoolEviction:
         entry.proc.kill.assert_called()
 
     def test_idle_process_is_evicted(self):
-        from chameleon_mcp.constants import POOL_MAX_IDLE_SECONDS
+        from kitsune_mcp.constants import POOL_MAX_IDLE_SECONDS
         from server import _evict_stale_pool_entries
         key, entry = self._make_entry(returncode=None, last_used_offset=-(POOL_MAX_IDLE_SECONDS + 1))
         _process_pool[key] = entry
@@ -488,7 +488,7 @@ class TestPoolEviction:
         assert key in _process_pool
 
     def test_hard_cap_evicts_oldest(self):
-        from chameleon_mcp.constants import POOL_MAX_PROCESSES
+        from kitsune_mcp.constants import POOL_MAX_PROCESSES
         from server import _evict_stale_pool_entries
         # Fill pool beyond cap: POOL_MAX_PROCESSES + 2 entries, each with different last_used_at
         for i in range(POOL_MAX_PROCESSES + 2):

@@ -1,13 +1,13 @@
-# Contributing to Protean MCP
+# Contributing to Kitsune MCP
 
 Thank you for helping make Chameleon better! This guide gets you to a working dev setup in under 5 minutes.
 
 ## Quick Setup
 
 ```bash
-git clone https://github.com/kaiser-data/protean-mcp
-cd protean-mcp
-make dev        # installs protean-mcp + dev deps (pytest, ruff)
+git clone https://github.com/kaiser-data/kitsune-mcp
+cd kitsune-mcp
+make dev        # installs kitsune-mcp + dev deps (pytest, ruff)
 make test       # run all tests
 make lint       # ruff lint check
 make format     # auto-format with ruff

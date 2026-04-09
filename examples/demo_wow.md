@@ -1,4 +1,4 @@
-# Protean MCP — 5-Minute Demo
+# Kitsune MCP — 5-Minute Demo
 
 This is the canonical "wow demo" — 8 steps that show every core capability in one session.
 
@@ -9,7 +9,7 @@ No config edits. No restarts. Copy each line into your AI client and run it.
 ## Prerequisites
 
 ```bash
-pip install protean-mcp
+pip install kitsune-mcp
 ```
 
 Add once to your MCP config and restart your client:
@@ -17,7 +17,7 @@ Add once to your MCP config and restart your client:
 ```json
 {
   "mcpServers": {
-    "chameleon": { "command": "protean-mcp" }
+    "chameleon": { "command": "kitsune-mcp" }
   }
 }
 ```

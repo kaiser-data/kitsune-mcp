@@ -1,6 +1,6 @@
 # Agent Patterns
 
-Common patterns for AI agents using Protean MCP.
+Common patterns for AI agents using Kitsune MCP.
 
 ## Pattern 1: Search → Quality Gate → Mount
 

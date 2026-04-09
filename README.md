@@ -1,14 +1,14 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/protean-mcp/main/logo_protean-mcp.png" alt="Protean MCP" width="160" />
-  <h1>🌊 Protean MCP</h1>
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/logo_kitsune-mcp.png" alt="Kitsune MCP" width="160" />
+  <h1>🌊 Kitsune MCP</h1>
   <p><strong>One MCP entry. 10,000+ servers on demand.<br/>Load only the tools you need. Switch instantly. No restarts.</strong></p>
 </div>
 
-[![PyPI](https://img.shields.io/pypi/v/protean-mcp?color=blue)](https://pypi.org/project/protean-mcp/)
-[![Python](https://img.shields.io/pypi/pyversions/protean-mcp)](https://pypi.org/project/protean-mcp/)
-[![CI](https://github.com/kaiser-data/protean-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/kaiser-data/protean-mcp/actions)
+[![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue)](https://pypi.org/project/kitsune-mcp/)
+[![Python](https://img.shields.io/pypi/pyversions/kitsune-mcp)](https://pypi.org/project/kitsune-mcp/)
+[![CI](https://github.com/kaiser-data/kitsune-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/kaiser-data/kitsune-mcp/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Smithery](https://smithery.ai/badge/@kaiser-data/protean-mcp)](https://smithery.ai/server/@kaiser-data/protean-mcp)
+[![Smithery](https://smithery.ai/badge/@kaiser-data/kitsune-mcp)](https://smithery.ai/server/@kaiser-data/kitsune-mcp)
 
 ---
 
@@ -18,7 +18,7 @@ Every server you add to your config loads all its tools at startup — and keeps
 
 Five servers means 3,000–5,000 tokens of overhead on every request. Your agent sees 50+ tools and has to reason about all of them before it can act.
 
-**Protean MCP is one entry that replaces all of them.**
+**Kitsune MCP is one entry that replaces all of them.**
 
 ```
 mount("brave-search", tools=["web_search"])  # only the tool you need
@@ -46,11 +46,11 @@ An agent that loads everything upfront burns tokens on tools it never calls — 
 - Chain across multiple servers in one session without touching config or restarting
 - Token overhead stays flat: ~650 base + only what you load
 
-Protean MCP is designed around the real economics of an agent loop.
+Kitsune MCP is designed around the real economics of an agent loop.
 
 ### MCP developers
 
-Beyond MCP Inspector's basic schema viewer, Protean MCP gives you a full development workflow inside your actual AI client:
+Beyond MCP Inspector's basic schema viewer, Kitsune MCP gives you a full development workflow inside your actual AI client:
 
 | Need | Tool |
 |---|---|
@@ -67,7 +67,7 @@ No separate web UI. No isolated test environment. Test how your server actually 
 
 ## Two modes
 
-| | `protean-mcp` | `protean-forge` |
+| | `kitsune-mcp` | `kitsune-forge` |
 |---|---|---|
 | **Purpose** | Adaptive agents, everyday mounting | MCP evaluation, benchmarking, crafting |
 | **Tools** | 7 (mount, unmount, search, inspect, call, key, status) | All 17 |
@@ -79,10 +79,10 @@ No separate web UI. No isolated test environment. Test how your server actually 
 Both modes from the same package:
 
 ```json
-{ "command": "protean-mcp" }                        ← lean (default)
-{ "command": "protean-forge" }                      ← full suite
-{ "command": "protean-mcp",
-  "env": { "CHAMELEON_TOOLS": "mount,unmount,key" } }    ← custom
+{ "command": "kitsune-mcp" }                        ← lean (default)
+{ "command": "kitsune-forge" }                      ← full suite
+{ "command": "kitsune-mcp",
+  "env": { "KITSUNE_TOOLS": "mount,unmount,key" } }    ← custom
 ```
 
 ---
@@ -90,15 +90,15 @@ Both modes from the same package:
 ## How It Fits Together
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/protean-mcp/main/docs/architecture.svg" alt="Protean MCP — lean profile" width="700"/>
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture.svg" alt="Kitsune MCP — lean profile" width="700"/>
 </div>
 
 `mount()` injects tools directly at runtime via FastMCP's live API. Token overhead stays flat regardless of how many servers you explore.
 
-Need the full evaluation suite? `protean-forge` adds execution, connection management, benchmarking, and tool crafting:
+Need the full evaluation suite? `kitsune-forge` adds execution, connection management, benchmarking, and tool crafting:
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/protean-mcp/main/docs/architecture-forge.svg" alt="Protean Forge — extended suite" width="700"/>
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture-forge.svg" alt="Protean Forge — extended suite" width="700"/>
 </div>
 
 ---
@@ -106,7 +106,7 @@ Need the full evaluation suite? `protean-forge` adds execution, connection manag
 ## Quick Start
 
 ```bash
-pip install protean-mcp
+pip install kitsune-mcp
 ```
 
 Add to your MCP client config — **once, globally**:
@@ -114,8 +114,8 @@ Add to your MCP client config — **once, globally**:
 ```json
 {
   "mcpServers": {
-    "protean": {
-      "command": "protean-mcp"
+    "kitsune": {
+      "command": "kitsune-mcp"
     }
   }
 }
@@ -136,7 +136,7 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.dev, Z
 
 ## Server Sources
 
-Protean MCP searches across 7 registries in parallel — tens of thousands of servers, no single one required.
+Kitsune MCP searches across 7 registries in parallel — tens of thousands of servers, no single one required.
 
 | Registry | Auth | `registry=` value |
 |---|---|---|
@@ -156,20 +156,20 @@ Default `search()` fans out across all no-auth registries automatically. Add a `
 
 ### The proxy model
 
-Protean MCP is a **dynamic MCP proxy**. It sits between your AI client and any number of other MCP servers, connecting to them on demand:
+Kitsune MCP is a **dynamic MCP proxy**. It sits between your AI client and any number of other MCP servers, connecting to them on demand:
 
 ```
 Your AI client
     │
     ▼
-Protean MCP          ← the one entry in your config
+Kitsune MCP          ← the one entry in your config
     │
     ├── (on mount) ──► filesystem server   (spawned subprocess)
     ├── (on mount) ──► brave-search server (spawned subprocess)
     └── (on mount) ──► remote HTTP server  (HTTP+SSE connection)
 ```
 
-**Nothing is copied.** When you call a mounted tool, Protean MCP forwards the call to the original server via JSON-RPC and returns the result. The server's logic always runs on the server — Protean MCP only relays the schema and the call.
+**Nothing is copied.** When you call a mounted tool, Kitsune MCP forwards the call to the original server via JSON-RPC and returns the result. The server's logic always runs on the server — Kitsune MCP only relays the schema and the call.
 
 ### What mount() does, step by step
 
@@ -233,7 +233,7 @@ call("brave_web_search", arguments={"query": "MCP protocol 2025"})
 
 ## Security
 
-Protean MCP introduces a trust model for servers you haven't personally audited.
+Kitsune MCP introduces a trust model for servers you haven't personally audited.
 
 ### Trust tiers
 
@@ -247,7 +247,7 @@ Every `mount()`, `call()`, and `connect()` result shows where the server comes f
 
 ### Install command validation
 
-Before spawning any subprocess, Protean MCP validates the executable name:
+Before spawning any subprocess, Kitsune MCP validates the executable name:
 - Blocks shell metacharacters (`&`, `;`, `|`, `` ` ``, `$`) — prevents injection via a crafted server ID
 - Blocks path traversal (`../`) — prevents escaping to arbitrary binaries
 
@@ -265,8 +265,8 @@ Arguments are passed directly to `asyncio.create_subprocess_exec` (never a shell
 
 ### Process isolation and sandboxing
 
-- stdio servers run as separate OS processes — no shared memory with Protean MCP
-- Docker servers run with `--rm -i --memory 512m --label protean-mcp=1`
+- stdio servers run as separate OS processes — no shared memory with Kitsune MCP
+- Docker servers run with `--rm -i --memory 512m --label kitsune-mcp=1`
 - `fetch()` blocks private IPs, loopback, and non-HTTPS URLs (SSRF protection)
 - The process pool has a hard cap of 10 concurrent processes and evicts idle ones after 1 hour
 
@@ -274,7 +274,7 @@ Arguments are passed directly to `asyncio.create_subprocess_exec` (never a shell
 
 ## What You Can Access
 
-One `protean-mcp` entry unlocks any of these on demand — no config changes, no restart:
+One `kitsune-mcp` entry unlocks any of these on demand — no config changes, no restart:
 
 | Category | Servers | Key needed | Lean tokens |
 |---|---|---|---|
@@ -302,26 +302,26 @@ call("create_issue", arguments={"owner": "…", "repo": "…", "title": "…"})
 
 ### Security note on `.env`
 
-Protean MCP re-reads `.env` on every call — which means adding a key instantly activates it. That convenience comes with a responsibility: **`.env` is the single place all your API keys live**. A few practices worth following:
+Kitsune MCP re-reads `.env` on every call — which means adding a key instantly activates it. That convenience comes with a responsibility: **`.env` is the single place all your API keys live**. A few practices worth following:
 
 - Add `.env` to `.gitignore` — never commit real keys
 - Use project-level `.env` for project-specific keys; `~/.chameleon/.env` for personal global keys
 - Prefer minimal OAuth scopes and fine-grained tokens (e.g. GitHub fine-grained tokens with per-repo permissions)
-- Rotate keys that get exposed; Protean MCP picks up the new value immediately without restart
+- Rotate keys that get exposed; Kitsune MCP picks up the new value immediately without restart
 
 ---
 
 ## Why Not Just X?
 
-**"Can't I just add more servers to `mcp.json`?"** — Every configured server starts at launch and exposes all tools constantly. You can't add or remove mid-session without a restart. With 5+ servers you're burning thousands of tokens on every request for tools rarely needed. Protean MCP keeps the tool list minimal — mount what you need, unmount it when done.
+**"Can't I just add more servers to `mcp.json`?"** — Every configured server starts at launch and exposes all tools constantly. You can't add or remove mid-session without a restart. With 5+ servers you're burning thousands of tokens on every request for tools rarely needed. Kitsune MCP keeps the tool list minimal — mount what you need, unmount it when done.
 
-**"What about MCP Inspector?"** — MCP Inspector is a standalone web UI that connects to one server and lets you inspect schemas and call tools manually. It's useful for basic debugging but isolated from real AI workflows. Protean MCP tests servers inside actual Claude or Cursor sessions — how an AI really uses them. It adds `test()` scoring, `bench()` latency numbers, side-by-side server comparison, and `craft()` for live endpoint prototyping. It also discovers and installs servers on demand; Inspector requires you to already have one running.
+**"What about MCP Inspector?"** — MCP Inspector is a standalone web UI that connects to one server and lets you inspect schemas and call tools manually. It's useful for basic debugging but isolated from real AI workflows. Kitsune MCP tests servers inside actual Claude or Cursor sessions — how an AI really uses them. It adds `test()` scoring, `bench()` latency numbers, side-by-side server comparison, and `craft()` for live endpoint prototyping. It also discovers and installs servers on demand; Inspector requires you to already have one running.
 
-**"What about `mcp-dynamic-proxy`?"** — It hides tools behind `call_tool("brave", "web_search", {...})` — always a wrapper. After `mount("mcp-server-brave-search")`, Protean MCP gives you a real native `brave_web_search` with the actual schema. It also can't discover or install packages at runtime.
+**"What about `mcp-dynamic-proxy`?"** — It hides tools behind `call_tool("brave", "web_search", {...})` — always a wrapper. After `mount("mcp-server-brave-search")`, Kitsune MCP gives you a real native `brave_web_search` with the actual schema. It also can't discover or install packages at runtime.
 
 **"Can FastMCP do this natively?"**
 
-| | FastMCP native | Protean MCP |
+| | FastMCP native | Kitsune MCP |
 |---|:---:|:---:|
 | Proxy a known HTTP/SSE server | ✅ | ✅ |
 | Mount tools at runtime | ✅ (write code) | ✅ `mount()` |
@@ -340,7 +340,7 @@ Protean MCP re-reads `.env` on every call — which means adding a key instantly
 ```json
 {
   "mcpServers": {
-    "protean": { "command": "protean-mcp" }
+    "protean": { "command": "kitsune-mcp" }
   }
 }
 ```
@@ -350,17 +350,17 @@ Protean MCP re-reads `.env` on every call — which means adding a key instantly
 ```json
 {
   "mcpServers": {
-    "protean": {
-      "command": "protean-mcp",
+    "kitsune": {
+      "command": "kitsune-mcp",
       "env": { "SMITHERY_API_KEY": "your-key" }
     }
   }
 }
 ```
 
-Get a free key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, Protean MCP is fully functional via npm, PyPI, official registries, and GitHub.
+Get a free key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, Kitsune MCP is fully functional via npm, PyPI, official registries, and GitHub.
 
-**Frictionless credentials** — Protean MCP re-reads `.env` on every `inspect()`, `mount()`, and `call()`. Add a key mid-session and it takes effect immediately — no restart:
+**Frictionless credentials** — Kitsune MCP re-reads `.env` on every `inspect()`, `mount()`, and `call()`. Add a key mid-session and it takes effect immediately — no restart:
 
 ```
 # .env (CWD, ~/.env, or ~/.chameleon/.env — all checked, CWD wins)
@@ -378,7 +378,7 @@ key("BRAVE_API_KEY", "your-key")   # writes to .env, active immediately
 
 ## All Tools
 
-### `protean-mcp` — lean profile (7 tools, ~650 token overhead)
+### `kitsune-mcp` — lean profile (7 tools, ~650 token overhead)
 
 | Tool | Description |
 |---|---|
@@ -390,7 +390,7 @@ key("BRAVE_API_KEY", "your-key")   # writes to .env, active immediately
 | `key(env_var, value)` | Save an API key to `.env` and load it immediately. |
 | `status()` | Show current form, active connections (PID + RAM), token stats. |
 
-### `protean-forge` — full suite (all 17 tools, ~1,700 token overhead)
+### `kitsune-forge` — full suite (all 17 tools, ~1,700 token overhead)
 
 Everything above, plus:
 
@@ -482,7 +482,7 @@ setup("voice")                      # shows missing env vars
 key("DEEPGRAM_API_KEY", "your-key")
 setup("voice")                      # confirms ready
 mount("voice-mode")
-speak(text="Hello from Protean MCP!")
+speak(text="Hello from Kitsune MCP!")
 unmount(release=True)                  # kills process, frees RAM
 ```
 
@@ -491,9 +491,9 @@ unmount(release=True)                  # kills process, frees RAM
 ## Installation
 
 ```bash
-pip install protean-mcp        # from PyPI
+pip install kitsune-mcp        # from PyPI
 # or
-git clone https://github.com/kaiser-data/protean-mcp && pip install -e .
+git clone https://github.com/kaiser-data/kitsune-mcp && pip install -e .
 ```
 
 **Requirements:** Python 3.12+ · `node`/`npx` (for npm servers) · `uvx` from [uv](https://github.com/astral-sh/uv) (for pip servers)
@@ -508,7 +508,7 @@ make test    # pytest
 make lint    # ruff
 ```
 
-Issues and PRs: [github.com/kaiser-data/protean-mcp](https://github.com/kaiser-data/protean-mcp)
+Issues and PRs: [github.com/kaiser-data/kitsune-mcp](https://github.com/kaiser-data/kitsune-mcp)
 
 ---
 

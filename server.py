@@ -1,27 +1,27 @@
-"""Protean MCP — entry point and re-export facade.
+"""Kitsune MCP — entry point and re-export facade.
 
-All logic lives in the chameleon_mcp package. This file:
-  1. Loads .env before any chameleon_mcp imports read os.getenv() at module level.
+All logic lives in the kitsune_mcp package. This file:
+  1. Loads .env before any kitsune_mcp imports read os.getenv() at module level.
   2. Imports all modules so their @mcp.tool() decorators register with the shared mcp instance.
-  3. Prunes tools based on CHAMELEON_TOOLS env var (default: lean 7-tool profile).
+  3. Prunes tools based on KITSUNE_TOOLS env var (default: lean 7-tool profile).
   4. Re-exports public names so existing tests (from server import ...) continue to work.
 
-CHAMELEON_TOOLS env var controls which tools are registered:
+KITSUNE_TOOLS env var controls which tools are registered:
   (not set)                     — lean profile: mount, unmount, search, inspect, key, status, call
-  CHAMELEON_TOOLS=all           — all 17 tools (forge / evaluator mode)
-  CHAMELEON_TOOLS=mount,unmount — exactly those tools
+  KITSUNE_TOOLS=all           — all 17 tools (forge / evaluator mode)
+  KITSUNE_TOOLS=mount,unmount — exactly those tools
 """
 
 import os
 
 from dotenv import load_dotenv
 
-# Must run before chameleon_mcp.credentials reads SMITHERY_API_KEY at module level.
+# Must run before kitsune_mcp.credentials reads SMITHERY_API_KEY at module level.
 load_dotenv()
 
-from chameleon_mcp.app import mcp  # noqa: E402, F401
-from chameleon_mcp.constants import *  # noqa: E402, F401, F403
-from chameleon_mcp.credentials import (  # noqa: E402, F401
+from kitsune_mcp.app import mcp  # noqa: E402, F401
+from kitsune_mcp.constants import *  # noqa: E402, F401, F403
+from kitsune_mcp.credentials import (  # noqa: E402, F401
     ENV_PATH,
     SMITHERY_API_KEY,
     _credentials_guide,
@@ -34,7 +34,7 @@ from chameleon_mcp.credentials import (  # noqa: E402, F401
     _smithery_available,
     _to_env_var,
 )
-from chameleon_mcp.morph import (  # noqa: E402, F401
+from kitsune_mcp.morph import (  # noqa: E402, F401
     _do_shed,
     _fetch_tools_list,
     _json_type_to_py,
@@ -43,8 +43,8 @@ from chameleon_mcp.morph import (  # noqa: E402, F401
     _register_proxy_resources,
     _register_proxy_tools,
 )
-from chameleon_mcp.official_registry import OfficialMCPRegistry  # noqa: E402, F401
-from chameleon_mcp.probe import (  # noqa: E402, F401
+from kitsune_mcp.official_registry import OfficialMCPRegistry  # noqa: E402, F401
+from kitsune_mcp.probe import (  # noqa: E402, F401
     _ENV_VAR_RE,
     _LOCAL_URL_RE,
     _classify_provider,
@@ -52,7 +52,7 @@ from chameleon_mcp.probe import (  # noqa: E402, F401
     _format_setup_guide,
     _probe_requirements,
 )
-from chameleon_mcp.registry import (  # noqa: E402, F401
+from kitsune_mcp.registry import (  # noqa: E402, F401
     _CACHE_TTL_SEARCH,
     _CACHE_TTL_SERVER,
     REGISTRY_BASE,
@@ -71,13 +71,13 @@ from chameleon_mcp.registry import (  # noqa: E402, F401
     _registry,
     _relevance_score,
 )
-from chameleon_mcp.session import (  # noqa: E402, F401
+from kitsune_mcp.session import (  # noqa: E402, F401
     SKILLS_PATH,
     _load_skills,
     _save_skills,
     session,
 )
-from chameleon_mcp.tools import (  # noqa: E402, F401
+from kitsune_mcp.tools import (  # noqa: E402, F401
     _BASE_TOOL_NAMES,
     auto,
     bench,
@@ -97,7 +97,7 @@ from chameleon_mcp.tools import (  # noqa: E402, F401
     test,
     unmount,
 )
-from chameleon_mcp.transport import (  # noqa: E402, F401
+from kitsune_mcp.transport import (  # noqa: E402, F401
     BaseTransport,
     DockerTransport,
     HTTPSSETransport,
@@ -111,7 +111,7 @@ from chameleon_mcp.transport import (  # noqa: E402, F401
     _read_stdio_response,
     _validate_install_cmd,
 )
-from chameleon_mcp.utils import (  # noqa: E402, F401
+from kitsune_mcp.utils import (  # noqa: E402, F401
     _clean_response,
     _estimate_tokens,
     _extract_content,
@@ -126,12 +126,12 @@ from chameleon_mcp.utils import (  # noqa: E402, F401
 # All tools registered above via @mcp.tool(). Prune to the requested profile.
 
 _LEAN_TOOLS = {"mount", "unmount", "search", "inspect", "key", "status", "call"}
-_CHAMELEON_TOOLS_ENV = os.getenv("CHAMELEON_TOOLS", "")
+_KITSUNE_TOOLS_ENV = os.getenv("KITSUNE_TOOLS", "")
 
-if _CHAMELEON_TOOLS_ENV.lower() == "all":
+if _KITSUNE_TOOLS_ENV.lower() == "all":
     _active_tools = _BASE_TOOL_NAMES
-elif _CHAMELEON_TOOLS_ENV:
-    _active_tools = {t.strip() for t in _CHAMELEON_TOOLS_ENV.split(",")} & _BASE_TOOL_NAMES
+elif _KITSUNE_TOOLS_ENV:
+    _active_tools = {t.strip() for t in _KITSUNE_TOOLS_ENV.split(",")} & _BASE_TOOL_NAMES
 else:
     _active_tools = _LEAN_TOOLS
 

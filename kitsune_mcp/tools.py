@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 import httpx
 from mcp.server.fastmcp import Context
 
-from chameleon_mcp.app import mcp
-from chameleon_mcp.constants import (
+from kitsune_mcp.app import mcp
+from kitsune_mcp.constants import (
     MAX_INSPECT_DESC,
     MAX_RESOURCE_DOCS,
     MAX_RESPONSE_TOKENS,
@@ -26,7 +26,7 @@ from chameleon_mcp.constants import (
     TRUST_HIGH,
     TRUST_MEDIUM,
 )
-from chameleon_mcp.credentials import (
+from kitsune_mcp.credentials import (
     _credentials_guide,
     _credentials_inspect_block,
     _registry_headers,
@@ -36,23 +36,23 @@ from chameleon_mcp.credentials import (
     _smithery_available,
     _to_env_var,
 )
-from chameleon_mcp.morph import (
+from kitsune_mcp.morph import (
     _do_shed,
     _fetch_tools_list,
     _register_proxy_prompts,
     _register_proxy_resources,
     _register_proxy_tools,
 )
-from chameleon_mcp.probe import _doc_uri_priority, _format_setup_guide, _probe_requirements
-from chameleon_mcp.registry import (
+from kitsune_mcp.probe import _doc_uri_priority, _format_setup_guide, _probe_requirements
+from kitsune_mcp.registry import (
     REGISTRY_BASE,
     NpmRegistry,
     PyPIRegistry,
     SmitheryRegistry,
     _registry,
 )
-from chameleon_mcp.session import _save_skills, session
-from chameleon_mcp.transport import (
+from kitsune_mcp.session import _save_skills, session
+from kitsune_mcp.transport import (
     BaseTransport,
     DockerTransport,
     HTTPSSETransport,
@@ -61,7 +61,7 @@ from chameleon_mcp.transport import (
     _ping,
     _process_pool,
 )
-from chameleon_mcp.utils import (
+from kitsune_mcp.utils import (
     _estimate_tokens,
     _get_http_client,
     _rss_mb,
@@ -137,8 +137,8 @@ async def search(query: str, registry: str = "all", limit: int = 5) -> str:
     elif registry == "pypi":
         reg = PyPIRegistry()
     elif registry in ("official", "mcpregistry", "glama"):
-        from chameleon_mcp.registry import GlamaRegistry, McpRegistryIO
-        from chameleon_mcp.official_registry import OfficialMCPRegistry
+        from kitsune_mcp.registry import GlamaRegistry, McpRegistryIO
+        from kitsune_mcp.official_registry import OfficialMCPRegistry
         reg = {"official": OfficialMCPRegistry(), "mcpregistry": McpRegistryIO(), "glama": GlamaRegistry()}[registry]
     else:
         reg = _registry
@@ -841,7 +841,7 @@ async def craft(
     py_params = []
     for pname, pschema in (params or {}).items():
         json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
-        from chameleon_mcp.morph import _json_type_to_py
+        from kitsune_mcp.morph import _json_type_to_py
         ptype = _json_type_to_py(json_type)
         py_params.append(_inspect.Parameter(
             pname, _inspect.Parameter.KEYWORD_ONLY,
@@ -1200,7 +1200,7 @@ async def status() -> str:
     current_form = session["current_form"]
     morphed = session["morphed_tools"]
 
-    lines = ["PROTEAN MCP STATUS", ""]
+    lines = ["KITSUNE MCP STATUS", ""]
 
     if current_form:
         lines.append(f"CURRENT FORM: {current_form}")

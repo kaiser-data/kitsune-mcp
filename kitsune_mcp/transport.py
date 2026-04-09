@@ -8,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from chameleon_mcp.constants import (
+from kitsune_mcp.constants import (
     MCP_CLIENT_INFO,
     MCP_PROTOCOL_VERSION,
     POOL_MAX_IDLE_SECONDS,
@@ -19,11 +19,11 @@ from chameleon_mcp.constants import (
     TIMEOUT_STDIO_INIT,
     TIMEOUT_STDIO_TOOL,
 )
-import chameleon_mcp.credentials as _creds
-from chameleon_mcp.credentials import SMITHERY_API_KEY, _credentials_guide, _resolve_config
-from chameleon_mcp.registry import SmitheryRegistry
-from chameleon_mcp.session import session
-from chameleon_mcp.utils import (
+import kitsune_mcp.credentials as _creds
+from kitsune_mcp.credentials import SMITHERY_API_KEY, _credentials_guide, _resolve_config
+from kitsune_mcp.registry import SmitheryRegistry
+from kitsune_mcp.session import session
+from kitsune_mcp.utils import (
     _clean_response,
     _estimate_tokens,
     _extract_content,

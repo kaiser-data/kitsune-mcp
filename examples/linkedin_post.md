@@ -1,4 +1,4 @@
-# LinkedIn Post — Protean MCP
+# LinkedIn Post — Kitsune MCP
 
 **Most AI agents load every tool upfront. That's the wrong model.**
 
@@ -15,4 +15,4 @@ mount("supabase")  # instantly
 
 Lean agent. Focused context. Endless reach.
 
-`pip install protean-mcp`
+`pip install kitsune-mcp`

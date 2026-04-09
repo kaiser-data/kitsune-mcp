@@ -1,6 +1,6 @@
 # Client Compatibility
 
-Protean MCP sends MCP notifications when the tool/resource/prompt list changes — allowing clients to refresh without a restart.
+Kitsune MCP sends MCP notifications when the tool/resource/prompt list changes — allowing clients to refresh without a restart.
 
 ## Notification support matrix
 
@@ -33,7 +33,7 @@ Notification failures are silently suppressed — Chameleon continues to work ev
 
 To fill in missing rows, run the following steps in your client and record the result:
 
-1. Connect to `protean-mcp` (lean profile)
+1. Connect to `kitsune-mcp` (lean profile)
 2. Call `mount("@modelcontextprotocol/server-filesystem")` — verify filesystem tools appear
 3. Call any filesystem tool (e.g. `list_directory(path="/tmp")`) — verify it works
 4. Call `unmount()` — verify filesystem tools disappear

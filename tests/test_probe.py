@@ -1,11 +1,11 @@
-"""Tests for chameleon_mcp/probe.py — readiness probing and setup guide formatting."""
+"""Tests for kitsune_mcp/probe.py — readiness probing and setup guide formatting."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from chameleon_mcp.constants import RESOURCE_PRIORITY_KEYWORDS
-from chameleon_mcp.probe import (
+from kitsune_mcp.constants import RESOURCE_PRIORITY_KEYWORDS
+from kitsune_mcp.probe import (
     _classify_provider,
     _doc_uri_priority,
     _format_setup_guide,
