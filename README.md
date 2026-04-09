@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/logo_kitsune-mcp.png" alt="Kitsune MCP" width="160" />
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
   <p><strong>One MCP entry. 10,000+ servers on demand.<br/>Load only the tools you need. Switch instantly. No restarts.</strong></p>
 </div>
