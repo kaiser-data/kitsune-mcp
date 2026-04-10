@@ -2,6 +2,8 @@
 
 Thank you for helping make Kitsune better! This guide gets you to a working dev setup in under 5 minutes.
 
+Questions or ideas? Join the [Discord](https://discord.gg/EYgcf7EX).
+
 ## Quick Setup
 
 ```bash

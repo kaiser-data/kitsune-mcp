@@ -18,7 +18,13 @@ keywords = [
     "llm-tools",
     "fastmcp",
     "mcp-server",
+    "mcp-hub",
     "mcp-registry",
+    "mcp-router",
+    "mcp-proxy",
+    "smithery",
+    "tool-use",
+    "ai-tools",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
