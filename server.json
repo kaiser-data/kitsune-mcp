@@ -1,0 +1,19 @@
+{
+  "name": "io.github.kaiser-data/kitsune-mcp",
+  "description": "The shape-shifting MCP hub — shapeshift() into 10,000+ MCP servers at runtime. One entry point, no restarts, 7 registries.",
+  "repository": "https://github.com/kaiser-data/kitsune-mcp",
+  "homepage": "https://github.com/kaiser-data/kitsune-mcp",
+  "license": "MIT",
+  "packages": [
+    {
+      "registry_type": "pypi",
+      "name": "kitsune-mcp",
+      "version": "0.8.1"
+    },
+    {
+      "registry_type": "npm",
+      "name": "kitsune-mcp",
+      "version": "0.8.1"
+    }
+  ]
+}

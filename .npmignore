@@ -1,0 +1,21 @@
+# Exclude Python source — npm package is a thin launcher only
+kitsune_mcp/
+tests/
+docs/
+examples/
+__pycache__/
+*.py
+*.pyc
+*.pyo
+.env*
+.venv/
+dist/
+*.egg-info/
+pyproject.toml
+Makefile
+PLAN.md
+smithery.yaml
+agent_manifest.json
+*.png
+*.svg
+*.excalidraw

@@ -1,0 +1,39 @@
+{
+  "name": "kitsune-mcp",
+  "version": "0.8.1",
+  "description": "The shape-shifting MCP hub — shapeshift() into 10,000+ MCP servers at runtime. One entry point, no restarts, 7 registries.",
+  "mcpName": "io.github.kaiser-data/kitsune-mcp",
+  "bin": {
+    "kitsune-mcp": "./bin/kitsune-mcp.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "anthropic",
+    "ai-agents",
+    "llm-tools",
+    "fastmcp",
+    "mcp-server",
+    "mcp-hub",
+    "mcp-registry",
+    "mcp-router",
+    "tool-use"
+  ],
+  "author": "kaiser-data",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaiser-data/kitsune-mcp.git"
+  },
+  "homepage": "https://github.com/kaiser-data/kitsune-mcp",
+  "bugs": {
+    "url": "https://github.com/kaiser-data/kitsune-mcp/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/"
+  ]
+}
