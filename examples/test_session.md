@@ -49,9 +49,9 @@ Expect:
 ---
 
 TEST 4 — Full mount injects tools natively
-Call: mount("@modelcontextprotocol/server-filesystem")
+Call: receive("@modelcontextprotocol/server-filesystem")
 Expect:
-- Output says "Morphed into '@modelcontextprotocol/server-filesystem'"
+- Output says "Received form of '@modelcontextprotocol/server-filesystem'"
 - Lists registered tools: read_file, write_file, list_directory etc
 - Shows "✓  Source: official" (high-trust source)
 - No credential warning (filesystem needs none)
@@ -68,7 +68,7 @@ Expect:
 ---
 
 TEST 6 — Unmount removes all mounted tools
-Call: unmount()
+Call: cast_off()
 Expect:
 - Output says "Unmount '@modelcontextprotocol/server-filesystem'. Removed: read_file, write_file, ..."
 - Filesystem tools are gone from your tool list
@@ -76,12 +76,12 @@ Expect:
 ---
 
 TEST 7 — Lean mount filters to specific tools
-Call: mount("@modelcontextprotocol/server-filesystem", tools=["read_file", "list_directory"])
+Call: receive("@modelcontextprotocol/server-filesystem", tools=["read_file", "list_directory"])
 Expect:
 - Output says "(lean: read_file, list_directory)"
 - Only 2 tools registered — NOT write_file, create_directory, delete_file etc
 - Output count matches: "2 tool(s) registered"
-Then call: unmount()
+Then call: cast_off()
 
 ---
 
@@ -95,16 +95,16 @@ Expect:
 ---
 
 TEST 9 — Trust warning for community server
-Call: mount("mcp-server-brave-search")
+Call: receive("mcp-server-brave-search")
 Expect:
 - Output shows "⚠️  Source: npm (community — not verified by official MCP registry)"
 - Output shows credential warning: '⚠️  Credentials may be required' with key("BRAVE_API_KEY", ...)
 - Tools ARE registered despite the warning (warning is informational, not blocking)
-Then call: unmount()
+Then call: cast_off()
 
 ---
 
-TEST 10 — inspect() is cheaper than mount()
+TEST 10 — inspect() is cheaper than receive()
 Call: inspect("@modelcontextprotocol/server-memory")
 Expect:
 - Shows tool schemas with parameters
@@ -154,9 +154,9 @@ Run `python examples/benchmark.py` to see Chameleon's own schema costs measured 
 | 1 | Chameleon is connected and responding |
 | 2 | Registry fan-out works (official + fallbacks) |
 | 3 | inspect() fetches live schemas, measures token cost, stores in session |
-| 4 | mount() registers tools natively, trust tier shown |
+| 4 | receive() registers tools natively, trust tier shown |
 | 5 | Proxy execution works — call actually reaches the target server |
-| 6 | unmount() removes all mounted tools cleanly |
+| 6 | cast_off() removes all mounted tools cleanly |
 | 7 | Lean mount (tools=[...]) filters correctly |
 | 8 | status() uses measured token costs, not heuristics (v0.6.0) |
 | 9 | Trust warnings and credential warnings fire for community sources |
@@ -173,4 +173,4 @@ Run `python examples/benchmark.py` to see Chameleon's own schema costs measured 
 
 **No trust warning on TEST 9** — check that mcp-server-brave-search resolves from npm (source should be "npm", not "official").
 
-**Token savings is 0 in TEST 8** — make sure you called `inspect()` in TEST 3 before `mount()` in TEST 4. inspect() is what stores the measured cost; mount() alone does not.
+**Token savings is 0 in TEST 8** — make sure you called `inspect()` in TEST 3 before `receive()` in TEST 4. inspect() is what stores the measured cost; receive() alone does not.

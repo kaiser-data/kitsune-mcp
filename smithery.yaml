@@ -1,8 +1,8 @@
 name: Kitsune MCP
 qualifiedName: kaiser-data/kitsune-mcp
 description: >
-  The shape-shifting MCP hub. mount() into any MCP server at runtime across 7 registries.
-  No config files. No restarts. Search → mount → call → unmount in seconds.
+  The shape-shifting MCP hub. shapeshift() into any MCP server at runtime across 7 registries.
+  No config files. No restarts. Search → shapeshift → call → shiftback in seconds.
 homepage: https://github.com/kaiser-data/kitsune-mcp
 license: MIT
 transport: stdio
@@ -37,10 +37,10 @@ tools:
     description: Call any tool on any MCP server (HTTP or stdio)
   - name: run
     description: Run a tool from a local npm/pip package directly
-  - name: mount
-    description: Take a server's form — register its tools directly in your context
-  - name: unmount
-    description: Drop current form and return to base Protean tools
+  - name: shapeshift
+    description: Take a server's form — load its tools directly into your context
+  - name: shiftback
+    description: Drop current form and return to base Kitsune tools
   - name: connect
     description: Connect a persistent hardware/audio MCP server (process stays alive)
   - name: release

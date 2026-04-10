@@ -46,7 +46,7 @@ search("web search")
 Pick a server from the results, then:
 
 ```
-mount("exa/exa")
+receive("exa/exa")
 ```
 
 Now call its tools directly — they appear in your tool list instantly:
@@ -58,7 +58,7 @@ web_search_exa(query="latest AI news")
 Done! To go back to base form:
 
 ```
-unmount()
+cast_off()
 ```
 
 ## Next Steps

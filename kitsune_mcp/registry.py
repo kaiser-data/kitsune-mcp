@@ -107,13 +107,16 @@ class SmitheryRegistry(BaseRegistry):
                 continue
             credentials = _extract_credentials(s)
             remote = s.get("remote", False)
+            deployment_url = s.get("deploymentUrl") or (
+                f"https://server.smithery.ai/{qname}" if remote else ""
+            )
             results.append(ServerInfo(
                 id=qname,
                 name=s.get("displayName") or qname,
                 description=(s.get("description") or "").strip()[:MAX_EXPLORE_DESC],
                 source="smithery",
                 transport="http" if remote else "stdio",
-                url=f"https://server.smithery.ai/{qname}" if remote else "",
+                url=deployment_url,
                 install_cmd=[],
                 credentials=credentials,
                 tools=[],
@@ -139,13 +142,16 @@ class SmitheryRegistry(BaseRegistry):
         tools = s.get("tools") or []
         remote = s.get("remote", False)
         qname = s.get("qualifiedName", id)
+        deployment_url = s.get("deploymentUrl") or (
+            f"https://server.smithery.ai/{qname}" if remote else ""
+        )
         return ServerInfo(
             id=qname,
             name=s.get("displayName") or qname,
             description=(s.get("description") or "").strip(),
             source="smithery",
             transport="http" if remote else "stdio",
-            url=f"https://server.smithery.ai/{qname}" if remote else "",
+            url=deployment_url,
             install_cmd=[],
             credentials=credentials,
             tools=tools,
@@ -428,9 +434,15 @@ class MultiRegistry(BaseRegistry):
             return_exceptions=True,
         )
         valid = [r for r in results if r and not isinstance(r, Exception)]
-        # Prefer a result that has tools cached (e.g. Smithery) over one that doesn't
-        # (e.g. McpRegistryIO), so morph() can work without a prior inspect().
-        result = next((r for r in valid if r.tools), None) or (valid[0] if valid else None)
+        # Skip Smithery results when no API key is configured.
+        smithery_key_ok = _smithery_available()
+        filtered = [r for r in valid if not (r.source == "smithery" and not smithery_key_ok)]
+        candidates = filtered or valid  # fall back to unfiltered if everything was smithery
+        # Sort: cached tools first (usable immediately), then by trust tier within each group.
+        # A Smithery entry with 6 tools beats an mcpregistry entry with none.
+        # If an official/high-trust source has tools, it wins over everything.
+        candidates.sort(key=lambda r: (0 if r.tools else 1, _SOURCE_TIER.get(r.source, 99)))
+        result = candidates[0] if candidates else None
         self._server_cache[id] = (result, now + _CACHE_TTL_SERVER)
         return result
 

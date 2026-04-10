@@ -1,18 +1,18 @@
 import json
 from pathlib import Path
 
-SKILLS_PATH = Path.home() / ".chameleon" / "skills.json"
+SKILLS_PATH = Path.home() / ".kitsune" / "skills.json"
 
 _session: dict = {
     "explored": {},
     "skills": {},
     "grown": {},
-    "morphed_tools": [],      # names of dynamically registered proxy tools
-    "morphed_resources": [],  # normalized URI strings registered via morph()
-    "morphed_prompts": [],    # prompt names registered via morph()
-    "crafted_tools": {},      # name -> {url, method, description, params, headers}
-    "current_form": None,     # server_id currently morphed into
-    "current_form_pool_key": None,  # exact _process_pool key for shed(release=True)
+    "shapeshift_tools": [],      # names of dynamically registered proxy tools
+    "shapeshift_resources": [],  # normalized URI strings registered via shapeshift()
+    "shapeshift_prompts": [],    # prompt names registered via shapeshift()
+    "crafted_tools": {},         # name -> {url, method, description, params, headers}
+    "current_form": None,        # server_id currently shapeshifted into
+    "current_form_pool_key": None,  # exact _process_pool key for shiftback(kill=True)
     "connections": {},        # persistent connections: {pool_key: {name, command, pid, ...}}
     "stats": {
         "total_calls": 0,

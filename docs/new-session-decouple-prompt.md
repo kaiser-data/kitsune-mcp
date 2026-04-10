@@ -32,7 +32,7 @@ A. Code changes needed to make Smithery truly optional (not just documented as o
    - test() and bench() — currently says "not found in registry" for GitHub paths, needs fix
 
 B. GitHub as a first-class server source:
-   - Add `github:user/repo` as a recognized server_id prefix in mount(), call(), inspect()
+   - Add `github:user/repo` as a recognized server_id prefix in receive(), call(), inspect()
    - Detect whether the repo is npm or pip based (check for package.json vs pyproject.toml)
    - Route to `npx github:user/repo` or `uvx --from git+https://github.com/...` accordingly
    - Add a GitHubRegistry that searches GitHub's repo API (topic: mcp-server)

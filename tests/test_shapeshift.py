@@ -1,4 +1,4 @@
-"""Tests for morph-related helpers: _make_proxy, collision detection, _BASE_TOOL_NAMES."""
+"""Tests for shapeshift-related helpers: _make_proxy, collision detection, _BASE_TOOL_NAMES."""
 import inspect
 import os
 import sys
@@ -13,7 +13,7 @@ class TestBaseToolNames:
         assert isinstance(_BASE_TOOL_NAMES, set)
 
     def test_core_tools_present(self):
-        expected = {"search", "inspect", "call", "mount", "unmount", "status"}
+        expected = {"search", "inspect", "call", "shapeshift", "shiftback", "status"}
         assert expected.issubset(_BASE_TOOL_NAMES)
 
     def test_new_tools_present(self):
@@ -116,7 +116,7 @@ class TestMakeProxy:
 
 
 class TestCollisionDetection:
-    """Test that morph() prefixes tool names that collide with base tools."""
+    """Test that shapeshift() prefixes tool names that collide with base tools."""
 
     def test_collision_name_would_be_prefixed(self):
         """Verify the collision logic: if name in _BASE_TOOL_NAMES, it gets prefixed."""
@@ -141,12 +141,12 @@ class TestCollisionDetection:
 
 
 class TestMorphUsesPersistentTransport:
-    """morph() for stdio servers must use PersistentStdioTransport so processes are pooled."""
+    """shapeshift() for stdio servers must use PersistentStdioTransport so processes are pooled."""
 
     async def test_list_tools_called_on_persistent_transport(self):
         """_register_proxy_tools receives a PersistentStdioTransport, not StdioTransport."""
         from unittest.mock import AsyncMock, MagicMock, patch
-        from server import PersistentStdioTransport, ServerInfo, _registry, mount
+        from server import PersistentStdioTransport, ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
             id="test-org/pool-server", name="pool-server", description="",
@@ -174,7 +174,7 @@ class TestMorphUsesPersistentTransport:
             ])
             MockPersistent.return_value = mock_transport
 
-            await mount("test-org/pool-server", ctx)
+            await shapeshift("test-org/pool-server", ctx, confirm=True)
 
         MockPersistent.assert_called_once_with(["npx", "-y", "pool-server"])
         mock_transport.list_tools.assert_called_once()
@@ -382,8 +382,8 @@ class TestDoShedAll:
             [{"name": "shed_test_prompt", "description": "", "arguments": []}],
         )
 
-        session["morphed_resources"] = reg_res
-        session["morphed_prompts"] = reg_prom
+        session["shapeshift_resources"] = reg_res
+        session["shapeshift_prompts"] = reg_prom
 
         _do_shed()
 
@@ -392,17 +392,17 @@ class TestDoShedAll:
             assert uri not in mcp._resource_manager._resources
         for pname in reg_prom:
             assert pname not in mcp._prompt_manager._prompts
-        assert session["morphed_resources"] == []
-        assert session["morphed_prompts"] == []
+        assert session["shapeshift_resources"] == []
+        assert session["shapeshift_prompts"] == []
 
     async def test_shed_tolerates_already_removed(self):
         """_do_shed() should not raise if resources/prompts were already removed."""
         from server import _do_shed, session
-        session["morphed_resources"] = ["config://nonexistent/r"]
-        session["morphed_prompts"] = ["nonexistent_prompt"]
+        session["shapeshift_resources"] = ["config://nonexistent/r"]
+        session["shapeshift_prompts"] = ["nonexistent_prompt"]
         _do_shed()  # should not raise
-        assert session["morphed_resources"] == []
-        assert session["morphed_prompts"] == []
+        assert session["shapeshift_resources"] == []
+        assert session["shapeshift_prompts"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -410,12 +410,12 @@ class TestDoShedAll:
 # ---------------------------------------------------------------------------
 
 class TestMorphRegistersAll:
-    """morph() should register resources+prompts when transport supports them."""
+    """shapeshift() should register resources+prompts when transport supports them."""
 
     async def test_resources_registered_for_stdio_transport(self):
-        """morph() calls _register_proxy_resources when transport has list_resources."""
+        """shapeshift() calls _register_proxy_resources when transport has list_resources."""
         from unittest.mock import AsyncMock, MagicMock, patch
-        from server import ServerInfo, _registry, mount, session
+        from server import ServerInfo, _registry, shapeshift, session
 
         srv = ServerInfo(
             id="org/res-server", name="res-server", description="",
@@ -446,16 +446,16 @@ class TestMorphRegistersAll:
             mock_t.list_resources = AsyncMock(return_value=[{"uri": "config://org/cfg", "name": "cfg"}])
             mock_t.list_prompts = AsyncMock(return_value=[])
             MockPST.return_value = mock_t
-            await mount("org/res-server", ctx)
+            await shapeshift("org/res-server", ctx, confirm=True)
 
         mock_rr.assert_called_once()
         # list_resources was called via wait_for on the transport
         mock_t.list_resources.assert_called_once()
 
     async def test_resources_skipped_for_http_transport(self):
-        """morph() does not attempt list_resources on HTTPSSETransport (no such method)."""
+        """shapeshift() does not attempt list_resources on HTTPSSETransport (no such method)."""
         from unittest.mock import AsyncMock, MagicMock, patch
-        from server import ServerInfo, _registry, mount
+        from server import ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
             id="http-org/http-server", name="http-server", description="",
@@ -476,15 +476,15 @@ class TestMorphRegistersAll:
              patch("kitsune_mcp.tools._register_proxy_resources") as mock_rr, \
              patch("kitsune_mcp.tools._register_proxy_prompts") as mock_rp, \
              patch("kitsune_mcp.tools.HTTPSSETransport"):
-            await mount("http-org/http-server", ctx)
+            await shapeshift("http-org/http-server", ctx)
 
         mock_rr.assert_not_called()
         mock_rp.assert_not_called()
 
     async def test_graceful_on_list_resources_exception(self):
-        """morph() succeeds even if list_resources raises."""
+        """shapeshift() succeeds even if list_resources raises."""
         from unittest.mock import AsyncMock, MagicMock, patch
-        from server import ServerInfo, _registry, mount
+        from server import ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
             id="org/exc-server", name="exc-server", description="",
@@ -507,7 +507,7 @@ class TestMorphRegistersAll:
             mock_t.list_resources = AsyncMock(side_effect=RuntimeError("timeout"))
             mock_t.list_prompts = AsyncMock(return_value=[])
             MockPST.return_value = mock_t
-            result = await mount("org/exc-server", ctx)
+            result = await shapeshift("org/exc-server", ctx, confirm=True)
 
-        # morph should still succeed
-        assert "exc_tool" in result or "Morphed" in result
+        # shapeshift should still succeed
+        assert "exc_tool" in result or "Shapeshifted" in result

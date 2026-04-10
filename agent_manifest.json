@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "name": "kitsune-mcp",
   "display_name": "Kitsune MCP",
-  "description": "The shape-shifting MCP hub. mount() into any MCP server at runtime. 7 registries. No restarts.",
+  "description": "The shape-shifting MCP hub. shapeshift() into any MCP server at runtime. 7 registries. No restarts.",
   "version": "0.2.0",
   "license": "MIT",
   "repository": "https://github.com/kaiser-data/kitsune-mcp",
@@ -30,7 +30,7 @@
   "tools": {
     "discovery": ["search", "inspect", "auto"],
     "execution": ["call", "run", "fetch"],
-    "morphing": ["mount", "unmount"],
+    "morphing": ["shapeshift", "shiftback"],
     "hardware": ["connect", "release"],
     "quality": ["test", "bench"],
     "management": ["status", "key", "skill"]
@@ -38,7 +38,7 @@
   "tool_count": 15,
   "all_tool_names": [
     "search", "inspect", "call", "run", "fetch",
-    "skill", "key", "auto", "status", "mount", "unmount",
+    "skill", "key", "auto", "status", "shapeshift", "shiftback",
     "connect", "release", "test", "bench"
   ],
   "decision_guide": {

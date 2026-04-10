@@ -1,5 +1,5 @@
 MCP_PROTOCOL_VERSION = "2024-11-05"
-MCP_CLIENT_INFO = {"name": "chameleon", "version": "1.0.0"}
+MCP_CLIENT_INFO = {"name": "kitsune", "version": "1.0.0"}
 
 TIMEOUT_STDIO_INIT    = 60.0
 TIMEOUT_STDIO_TOOL    = 30.0

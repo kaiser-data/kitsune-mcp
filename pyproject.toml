@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "kitsune-mcp"
 version = "0.8.0"
-description = "The shape-shifting MCP hub — mount() into any MCP server at runtime. 7 registries. No restart."
+description = "The shape-shifting MCP hub — shapeshift() into any MCP server at runtime. 7 registries. No restart."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Kitsune MCP Contributors" }]

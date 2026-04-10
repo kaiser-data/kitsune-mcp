@@ -67,7 +67,7 @@ test: add test_connect_returns_tool_list
 If you found a server that works well with Chameleon, open a "New Server" issue:
 - Server ID (e.g. `@modelcontextprotocol/server-filesystem`)
 - Transport type: `http` or `stdio`
-- Any error from `call()` or `mount()` you hit
+- Any error from `call()` or `receive()` you hit
 
 ## Project Structure
 

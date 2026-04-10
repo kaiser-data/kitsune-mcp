@@ -59,37 +59,31 @@ class TestHTTPSSETransport:
         """_parse_sse correctly parses SSE data lines."""
         import httpx
         import respx
+        import kitsune_mcp.transport as _t
 
+        endpoint = "https://api.smithery.ai/connect/ns/kitsune-test-org-test-server/mcp"
         payload = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}}}
         tool_payload = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "ok"}]}}
 
-        with respx.mock:
-            respx.post("https://server.smithery.ai/test-org/test-server").mock(
-                side_effect=[
-                    httpx.Response(200, text=f"data: {json.dumps(payload)}\n", headers={"mcp-session-id": "abc"}),
-                    httpx.Response(200, text=""),
-                    httpx.Response(200, text=f"data: {json.dumps(tool_payload)}\n"),
-                ]
-            )
-            transport = HTTPSSETransport("test-org/test-server")
-            # This will fail auth because no API key, but tests the SSE path
-            result = await transport.execute("do_thing", {"query": "test"}, {})
-        # Any string response is valid — auth error or tool result
+        transport = HTTPSSETransport("test-org/test-server")
+        with patch.object(transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))):
+            with respx.mock:
+                respx.post(endpoint).mock(
+                    side_effect=[
+                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n", headers={"mcp-session-id": "abc"}),
+                        httpx.Response(200, text=""),
+                        httpx.Response(200, text=f"data: {json.dumps(tool_payload)}\n"),
+                    ]
+                )
+                result = await transport.execute("do_thing", {"query": "test"}, {})
+        # Any string response is valid — tool result or error
         assert isinstance(result, str)
 
     async def test_timeout_returns_timeout_message(self):
         """HTTPSSETransport returns timeout message on asyncio.TimeoutError."""
-        import httpx
-        import respx
-
-        async def slow_response(request):
-            await asyncio.sleep(999)
-            return httpx.Response(200, text="")
-
-        with respx.mock:
-            respx.post("https://server.smithery.ai/slow-server").mock(side_effect=slow_response)
-            transport = HTTPSSETransport("slow-server")
-            # Patch wait_for to simulate timeout
+        endpoint = "https://api.smithery.ai/connect/ns/kitsune-slow-server/mcp"
+        transport = HTTPSSETransport("slow-server")
+        with patch.object(transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))):
             with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
                 result = await transport.execute("tool", {}, {})
         assert "Timeout" in result or "timeout" in result.lower()
@@ -194,7 +188,7 @@ class TestDockerTransport:
         cmd = t._build_cmd({})
         assert "--label" in cmd
         label_idx = cmd.index("--label")
-        assert cmd[label_idx + 1] == "chameleon-mcp=1"
+        assert cmd[label_idx + 1] == "kitsune-mcp=1"
 
     async def test_missing_docker_returns_friendly_message(self):
         t = DockerTransport("mcp/nonexistent-image:latest")

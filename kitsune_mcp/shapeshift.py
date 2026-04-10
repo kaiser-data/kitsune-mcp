@@ -122,32 +122,32 @@ def _make_proxy(
 
 
 def _do_shed() -> list[str]:
-    """Remove all morphed proxy tools, resources, and prompts.
+    """Remove all shapeshifted proxy tools, resources, and prompts.
 
     Returns list of removed tool names (resources/prompts cleaned up silently).
     """
     removed = []
-    for tname in session["morphed_tools"]:
+    for tname in session["shapeshift_tools"]:
         try:
             mcp.remove_tool(tname)
             removed.append(tname)
         except Exception:
             pass
-    session["morphed_tools"] = []
+    session["shapeshift_tools"] = []
 
     # Remove proxied resources via _resource_manager internal dict
     _rm = getattr(mcp, "_resource_manager", None)
-    for uri in session.get("morphed_resources", []):
+    for uri in session.get("shapeshift_resources", []):
         if _rm is not None:
             _rm._resources.pop(uri, None)
-    session["morphed_resources"] = []
+    session["shapeshift_resources"] = []
 
     # Remove proxied prompts via _prompt_manager internal dict
     _pm = getattr(mcp, "_prompt_manager", None)
-    for pname in session.get("morphed_prompts", []):
+    for pname in session.get("shapeshift_prompts", []):
         if _pm is not None:
             _pm._prompts.pop(pname, None)
-    session["morphed_prompts"] = []
+    session["shapeshift_prompts"] = []
 
     session["current_form"] = None
     return removed
@@ -247,7 +247,7 @@ def _register_proxy_tools(
 ) -> list[str]:
     """Register proxy tools for a server, handling name collisions with base tools.
 
-    only: if provided, only register tools whose names are in this set (lean morph).
+    only: if provided, only register tools whose names are in this set (lean shapeshift).
     """
     import re
     sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())

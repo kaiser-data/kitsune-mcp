@@ -70,10 +70,10 @@ Returns a score from 0–100 across: connectivity, tool schema validity, respons
 
 ---
 
-## Step 5 — The aha moment: mount()
+## Step 5 — The aha moment: receive()
 
 ```
-mount("@modelcontextprotocol/server-puppeteer")
+receive("@modelcontextprotocol/server-puppeteer")
 ```
 
 Chameleon fetches the server's tool definitions and registers them **directly onto itself** via FastMCP's live API. After this call:
@@ -104,10 +104,10 @@ Returns p50 and p95 latency across 5 runs. Compare two servers before deciding w
 ## Step 7 — Chain to a second server without unmounting
 
 ```
-mount("@modelcontextprotocol/server-filesystem")
+receive("@modelcontextprotocol/server-filesystem")
 ```
 
-`mount()` automatically sheds the current form before injecting the new one. Now you have filesystem tools:
+`receive()` automatically sheds the current form before injecting the new one. Now you have filesystem tools:
 
 ```
 read_file(path="/tmp/homepage_notes.txt")
@@ -119,7 +119,7 @@ write_file(path="/tmp/scraped.txt", content="...")
 ## Step 8 — Final status with token savings
 
 ```
-unmount()
+cast_off()
 status()
 ```
 
@@ -141,12 +141,12 @@ status()
 search("web scraping")
 inspect("@modelcontextprotocol/server-puppeteer")
 test("@modelcontextprotocol/server-puppeteer")
-mount("@modelcontextprotocol/server-puppeteer")
+receive("@modelcontextprotocol/server-puppeteer")
 puppeteer_navigate(url="https://example.com")
 bench("@modelcontextprotocol/server-puppeteer", "puppeteer_navigate", {"url": "https://example.com"}, n=5)
-mount("@modelcontextprotocol/server-filesystem")
+receive("@modelcontextprotocol/server-filesystem")
 read_file(path="/tmp/test.txt")
-unmount()
+cast_off()
 status()
 ```
 
@@ -160,8 +160,8 @@ status()
 | `search()` | Discovery across 4 registries: official, Smithery, npm, PyPI |
 | `inspect()` | Schema + token cost preview without spawning anything |
 | `test()` | Quality score before you commit |
-| `mount()` | Native tools injected live — no restart, no config edit |
+| `receive()` | Native tools injected live — no restart, no config edit |
 | Native tool call | Claude calls `puppeteer_navigate` as if it were always there |
 | `bench()` | Measured latency before permanent adoption |
-| Second `mount()` | Instant swap to a different server |
+| Second `receive()` | Instant swap to a different server |
 | `status()` final | Token savings vs always-on config, health of pool entries |

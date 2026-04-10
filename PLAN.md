@@ -238,7 +238,7 @@ extras = []
 if morphed_resources: extras.append(f"{len(morphed_resources)} resource(s)")
 if morphed_prompts:   extras.append(f"{len(morphed_prompts)} prompt(s)")
 extra_note = f" + {', '.join(extras)}" if extras else ""
-# "Morphed into 'X' — 10 tool(s) + 3 resource(s), 1 prompt(s):"
+# "Received form of 'X' — 10 tool(s) + 3 resource(s), 1 prompt(s):"
 ```
 
 In shed(): read counts before `_do_shed()`, send notifications, extend output:
@@ -495,7 +495,7 @@ When a profile is active, `morph("filesystem")` automatically applies `tools=["r
 CHAMELEON_PROFILE=profiles/code_reviewer.yaml chameleon-mcp
 ```
 
-`morph()` output shows: `Morphed into 'filesystem' [profile: code_reviewer] — 2 tool(s) registered`
+`morph()` output shows: `Received form of 'filesystem' [profile: code_reviewer] — 2 tool(s) registered`
 
 ---
 

@@ -4,6 +4,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from kitsune_mcp.constants import CRED_SUFFIXES
+
 # Read at import time (load_dotenv() must be called by entry point first)
 SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
 # Write .env to the user's working directory (same location load_dotenv() reads from).
@@ -11,7 +13,7 @@ ENV_PATH = os.path.join(os.getcwd(), ".env")
 
 # .env search order — CWD wins (loaded last with override=True)
 _DOTENV_PATHS = [
-    Path.home() / ".chameleon" / ".env",
+    Path.home() / ".kitsune" / ".env",
     Path.home() / ".env",
     Path(ENV_PATH),
 ]
@@ -94,10 +96,14 @@ def _resolve_config(credentials: dict, user_config: dict) -> tuple:
     resolved = dict(user_config)
     for cred_key in credentials:
         if not resolved.get(cred_key):
-            val = os.getenv(_to_env_var(cred_key))
-            if val:
-                resolved[cred_key] = val
-    missing = {k: v for k, v in credentials.items() if not resolved.get(k)}
+            val = os.getenv(_to_env_var(cred_key)) or None
+            resolved[cred_key] = val  # None → JSON null, satisfies Smithery config schema
+    # Only block on real secrets — env vars ending in a credential suffix.
+    # Optional config knobs (ENABLED_TOOLS, LOGGING_LEVEL, etc.) are not blockers.
+    missing = {
+        k: v for k, v in credentials.items()
+        if not resolved.get(k) and any(_to_env_var(k).endswith(sfx) for sfx in CRED_SUFFIXES)
+    }
     return resolved, missing
 
 

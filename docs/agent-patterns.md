@@ -15,7 +15,7 @@ score = test("exa/exa")
 # → Score: 85/100 (Good) — proceed
 
 # Step 3: Mount only if quality is acceptable
-mount("exa/exa")
+receive("exa/exa")
 web_search_exa(query="latest Python news")
 ```
 
@@ -25,19 +25,19 @@ Mount into multiple servers in sequence for a multi-step task:
 
 ```python
 # Step 1: Research
-mount("exa/exa")
+receive("exa/exa")
 results = web_search_exa(query="MCP server list 2025")
-unmount()
+cast_off()
 
 # Step 2: Fetch and extract
-mount("fetch-mcp/fetch-mcp")
+receive("fetch-mcp/fetch-mcp")
 content = fetch_page(url="https://example.com/mcp-servers")
-unmount()
+cast_off()
 
 # Step 3: Write output
-mount("@modelcontextprotocol/server-filesystem")
+receive("@modelcontextprotocol/server-filesystem")
 write_file(path="/tmp/report.md", content=f"# Research\n{results}\n\n{content}")
-unmount()
+cast_off()
 ```
 
 ## Pattern 3: Hardware Pipeline
@@ -49,14 +49,14 @@ Audio processing with persistent connections:
 connect("uvx voice-mode", name="audio", timeout=30)
 
 # Mounting uses the persistent process
-mount("voice-mode")
+receive("voice-mode")
 
 # Pipeline: listen → process → speak
 transcript = listen(duration=10)
 # (call other tools to process transcript)
 speak(text=f"I heard: {transcript}")
 
-unmount()
+cast_off()
 release("audio")
 ```
 
@@ -84,10 +84,10 @@ bench("exa/exa", "web_search_exa", {"query": "test"}, iterations=3)
 
 # If p95 < 1000ms, proceed with batch
 queries = ["AI news", "Python MCP", "FastAPI tutorial"]
-mount("exa/exa")
+receive("exa/exa")
 for q in queries:
     web_search_exa(query=q)
-unmount()
+cast_off()
 ```
 
 ## Pattern 6: Multi-Registry Discovery
@@ -103,19 +103,19 @@ inspect(smithery_results[0].id)
 inspect(npm_results[0].id)
 
 # Pick the one with better tooling
-mount("@modelcontextprotocol/server-filesystem")
+receive("@modelcontextprotocol/server-filesystem")
 ```
 
 ## Anti-Patterns to Avoid
 
 ### Don't mount without shedding
 ```python
-mount("server-a")
-mount("server-b")  # ✓ Auto-sheds server-a first
-# But explicit unmount() is clearer:
-mount("server-a")
-unmount()
-mount("server-b")
+receive("server-a")
+receive("server-b")  # ✓ Auto-sheds server-a first
+# But explicit cast_off() is clearer:
+receive("server-a")
+cast_off()
+receive("server-b")
 ```
 
 ### Don't use call() for hardware tools
@@ -136,11 +136,11 @@ release("voice")
 # ❌ Process leaks
 connect("uvx voice-mode", name="voice")
 # ... work ...
-unmount()   # only removes mount, doesn't kill process!
+cast_off()   # only removes mount, doesn't kill process!
 
 # ✓ Always release hardware connections
 connect("uvx voice-mode", name="voice")
 # ... work ...
-unmount()
+cast_off()
 release("voice")
 ```

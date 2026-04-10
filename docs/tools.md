@@ -89,12 +89,12 @@ fetch("https://news.ycombinator.com", intent="top AI stories today")
 
 ## Mounting Tools
 
-### `mount(server_id)`
+### `receive(server_id)`
 
 Take a server's form — register its tools directly in your tool list. Requires FastMCP context.
 
 ```python
-mount("exa/exa")
+receive("exa/exa")
 # → Tools appear: web_search_exa, find_similar_exa, ...
 # Call them directly now
 web_search_exa(query="MCP servers")
@@ -104,12 +104,12 @@ web_search_exa(query="MCP servers")
 
 ---
 
-### `unmount()`
+### `cast_off()`
 
 Drop current form, remove all mounted tools, return to base Kitsune MCP.
 
 ```python
-unmount()
+cast_off()
 # → Mounted tools removed from tool list
 ```
 

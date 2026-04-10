@@ -19,12 +19,12 @@ Most AI clients (Claude Desktop, Cursor, etc.) require you to list MCP servers s
 ```
 # From within Claude or any MCP client:
 search("web search")                          # find available servers
-mount("@modelcontextprotocol/server-brave")   # add their tools instantly
+receive("@modelcontextprotocol/server-brave")   # add their tools instantly
 brave_web_search(query="MCP 2025")            # use them natively
-unmount()                                         # remove them when done
+cast_off()                                         # remove them when done
 ```
 
-The `mount()` call downloads and starts the target server as a subprocess, then registers its tools into the live MCP session via FastMCP's runtime API. `unmount()` removes them. The running process is pooled and reused across calls.
+The `receive()` call downloads and starts the target server as a subprocess, then registers its tools into the live MCP session via FastMCP's runtime API. `cast_off()` removes them. The running process is pooled and reused across calls.
 
 ---
 
@@ -66,7 +66,7 @@ Things I'm uncertain about stylistically:
 
 ## 3. Security
 
-The project's fundamental design is that it executes arbitrary npm/pip packages. `mount("some-package")` runs `npx -y some-package` as a subprocess. This is intentional and the core value proposition — but it means I need to be honest about the threat model.
+The project's fundamental design is that it executes arbitrary npm/pip packages. `receive("some-package")` runs `npx -y some-package` as a subprocess. This is intentional and the core value proposition — but it means I need to be honest about the threat model.
 
 **Fixed before this review:**
 

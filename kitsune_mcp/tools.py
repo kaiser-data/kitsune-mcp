@@ -24,6 +24,7 @@ from kitsune_mcp.constants import (
     TIMEOUT_STDIO_INIT,
     TIMEOUT_STDIO_TOOL,
     TRUST_HIGH,
+    TRUST_LOW,
     TRUST_MEDIUM,
 )
 from kitsune_mcp.credentials import (
@@ -36,7 +37,7 @@ from kitsune_mcp.credentials import (
     _smithery_available,
     _to_env_var,
 )
-from kitsune_mcp.morph import (
+from kitsune_mcp.shapeshift import (
     _do_shed,
     _fetch_tools_list,
     _register_proxy_prompts,
@@ -86,10 +87,8 @@ def _get_transport(server_id: str, srv) -> "BaseTransport":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
         return PersistentStdioTransport(cmd)
     if srv is not None and getattr(srv, "transport", None) == "http":
-        url = srv.url or server_id
-        # srv.url is the full Smithery URL; strip the base so execute() can prepend it cleanly.
-        qname = url.removeprefix("https://server.smithery.ai/")
-        return HTTPSSETransport(qname)
+        # srv.url is now the deploymentUrl (e.g. "https://brave.run.tools")
+        return HTTPSSETransport(srv.id, deployment_url=srv.url)
     return HTTPSSETransport(server_id)
 
 
@@ -119,10 +118,10 @@ async def _fetch_resource_docs(transport: "BaseTransport") -> str:
         return ""
 
 
-# Base tool names — used for collision detection in receive()
+# Base tool names — used for collision detection in shapeshift()
 _BASE_TOOL_NAMES = {
     "search", "inspect", "call", "run", "fetch",
-    "skill", "key", "auto", "status", "receive", "cast_off", "craft",
+    "skill", "key", "auto", "status", "shapeshift", "shiftback", "craft",
     "connect", "release", "test", "bench", "setup",
 }
 
@@ -223,13 +222,13 @@ async def call(
     arguments: dict | None = None,
     config: dict | None = None,
 ) -> str:
-    """Call a tool on an MCP server. server_id optional when mounted — current form used.
-    After receive(): call('list_directory', arguments={'path': '/tmp'})
-    Direct:        call('list_directory', '@some-server', {'path': '/tmp'})"""
+    """Call a tool on an MCP server. server_id optional when shapeshifted — current form used.
+    After shapeshift(): call('list_directory', arguments={'path': '/tmp'})
+    Direct:             call('list_directory', '@some-server', {'path': '/tmp'})"""
     if server_id is None:
         server_id = session.get("current_form")
         if not server_id:
-            return "Provide a server_id, or use receive() first to set a current form."
+            return "Provide a server_id, or use shapeshift() first to set a current form."
     if arguments is None:
         arguments = {}
     if config is None:
@@ -537,8 +536,8 @@ async def auto(
 
 
 @mcp.tool()
-async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) -> str:
-    """Receive a server's form into Kitsune. The fox takes on the server's shape — its tools become available natively in the session. Use tools=[...] to receive only specific tools instead of everything."""
+async def shapeshift(server_id: str, ctx: Context, tools: list[str] | None = None, confirm: bool = False) -> str:
+    """Shapeshift into a server's form. The fox takes on the server's shape — its tools become available natively in the session. Use tools=[...] to load only specific tools instead of everything. Pass confirm=True to proceed with community (npm/pypi/github) sources after reviewing."""
     # 1. Check pool connections first (friendly names from connect() take priority)
     pool_conn = None
     for _pk, conn in session["connections"].items():
@@ -573,17 +572,17 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
         registered = _register_proxy_tools(server_id, raw_tools, transport, {}, _BASE_TOOL_NAMES, only)
 
         if not registered:
-            return f"No tools could be received from '{server_id}'."
+            return f"No tools could be shapeshifted from '{server_id}'."
 
         # Register resources + prompts (best-effort — pool transports support both)
-        morphed_resources: list[str] = []
-        morphed_prompts: list[str] = []
+        shapeshift_resources: list[str] = []
+        shapeshift_prompts: list[str] = []
         if hasattr(transport, "list_resources"):
             try:
                 raw_res = await asyncio.wait_for(
                     transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST
                 )
-                morphed_resources = _register_proxy_resources(transport, raw_res)
+                shapeshift_resources = _register_proxy_resources(transport, raw_res)
             except Exception:
                 pass
         if hasattr(transport, "list_prompts"):
@@ -591,22 +590,22 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
                 raw_prompts = await asyncio.wait_for(
                     transport.list_prompts(), timeout=TIMEOUT_PROMPT_LIST
                 )
-                morphed_prompts = _register_proxy_prompts(transport, raw_prompts)
+                shapeshift_prompts = _register_proxy_prompts(transport, raw_prompts)
             except Exception:
                 pass
 
-        session["morphed_tools"] = registered
-        session["morphed_resources"] = morphed_resources
-        session["morphed_prompts"] = morphed_prompts
+        session["shapeshift_tools"] = registered
+        session["shapeshift_resources"] = shapeshift_resources
+        session["shapeshift_prompts"] = shapeshift_prompts
         session["current_form"] = server_id
         session["current_form_pool_key"] = json.dumps(cmd, sort_keys=True)
 
         with contextlib.suppress(Exception):
             await ctx.session.send_tool_list_changed()
-        if morphed_resources:
+        if shapeshift_resources:
             with contextlib.suppress(Exception):
                 await ctx.session.send_resource_list_changed()
-        if morphed_prompts:
+        if shapeshift_prompts:
             with contextlib.suppress(Exception):
                 await ctx.session.send_prompt_list_changed()
 
@@ -620,22 +619,22 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
 
         lean = f" (lean: {', '.join(tools)})" if tools else ""
         extras = []
-        if morphed_resources:
-            extras.append(f"{len(morphed_resources)} resource(s)")
-        if morphed_prompts:
-            extras.append(f"{len(morphed_prompts)} prompt(s)")
+        if shapeshift_resources:
+            extras.append(f"{len(shapeshift_resources)} resource(s)")
+        if shapeshift_prompts:
+            extras.append(f"{len(shapeshift_prompts)} prompt(s)")
         extra_note = f" + {', '.join(extras)}" if extras else ""
 
         lines = [
-            f"Received form of '{server_id}' (pool connection){lean} — {len(registered)} tool(s){extra_note} registered:",
+            f"Shapeshifted into '{server_id}' (pool connection){lean} — {len(registered)} tool(s){extra_note} registered:",
             *[f"  {t}" for t in registered],
         ]
-        if morphed_resources:
-            shown = ", ".join(morphed_resources[:3]) + (" ..." if len(morphed_resources) > 3 else "")
-            lines.append(f"Resources ({len(morphed_resources)}): {shown}")
-        if morphed_prompts:
-            shown = ", ".join(morphed_prompts[:3]) + (" ..." if len(morphed_prompts) > 3 else "")
-            lines.append(f"Prompts ({len(morphed_prompts)}): {shown}")
+        if shapeshift_resources:
+            shown = ", ".join(shapeshift_resources[:3]) + (" ..." if len(shapeshift_resources) > 3 else "")
+            lines.append(f"Resources ({len(shapeshift_resources)}): {shown}")
+        if shapeshift_prompts:
+            shown = ", ".join(shapeshift_prompts[:3]) + (" ..." if len(shapeshift_prompts) > 3 else "")
+            lines.append(f"Prompts ({len(shapeshift_prompts)}): {shown}")
         lines += ["", "In this session: call('tool_name', arguments={...})"]
         lines.append("\n⚠️  Source: pool connection (local — verify command before use)")
         if missing_env:
@@ -645,16 +644,27 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
             lines.append(f'  Or: key("{missing_env[0]}", "your-value")')
         return "\n".join(lines)
 
-    # 2. Drop previous form early so pool slot is freed before we potentially start a new one
+    # 2. Trust gate — community sources require explicit confirmation
+    source = srv.source if srv else "unknown"
+    if source in TRUST_LOW and not confirm:
+        return (
+            f"⚠️  '{server_id}' is from {source} (community — not verified by the official MCP registry).\n\n"
+            f"Review before trusting:\n"
+            f"  inspect('{server_id}')  — see tools and credentials\n\n"
+            f"To proceed anyway:\n"
+            f"  shapeshift('{server_id}', confirm=True)"
+        )
+
+    # 3. Drop previous form early so pool slot is freed before we potentially start a new one
     _do_shed()
 
-    # 3. Resolve credentials
+    # 4. Resolve credentials
     resolved_config, missing = _resolve_config(srv.credentials, {})
     if missing:
         creds_msg = _credentials_guide(server_id, srv.credentials, resolved_config)
-        return f"Cannot receive form of '{server_id}' — missing credentials:\n\n{creds_msg}"
+        return f"Cannot shapeshift into '{server_id}' — missing credentials:\n\n{creds_msg}"
 
-    # 4. Build transport and fetch tool list
+    # 5. Build transport and fetch tool list
     if srv.transport == "stdio":
         cmd = srv.install_cmd or ["npx", "-y", server_id]
         # Always use PersistentStdioTransport so the process stays alive for subsequent calls.
@@ -667,7 +677,7 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
             except Exception:
                 tool_schemas = []
         if not tool_schemas:
-            return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
+            return f"No tools found for '{server_id}'. Try inspect() first."
     else:
         transport = _get_transport(server_id, srv)
         tool_schemas = srv.tools or []
@@ -675,24 +685,24 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
             # Registry didn't cache tools — fetch live from the server.
             tool_schemas = await transport.list_tools(resolved_config)
         if not tool_schemas:
-            return f"No tools found for '{server_id}'. Try inspect('{server_id}') first."
+            return f"No tools found for '{server_id}'. Try inspect() first."
 
     # 6. Register proxy tools, handling name collisions with base tools
     only = set(tools) if tools else None
     registered = _register_proxy_tools(server_id, tool_schemas, transport, resolved_config, _BASE_TOOL_NAMES, only)
 
     if not registered:
-        return f"No tools could be received from '{server_id}'."
+        return f"No tools could be shapeshifted from '{server_id}'."
 
     # 7. Register resources + prompts (best-effort — only stdio transports support these)
-    morphed_resources: list[str] = []
-    morphed_prompts: list[str] = []
+    shapeshift_resources: list[str] = []
+    shapeshift_prompts: list[str] = []
     if hasattr(transport, "list_resources"):
         try:
             raw_res = await asyncio.wait_for(
                 transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST
             )
-            morphed_resources = _register_proxy_resources(transport, raw_res)
+            shapeshift_resources = _register_proxy_resources(transport, raw_res)
         except Exception:
             pass
     if hasattr(transport, "list_prompts"):
@@ -700,13 +710,13 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
             raw_prompts = await asyncio.wait_for(
                 transport.list_prompts(), timeout=TIMEOUT_PROMPT_LIST
             )
-            morphed_prompts = _register_proxy_prompts(transport, raw_prompts)
+            shapeshift_prompts = _register_proxy_prompts(transport, raw_prompts)
         except Exception:
             pass
 
-    session["morphed_tools"] = registered
-    session["morphed_resources"] = morphed_resources
-    session["morphed_prompts"] = morphed_prompts
+    session["shapeshift_tools"] = registered
+    session["shapeshift_resources"] = shapeshift_resources
+    session["shapeshift_prompts"] = shapeshift_prompts
     session["current_form"] = server_id
     # cmd is only defined for stdio transport — HTTP transport has no process pool key
     session["current_form_pool_key"] = json.dumps(cmd, sort_keys=True) if srv.transport == "stdio" else None
@@ -714,15 +724,14 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
     # 8. Notify client of all changed lists
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
-    if morphed_resources:
+    if shapeshift_resources:
         with contextlib.suppress(Exception):
             await ctx.session.send_resource_list_changed()
-    if morphed_prompts:
+    if shapeshift_prompts:
         with contextlib.suppress(Exception):
             await ctx.session.send_prompt_list_changed()
 
-    # 9. Trust / source note
-    source = srv.source if srv else "unknown"
+    # 9. Trust / source note (source already resolved above)
     if source in TRUST_HIGH | TRUST_MEDIUM:
         trust_note = f"\n✓  Source: {source}"
     else:
@@ -738,22 +747,22 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
 
     lean = f" (lean: {', '.join(tools)})" if tools else ""
     extras = []
-    if morphed_resources:
-        extras.append(f"{len(morphed_resources)} resource(s)")
-    if morphed_prompts:
-        extras.append(f"{len(morphed_prompts)} prompt(s)")
+    if shapeshift_resources:
+        extras.append(f"{len(shapeshift_resources)} resource(s)")
+    if shapeshift_prompts:
+        extras.append(f"{len(shapeshift_prompts)} prompt(s)")
     extra_note = f" + {', '.join(extras)}" if extras else ""
 
     lines = [
-        f"Received form of '{server_id}'{lean} — {len(registered)} tool(s){extra_note} registered:",
+        f"Shapeshifted into '{server_id}'{lean} — {len(registered)} tool(s){extra_note} registered:",
         *[f"  {t}" for t in registered],
     ]
-    if morphed_resources:
-        shown = ", ".join(morphed_resources[:3]) + (" ..." if len(morphed_resources) > 3 else "")
-        lines.append(f"Resources ({len(morphed_resources)}): {shown}")
-    if morphed_prompts:
-        shown = ", ".join(morphed_prompts[:3]) + (" ..." if len(morphed_prompts) > 3 else "")
-        lines.append(f"Prompts ({len(morphed_prompts)}): {shown}")
+    if shapeshift_resources:
+        shown = ", ".join(shapeshift_resources[:3]) + (" ..." if len(shapeshift_resources) > 3 else "")
+        lines.append(f"Resources ({len(shapeshift_resources)}): {shown}")
+    if shapeshift_prompts:
+        shown = ", ".join(shapeshift_prompts[:3]) + (" ..." if len(shapeshift_prompts) > 3 else "")
+        lines.append(f"Prompts ({len(shapeshift_prompts)}): {shown}")
     lines += ["", "In this session: call('tool_name', arguments={...})"]
     lines.append(trust_note)
     if missing_env:
@@ -765,18 +774,18 @@ async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) 
 
 
 @mcp.tool()
-async def cast_off(ctx: Context, release: bool = False) -> str:
-    """Cast off the currently received form. Removes all tools that were received, returning Kitsune to its true shape. Pass release=True to also kill the underlying server process and free its memory."""
-    has_tools = bool(session["morphed_tools"])
-    has_resources = bool(session.get("morphed_resources"))
-    has_prompts = bool(session.get("morphed_prompts"))
+async def shiftback(ctx: Context, kill: bool = False) -> str:
+    """Shift back to Kitsune's true form. Removes all tools that were shapeshifted in, returning to base shape. Pass kill=True to also terminate the underlying server process and free its memory."""
+    has_tools = bool(session["shapeshift_tools"])
+    has_resources = bool(session.get("shapeshift_resources"))
+    has_prompts = bool(session.get("shapeshift_prompts"))
     if not has_tools and not has_resources and not has_prompts:
         return "Already in base form."
 
     form = session["current_form"]
     # Snapshot counts before _do_shed() clears the lists
-    n_res = len(session.get("morphed_resources", []))
-    n_prompts = len(session.get("morphed_prompts", []))
+    n_res = len(session.get("shapeshift_resources", []))
+    n_prompts = len(session.get("shapeshift_prompts", []))
     removed = _do_shed()
 
     with contextlib.suppress(Exception):
@@ -795,8 +804,8 @@ async def cast_off(ctx: Context, release: bool = False) -> str:
         extras.append(f"{n_prompts} prompt(s)")
     extra_note = f", {', '.join(extras)}" if extras else ""
 
-    if release and form:
-        # Use the exact pool key stored at morph() time — no fragile string matching needed
+    if kill and form:
+        # Use the exact pool key stored at shapeshift() time — no fragile string matching needed
         exact_key = session.pop("current_form_pool_key", None)
         killed = []
         keys_to_check = [exact_key] if exact_key else list(_process_pool.keys())
@@ -810,33 +819,50 @@ async def cast_off(ctx: Context, release: bool = False) -> str:
             _process_pool.pop(pool_key, None)
             killed.append(entry.name or entry.install_cmd[0])
         if killed:
-            return f"Cast off '{form}'. Removed: {', '.join(removed)}{extra_note}. Released: {', '.join(killed)}"
+            return f"Shifted back from '{form}'. Removed: {', '.join(removed)}{extra_note}. Released: {', '.join(killed)}"
 
-    return f"Cast off '{form}'. Removed: {', '.join(removed)}{extra_note}"
+    return f"Shifted back from '{form}'. Removed: {', '.join(removed)}{extra_note}"
 
 
 # ── Deprecated aliases (Python-level only — NOT registered as MCP tools) ──────
 
-async def mount(server_id: str, ctx: Context, tools: list[str] | None = None) -> str:
-    """Deprecated: use receive() instead. Will be removed in a future version."""
+async def shapeshift_alias(server_id: str, ctx: Context, tools: list[str] | None = None, *, _name: str) -> str:
     import warnings
     warnings.warn(
-        "mount() is deprecated, use receive() instead. It will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
+        f"{_name}() is deprecated, use shapeshift() instead. It will be removed in a future version.",
+        DeprecationWarning, stacklevel=3,
     )
-    return await receive(server_id, ctx, tools)
+    return await shapeshift(server_id, ctx, tools)
+
+
+async def mount(server_id: str, ctx: Context, tools: list[str] | None = None) -> str:
+    """Deprecated: use shapeshift() instead."""
+    return await shapeshift_alias(server_id, ctx, tools, _name="mount")
+
+
+async def receive(server_id: str, ctx: Context, tools: list[str] | None = None) -> str:
+    """Deprecated: use shapeshift() instead."""
+    return await shapeshift_alias(server_id, ctx, tools, _name="receive")
 
 
 async def unmount(ctx: Context, release: bool = False) -> str:
-    """Deprecated: use cast_off() instead. Will be removed in a future version."""
+    """Deprecated: use shiftback() instead."""
     import warnings
     warnings.warn(
-        "unmount() is deprecated, use cast_off() instead. It will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2,
+        "unmount() is deprecated, use shiftback() instead. It will be removed in a future version.",
+        DeprecationWarning, stacklevel=2,
     )
-    return await cast_off(ctx, release)
+    return await shiftback(ctx, kill=release)
+
+
+async def cast_off(ctx: Context, release: bool = False) -> str:
+    """Deprecated: use shiftback() instead."""
+    import warnings
+    warnings.warn(
+        "cast_off() is deprecated, use shiftback() instead. It will be removed in a future version.",
+        DeprecationWarning, stacklevel=2,
+    )
+    return await shiftback(ctx, kill=release)
 
 
 @mcp.tool()
@@ -849,7 +875,7 @@ async def craft(
     method: str = "POST",
     headers: dict | None = None,
 ) -> str:
-    """Register a custom tool backed by your HTTP endpoint — live immediately. POST=JSON body, GET=query params. cast_off() removes it."""
+    """Register a custom tool backed by your HTTP endpoint — live immediately. POST=JSON body, GET=query params. shiftback() removes it."""
     import inspect as _inspect
 
     if not name or not name.replace("_", "").isalnum():
@@ -865,7 +891,7 @@ async def craft(
     py_params = []
     for pname, pschema in (params or {}).items():
         json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
-        from kitsune_mcp.morph import _json_type_to_py
+        from kitsune_mcp.shapeshift import _json_type_to_py
         ptype = _json_type_to_py(json_type)
         py_params.append(_inspect.Parameter(
             pname, _inspect.Parameter.KEYWORD_ONLY,
@@ -894,7 +920,7 @@ async def craft(
     if name in session["crafted_tools"]:
         with contextlib.suppress(Exception):
             mcp.remove_tool(name)
-        session["morphed_tools"] = [t for t in session["morphed_tools"] if t != name]
+        session["shapeshift_tools"] = [t for t in session["shapeshift_tools"] if t != name]
 
     try:
         mcp.add_tool(_endpoint_proxy)
@@ -904,8 +930,8 @@ async def craft(
     session["crafted_tools"][name] = {
         "url": url, "method": _method, "description": description, "params": params or {},
     }
-    if name not in session["morphed_tools"]:
-        session["morphed_tools"].append(name)
+    if name not in session["shapeshift_tools"]:
+        session["shapeshift_tools"].append(name)
 
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
@@ -914,7 +940,7 @@ async def craft(
     return (
         f"✓ Tool '{name}' registered — {_method} {url}\n"
         f"Params: {param_list}\n\n"
-        f"Call it directly, or cast_off() to remove it."
+        f"Call it directly, or shiftback() to remove it."
     )
 
 
@@ -1096,7 +1122,7 @@ async def test(server_id: str, level: str = "basic") -> str:
         score += 10
         checks.append("✅ No name collisions with Chameleon base tools (+10)")
     else:
-        checks.append(f"⚠️  Name collisions: {', '.join(collisions)} (0) — will be prefixed on receive()")
+        checks.append(f"⚠️  Name collisions: {', '.join(collisions)} (0) — will be prefixed on shapeshift()")
 
     # Check 7: Live tool calls (full mode only, 10 pts per tool, max 5 tools)
     if level == "full" and tools:
@@ -1222,16 +1248,16 @@ async def status() -> str:
     grown = session["grown"]
     stats = session["stats"]
     current_form = session["current_form"]
-    morphed = session["morphed_tools"]
+    morphed = session["shapeshift_tools"]
 
     lines = ["KITSUNE MCP STATUS", ""]
 
     if current_form:
         lines.append(f"CURRENT FORM: {current_form}")
-        lines.append(f"MORPHED TOOLS ({len(morphed)}): {', '.join(morphed)}")
+        lines.append(f"SHAPESHIFTED TOOLS ({len(morphed)}): {', '.join(morphed)}")
         lines.append("")
     else:
-        lines += ["CURRENT FORM: base (no morph active)", ""]
+        lines += ["CURRENT FORM: base (no shapeshift active)", ""]
 
     # Persistent connections — ping all in parallel
     if _process_pool:

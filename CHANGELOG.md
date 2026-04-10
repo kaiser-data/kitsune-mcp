@@ -53,8 +53,8 @@ pip install kitsune-mcp
 
 ### Breaking Changes
 
-- **`morph()` renamed to `mount()`** — update any prompts or scripts that call `morph(...)`
-- **`shed()` renamed to `unmount()`** — update any prompts or scripts that call `shed()`
+- **`morph()` renamed to `receive()`** — update any prompts or scripts that call `morph(...)`
+- **`shed()` renamed to `cast_off()`** — update any prompts or scripts that call `shed()`
 - **Package renamed from `chameleon-mcp` to `kitsune-mcp`** — update `pip install` and `pyproject.toml` references
 - **Executables renamed**: `chameleon-mcp` → `kitsune-mcp`, `chameleon-forge` → `kitsune-forge`
 
@@ -64,9 +64,9 @@ pip install kitsune-mcp
 |---|---|
 | `pip install chameleon-mcp` | `pip install kitsune-mcp` |
 | `"command": "chameleon-mcp"` | `"command": "kitsune-mcp"` |
-| `mount("exa")` | `mount("exa")` ← no change |
-| `morph("exa")` | `mount("exa")` |
-| `shed()` | `unmount()` |
+| `receive("exa")` | `receive("exa")` ← no change |
+| `morph("exa")` | `receive("exa")` |
+| `shed()` | `cast_off()` |
 
 **Deprecated executables** (`chameleon-mcp`, `chameleon-forge`) are kept as aliases in v0.7.x for backward compatibility and will be removed in v0.8.0.
 
@@ -84,7 +84,7 @@ pip install kitsune-mcp
 ## [0.6.2] — 2026-04-08
 
 ### Fixed
-- `mount()` cold-start: prefer registry results with cached tool schemas over those without (fixes Exa cold-start failure)
+- `receive()` cold-start: prefer registry results with cached tool schemas over those without (fixes Exa cold-start failure)
 - Live `tools/list` HTTP fetch fallback when registry cache is cold
 - Smithery URL format: `/mcp` suffix + `api_key` query param (was using wrong format)
 - Doubled Smithery URL when `srv.url` was already a full URL
@@ -96,7 +96,7 @@ pip install kitsune-mcp
 
 ### Added
 - Frictionless credentials: `.env` auto-reload without restart (tracks mtime changes)
-- `call()` is mount-aware: `server_id` optional after `mount()`
+- `call()` is mount-aware: `server_id` optional after `receive()`
 - `call()` added to lean profile (7 tools total)
 - WebSocket transport support (`ws://`, `wss://`)
 
@@ -105,13 +105,13 @@ pip install kitsune-mcp
 ## [0.6.0] — 2026-04-07
 
 ### Added
-- `mount()` proxies resources + prompts in addition to tools
+- `receive()` proxies resources + prompts in addition to tools
 - Install command validation (shell injection and path traversal blocked)
-- Trust tier warnings in `mount()` output
+- Trust tier warnings in `receive()` output
 - Credential warnings at mount-time (not just at `call()`-time)
 - `examples/benchmark.py` — reproducible token overhead measurement
 - Notification compatibility testing
-- Provenance shown in all `search()`/`inspect()`/`mount()`/`call()` output
+- Provenance shown in all `search()`/`inspect()`/`receive()`/`call()` output
 
 ---
 

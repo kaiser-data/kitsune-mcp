@@ -1,10 +1,11 @@
 import asyncio
-import base64
 import contextlib
+import datetime
 import json
 import os
 import re
 import time
+import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -156,45 +157,182 @@ async def _read_stdio_response(reader, expected_id: int, timeout: float = 30.0) 
 
 
 # ---------------------------------------------------------------------------
+# Smithery Connect helpers (new API — api.smithery.ai/connect)
+# ---------------------------------------------------------------------------
+
+_SMITHERY_API_BASE = "https://api.smithery.ai"
+_smithery_namespace_cache: str | None = None
+_smithery_service_token: str = ""
+_smithery_token_expires: float = 0.0
+_smithery_connections: dict[str, str] = {}  # conn_id → mcpUrl (session cache)
+
+
+async def _smithery_namespace() -> str | None:
+    """Return the user's first Smithery namespace (cached for the session)."""
+    global _smithery_namespace_cache
+    if _smithery_namespace_cache:
+        return _smithery_namespace_cache
+    api_key = os.getenv("SMITHERY_API_KEY") or SMITHERY_API_KEY
+    if not api_key:
+        return None
+    try:
+        r = await _get_http_client().get(
+            f"{_SMITHERY_API_BASE}/namespaces",
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        namespaces = r.json().get("namespaces", [])
+        if namespaces:
+            _smithery_namespace_cache = namespaces[0]["name"]
+    except Exception:
+        pass
+    return _smithery_namespace_cache
+
+
+async def _smithery_service_token() -> str:
+    """Return a valid service token with mcp scope (cached, auto-refreshed)."""
+    global _smithery_service_token, _smithery_token_expires
+    now = time.monotonic()
+    if _smithery_service_token and now < _smithery_token_expires:
+        return _smithery_service_token
+    api_key = os.getenv("SMITHERY_API_KEY") or SMITHERY_API_KEY
+    if not api_key:
+        return ""
+    try:
+        r = await _get_http_client().post(
+            f"{_SMITHERY_API_BASE}/tokens",
+            json={"name": "kitsune-mcp", "scopes": ["mcp"]},
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        _smithery_service_token = data["token"]
+        expires_at = datetime.datetime.fromisoformat(
+            data["expiresAt"].replace("Z", "+00:00")
+        )
+        ttl = (
+            expires_at - datetime.datetime.now(datetime.timezone.utc)
+        ).total_seconds()
+        _smithery_token_expires = now + max(ttl - 300, 60)  # refresh 5 min early
+    except Exception:
+        _smithery_service_token = ""
+    return _smithery_service_token
+
+
+def _smithery_conn_id(qualified_name: str) -> str:
+    """Stable, URL-safe connection ID derived from a qualified server name."""
+    sanitized = re.sub(r"[^a-z0-9-]", "-", qualified_name.lower()).strip("-")
+    return f"kitsune-{sanitized}"[:64]
+
+
+def _build_mcp_url(deployment_url: str, config: dict) -> str:
+    """Append non-null config values as query parameters to the deployment URL."""
+    clean = {k: v for k, v in config.items() if v is not None}
+    if not clean:
+        return deployment_url
+    qs = urllib.parse.urlencode(clean)
+    sep = "&" if "?" in deployment_url else "?"
+    return f"{deployment_url}{sep}{qs}"
+
+
+async def _ensure_smithery_connection(
+    namespace: str, conn_id: str, mcp_url: str
+) -> bool:
+    """Create or update a Smithery Connect connection. Returns True on success."""
+    # Skip if we already set up this conn_id with the same URL this session
+    if _smithery_connections.get(conn_id) == mcp_url:
+        return True
+    api_key = os.getenv("SMITHERY_API_KEY") or SMITHERY_API_KEY
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    client = _get_http_client()
+    url = f"{_SMITHERY_API_BASE}/connect/{namespace}/{conn_id}"
+    try:
+        r = await client.put(url, json={"mcpUrl": mcp_url}, headers=headers, timeout=15)
+        if r.status_code == 409:
+            # URL mismatch — delete existing and recreate
+            await client.delete(url, headers=headers, timeout=10)
+            r = await client.put(url, json={"mcpUrl": mcp_url}, headers=headers, timeout=15)
+        r.raise_for_status()
+        _smithery_connections[conn_id] = mcp_url
+        return True
+    except Exception:
+        return False
+
+
+def _parse_sse(text: str) -> dict | None:
+    """Extract the first JSON payload from an SSE response body."""
+    for line in text.splitlines():
+        if line.startswith("data:"):
+            try:
+                return json.loads(line[5:].strip())
+            except json.JSONDecodeError:
+                pass
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Transports
 # ---------------------------------------------------------------------------
 
 class HTTPSSETransport(BaseTransport):
-    """Execute tool calls on remote Smithery-hosted MCP servers via HTTP+SSE."""
+    """Execute tool calls via the Smithery Connect API (api.smithery.ai/connect).
 
-    def __init__(self, qualified_name: str):
+    Uses the new run.tools deployment URLs and per-user namespaced connections
+    rather than the legacy server.smithery.ai/*/mcp endpoint.
+    """
+
+    def __init__(self, qualified_name: str, deployment_url: str = ""):
         self.qualified_name = qualified_name
+        # deployment_url comes from the registry's deploymentUrl field
+        # e.g. "https://brave.run.tools"
+        self.deployment_url = deployment_url or f"https://{qualified_name}.run.tools"
+
+    async def _connect_endpoint(self, config: dict) -> tuple[str, str] | None:
+        """Return (connect_mcp_url, service_token) or None on failure."""
+        namespace = await _smithery_namespace()
+        if not namespace:
+            return None
+        token = await _smithery_service_token()
+        if not token:
+            return None
+        mcp_url = _build_mcp_url(self.deployment_url, config)
+        conn_id = _smithery_conn_id(self.qualified_name)
+        ok = await _ensure_smithery_connection(namespace, conn_id, mcp_url)
+        if not ok:
+            return None
+        endpoint = f"{_SMITHERY_API_BASE}/connect/{namespace}/{conn_id}/mcp"
+        return endpoint, token
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
-        api_key = os.getenv("SMITHERY_API_KEY") or SMITHERY_API_KEY
-        config_b64 = base64.urlsafe_b64encode(
-            json.dumps(config).encode()
-        ).decode().rstrip("=")
-        base_url = (
-            f"https://server.smithery.ai/{self.qualified_name}/mcp"
-            f"?config={config_b64}"
-            f"&api_key={api_key}"
-        )
+        result = await self._connect_endpoint(config)
+        if result is None:
+            return (
+                f"Cannot reach {self.qualified_name} via Smithery Connect. "
+                "Check SMITHERY_API_KEY at smithery.ai/account/api-keys"
+            )
+        endpoint, token = result
         headers = {
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
-
-        def _parse_sse(text: str) -> dict | None:
-            for line in text.splitlines():
-                if line.startswith("data:"):
-                    try:
-                        return json.loads(line[5:].strip())
-                    except json.JSONDecodeError:
-                        pass
-            return None
 
         async def _post(client, payload, session_id=None):
             hdrs = dict(headers)
             if session_id:
                 hdrs["mcp-session-id"] = session_id
             return await client.post(
-                base_url, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
+                endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
             )
 
         async def _run():
@@ -211,19 +349,19 @@ class HTTPSSETransport(BaseTransport):
                 raise PermissionError(f"HTTP {r.status_code}")
             r.raise_for_status()
 
-            session_id = r.headers.get("mcp-session-id")
+            mcp_session_id = r.headers.get("mcp-session-id")
             init_msg = _parse_sse(r.text)
             if init_msg and "error" in init_msg:
                 raise RuntimeError(f"Initialize failed: {init_msg['error']}")
 
             await _post(client, {
                 "jsonrpc": "2.0", "method": "notifications/initialized", "params": {},
-            }, session_id)
+            }, mcp_session_id)
 
             r2 = await _post(client, {
                 "jsonrpc": "2.0", "id": 2, "method": "tools/call",
                 "params": {"name": tool, "arguments": args},
-            }, session_id)
+            }, mcp_session_id)
             r2.raise_for_status()
 
             msg = _parse_sse(r2.text)
@@ -252,8 +390,8 @@ class HTTPSSETransport(BaseTransport):
             err_obj = response["error"]
             return f"Error from {self.qualified_name}/{tool}: {err_obj.get('message', json.dumps(err_obj))}"
 
-        result = response.get("result", {})
-        raw = _extract_content(result)
+        result_data = response.get("result", {})
+        raw = _extract_content(result_data)
 
         tokens_out = _estimate_tokens({"tool": tool, "args": args})
         tokens_in = _estimate_tokens(raw)
@@ -264,54 +402,49 @@ class HTTPSSETransport(BaseTransport):
         return _truncate(_clean_response(raw))
 
     async def list_tools(self, config: dict | None = None) -> list[dict]:
-        """Fetch the tools/list from the HTTP MCP server and return raw tool schemas."""
+        """Fetch tools/list from the Smithery Connect endpoint."""
         if config is None:
             config = {}
-        api_key = os.getenv("SMITHERY_API_KEY") or SMITHERY_API_KEY
-        config_b64 = base64.urlsafe_b64encode(
-            json.dumps(config).encode()
-        ).decode().rstrip("=")
-        base_url = (
-            f"https://server.smithery.ai/{self.qualified_name}/mcp"
-            f"?config={config_b64}"
-            f"&api_key={api_key}"
-        )
+        result = await self._connect_endpoint(config)
+        if result is None:
+            return []
+        endpoint, token = result
         headers = {
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
 
-        def _parse_sse(text: str) -> dict | None:
-            for line in text.splitlines():
-                if line.startswith("data:"):
-                    try:
-                        return json.loads(line[5:].strip())
-                    except json.JSONDecodeError:
-                        pass
-            return None
+        async def _post(client, payload, session_id=None):
+            hdrs = dict(headers)
+            if session_id:
+                hdrs["mcp-session-id"] = session_id
+            return await client.post(
+                endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
+            )
 
         async def _run() -> list[dict]:
             client = _get_http_client()
-
-            async def _post(payload, session_id=None):
-                hdrs = dict(headers)
-                if session_id:
-                    hdrs["mcp-session-id"] = session_id
-                return await client.post(
-                    base_url, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
-                )
-
-            r = await _post({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                             "params": {"protocolVersion": MCP_PROTOCOL_VERSION,
-                                        "capabilities": {}, "clientInfo": MCP_CLIENT_INFO}})
+            r = await _post(client, {
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {
+                    "protocolVersion": MCP_PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": MCP_CLIENT_INFO,
+                },
+            })
             if r.status_code in (401, 403):
                 raise PermissionError(f"HTTP {r.status_code}")
             r.raise_for_status()
-            session_id = r.headers.get("mcp-session-id")
+            mcp_session_id = r.headers.get("mcp-session-id")
 
-            await _post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session_id)
+            await _post(client, {
+                "jsonrpc": "2.0", "method": "notifications/initialized", "params": {},
+            }, mcp_session_id)
 
-            r2 = await _post({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}, session_id)
+            r2 = await _post(client, {
+                "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
+            }, mcp_session_id)
             r2.raise_for_status()
             msg = _parse_sse(r2.text)
             if msg and "result" in msg:
@@ -741,7 +874,7 @@ class DockerTransport(BaseTransport):
         memory = str(config.get("memory") or "512m")
         cmd = [
             "docker", "run", "--rm", "-i",
-            "--label", "chameleon-mcp=1",
+            "--label", "kitsune-mcp=1",
             "--memory", memory,
         ]
         for k, v in (config.get("env") or {}).items():
