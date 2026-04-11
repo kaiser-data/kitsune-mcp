@@ -388,6 +388,7 @@ class MultiRegistry(BaseRegistry):
         ]
         self._server_cache: dict[str, tuple] = {}   # id → (ServerInfo|None, expires_at)
         self._search_cache: dict[tuple, tuple] = {} # (query, limit) → (list, expires_at)
+        self.last_registry_errors: dict[str, str] = {}
 
     def bust_cache(self, server_id: str | None = None) -> None:
         """Invalidate cache. Pass server_id to bust a single entry, or None for all."""
@@ -405,12 +406,15 @@ class MultiRegistry(BaseRegistry):
             if now < expires:
                 return cached
 
+        self.last_registry_errors = {}
+        reg_names = [type(r).__name__.replace("Registry", "").lower() for r in self._registries]
         tasks = [reg.search(query, limit) for reg in self._registries]
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
         seen: set[str] = set()
         candidates: list[ServerInfo] = []
-        for batch in all_results:
+        for name, batch in zip(reg_names, all_results, strict=False):
             if isinstance(batch, Exception):
+                self.last_registry_errors[name] = type(batch).__name__
                 continue
             for srv in batch:
                 k = _dedup_key(srv.name)
@@ -422,10 +426,11 @@ class MultiRegistry(BaseRegistry):
         self._search_cache[cache_key] = (result, now + _CACHE_TTL_SEARCH)
         return result
 
-    async def get_server(self, id: str):
+    async def get_server(self, id: str, source_preference: str | None = None):
         now = time.monotonic()
-        if id in self._server_cache:
-            cached, expires = self._server_cache[id]
+        cache_key = (id, source_preference)
+        if cache_key in self._server_cache:
+            cached, expires = self._server_cache[cache_key]
             if now < expires:
                 return cached
 
@@ -434,6 +439,10 @@ class MultiRegistry(BaseRegistry):
             return_exceptions=True,
         )
         valid = [r for r in results if r and not isinstance(r, Exception)]
+        # Source preference filtering — applied before the smithery-key filter
+        if source_preference:
+            preferred = [r for r in valid if r.source == source_preference]
+            valid = preferred if preferred else valid
         # Skip Smithery results when no API key is configured.
         smithery_key_ok = _smithery_available()
         filtered = [r for r in valid if not (r.source == "smithery" and not smithery_key_ok)]
@@ -443,7 +452,7 @@ class MultiRegistry(BaseRegistry):
         # If an official/high-trust source has tools, it wins over everything.
         candidates.sort(key=lambda r: (0 if r.tools else 1, _SOURCE_TIER.get(r.source, 99)))
         result = candidates[0] if candidates else None
-        self._server_cache[id] = (result, now + _CACHE_TTL_SERVER)
+        self._server_cache[cache_key] = (result, now + _CACHE_TTL_SERVER)
         return result
 
 

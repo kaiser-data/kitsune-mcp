@@ -129,6 +129,19 @@ def _credentials_guide(server_id: str, credentials: dict, resolved: dict) -> str
     return "\n".join(lines)
 
 
+def _credentials_ready(credentials: dict) -> str:
+    """One-line credential status for search result rows."""
+    if not credentials:
+        return "✅ ready"
+    _reload_dotenv()
+    missing = [
+        _to_env_var(k) for k in credentials
+        if not os.getenv(_to_env_var(k))
+        and any(_to_env_var(k).endswith(sfx) for sfx in CRED_SUFFIXES)
+    ]
+    return "✅ ready" if not missing else f"✗ needs {', '.join(missing)}"
+
+
 def _credentials_inspect_block(credentials: dict, resolved: dict) -> list[str]:
     """CREDENTIALS section lines for inspect() — shows ✓/✗ per key with .env hints."""
     if not credentials:

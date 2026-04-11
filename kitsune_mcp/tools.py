@@ -1,7 +1,9 @@
 import asyncio
 import contextlib
+import dataclasses
 import ipaddress
 import json
+import os
 import re
 import shlex
 import time
@@ -30,6 +32,7 @@ from kitsune_mcp.constants import (
 from kitsune_mcp.credentials import (
     _credentials_guide,
     _credentials_inspect_block,
+    _credentials_ready,
     _registry_headers,
     _resolve_config,
     _save_to_env,
@@ -146,12 +149,19 @@ async def search(query: str, registry: str = "all", limit: int = 5) -> str:
         return f"No servers found for '{query}'. Try a different query or registry."
 
     lines = [f"SERVERS — '{query}' ({len(servers)} found)\n"]
+    # Report any registry failures when searching all registries
+    if registry == "all":
+        real_reg = _registry._get() if hasattr(_registry, "_get") else _registry
+        errors = getattr(real_reg, "last_registry_errors", {})
+        if errors:
+            failed = ", ".join(f"{n} (timeout)" for n in errors)
+            lines.insert(1, f"⚠️  Skipped: {failed}\n")
     for s in servers:
-        creds = ", ".join(s.credentials.keys()) if s.credentials else "free"
-        lines.append(f"{s.id} | {s.name} — {s.description} | {s.source}/{s.transport} | creds: {creds}")
+        cred_status = _credentials_ready(s.credentials)
+        lines.append(f"{s.id} | {s.name} — {s.description} | {s.source}/{s.transport} | {cred_status}")
         session["explored"][s.id] = {"name": s.name, "desc": s.description, "status": "explored"}
 
-    lines.append("\ninspect('<id>') for details | call('<id>', '<tool>', args) to call")
+    lines.append("\ninspect('<id>') for details | shapeshift('<id>') to load")
     return "\n".join(lines)
 
 
@@ -204,13 +214,23 @@ async def inspect(server_id: str) -> str:
         token_cost = _estimate_tokens(tools)
         lines.append(f"\nToken cost: ~{token_cost} tokens (measured)")
     else:
-        lines.append("TOOLS: not listed in registry")
+        lines.append("TOOLS: not listed in registry (run locally to measure)")
         token_cost = srv.token_cost or 0
 
     session["explored"][srv.id] = {
         "name": srv.name, "desc": srv.description,
         "status": "inspected", "token_cost": token_cost,
     }
+
+    # Suggest next action based on credential state
+    _, missing_creds = _resolve_config(srv.credentials, {})
+    if missing_creds:
+        first_var = _to_env_var(next(iter(missing_creds)))
+        lines.append(f"\nNext: key(\"{first_var}\", \"...\") then shapeshift(\"{srv.id}\")")
+    else:
+        lean_hint = f", tools=[\"{tools[0].get('name', '')}\"]" if tools and len(tools) > 4 else ""
+        lines.append(f"\nNext: shapeshift(\"{srv.id}\"{lean_hint})")
+
     return "\n".join(lines)
 
 
@@ -534,9 +554,30 @@ async def auto(
     return result
 
 
+def _infer_install_cmd(server_id: str) -> list[str]:
+    """Infer a local install command from a server ID.
+    npm-style (@scope/pkg or IDs with / or no dots) → npx -y
+    Python-style (contains dots) → uvx
+    """
+    if server_id.startswith("@") or "/" in server_id or "." not in server_id:
+        return ["npx", "-y", server_id]
+    return ["uvx", server_id]
+
+
 @mcp.tool()
-async def shapeshift(server_id: str, ctx: Context, tools: list[str] | None = None, confirm: bool = False) -> str:
-    """Shapeshift into a server's form. The fox takes on the server's shape — its tools become available natively in the session. Use tools=[...] to load only specific tools instead of everything. Pass confirm=True to proceed with community (npm/pypi/github) sources after reviewing."""
+async def shapeshift(
+    server_id: str,
+    ctx: Context,
+    tools: list[str] | None = None,
+    confirm: bool = False,
+    source: str = "auto",
+) -> str:
+    """Shapeshift into a server's form. The fox takes on the server's shape — its tools become available natively in the session.
+
+    source: "auto" (default) | "local" (force npx/uvx install) | "smithery" (force HTTP via Smithery) | "official" (official/mcpregistry only)
+    tools: load only specific tools instead of everything
+    confirm: proceed with community (npm/pypi/github) sources after reviewing
+    """
     # 1. Check pool connections first (friendly names from connect() take priority)
     pool_conn = None
     for _pk, conn in session["connections"].items():
@@ -545,8 +586,16 @@ async def shapeshift(server_id: str, ctx: Context, tools: list[str] | None = Non
             break
 
     if pool_conn is None:
-        # Fall back to registry lookup
-        srv = await _registry.get_server(server_id)
+        # source="smithery": validate API key exists first
+        if source == "smithery" and not _smithery_available():
+            return (
+                f"Cannot use source='smithery' — SMITHERY_API_KEY is not set.\n\n"
+                f"Set it: key(\"SMITHERY_API_KEY\", \"your-key\")\n"
+                f"Or use: shapeshift(\"{server_id}\", source=\"local\") to install locally."
+            )
+        # Map source to registry source_preference (only for smithery/official — local overrides transport later)
+        reg_source = source if source in ("smithery", "official") else None
+        srv = await _registry.get_server(server_id, source_preference=reg_source)
     else:
         srv = None  # use pool path below
 
@@ -644,24 +693,38 @@ async def shapeshift(server_id: str, ctx: Context, tools: list[str] | None = Non
         return "\n".join(lines)
 
     # 2. Trust gate — community sources require explicit confirmation
-    source = srv.source if srv else "unknown"
-    if source in TRUST_LOW and not confirm:
+    srv_source = srv.source if srv else "unknown"
+    trust_level = (os.getenv("KITSUNE_TRUST") or "").lower()
+    _trust_override = trust_level in ("community", "all", "low")
+    if srv_source in TRUST_LOW and not confirm and not _trust_override:
         return (
-            f"⚠️  '{server_id}' is from {source} (community — not verified by the official MCP registry).\n\n"
+            f"⚠️  '{server_id}' is from {srv_source} (community — not verified by the official MCP registry).\n\n"
             f"Review before trusting:\n"
             f"  inspect('{server_id}')  — see tools and credentials\n\n"
-            f"To proceed anyway:\n"
-            f"  shapeshift('{server_id}', confirm=True)"
+            f"To proceed: shapeshift('{server_id}', confirm=True)\n"
+            f"To always trust community: key(\"KITSUNE_TRUST\", \"community\")"
         )
 
-    # 3. Drop previous form early so pool slot is freed before we potentially start a new one
-    _do_shed()
-
-    # 4. Resolve credentials
+    # 3. Resolve credentials FIRST — don't drop form if we'll fail anyway
     resolved_config, missing = _resolve_config(srv.credentials, {})
     if missing:
         creds_msg = _credentials_guide(server_id, srv.credentials, resolved_config)
         return f"Cannot shapeshift into '{server_id}' — missing credentials:\n\n{creds_msg}"
+
+    # 4. Drop previous form (only after we know credentials are OK)
+    _do_shed()
+
+    # 4.5 Source overrides — applied after cred check, before transport selection
+    if source == "local":
+        # Force local stdio transport regardless of registry result
+        srv = dataclasses.replace(srv, transport="stdio")
+        if not srv.install_cmd:
+            srv = dataclasses.replace(srv, install_cmd=_infer_install_cmd(server_id))
+    elif source == "official" and srv.source not in ("official", "mcpregistry"):
+        return (
+            f"No official/verified listing found for '{server_id}' (resolved source: {srv.source}).\n"
+            f"Try: shapeshift(\"{server_id}\") for auto, or shapeshift(\"{server_id}\", source=\"local\")."
+        )
 
     # 5. Build transport and fetch tool list
     if srv.transport == "stdio":
@@ -730,11 +793,12 @@ async def shapeshift(server_id: str, ctx: Context, tools: list[str] | None = Non
         with contextlib.suppress(Exception):
             await ctx.session.send_prompt_list_changed()
 
-    # 9. Trust / source note (source already resolved above)
-    if source in TRUST_HIGH | TRUST_MEDIUM:
-        trust_note = f"\n✓  Source: {source}"
+    # 9. Trust / source note
+    transport_label = " via local npx/uvx" if srv.transport == "stdio" else ""
+    if srv_source in TRUST_HIGH | TRUST_MEDIUM:
+        trust_note = f"\n✓  Source: {srv_source}{transport_label}"
     else:
-        trust_note = f"\n⚠️  Source: {source} (community — not verified by official MCP registry)"
+        trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry)"
 
     # 10. Credential warning (best-effort — probes tool schemas for unreferenced env vars)
     missing_env: list[str] = []
@@ -769,6 +833,14 @@ async def shapeshift(server_id: str, ctx: Context, tools: list[str] | None = Non
         for var in missing_env:
             lines.append(f"  {var}=your-value")
         lines.append(f'  Or: key("{missing_env[0]}", "your-value")')
+    # Lean hint: if no filter was requested and many tools were loaded
+    if not tools and len(registered) > 4:
+        tool_cost = _estimate_tokens(tool_schemas)
+        example_tool = registered[0] if registered else "tool_name"
+        lines.append(
+            f"\n💡 {len(registered)} tools loaded (~{tool_cost:,} tokens). "
+            f"For lean mounting: shapeshift(\"{server_id}\", tools=[\"{example_tool}\"])"
+        )
     return "\n".join(lines)
 
 
@@ -1250,6 +1322,21 @@ async def status() -> str:
     morphed = session["shapeshift_tools"]
 
     lines = ["KITSUNE MCP STATUS", ""]
+
+    # First-run onboarding — show once when session is completely clean
+    is_first_run = not explored and not grown and stats["total_calls"] == 0
+    if is_first_run:
+        lines += [
+            "Getting started:",
+            "  1. search(\"what you need\")              → find servers across 7 registries",
+            "  2. inspect(\"server-id\")                 → preview tools & token cost (zero load)",
+            "  3. shapeshift(\"server-id\")              → tools appear natively in your session",
+            "  4. call tools directly                  → no wrappers, full native speed",
+            "  5. shiftback()                          → return to base form",
+            "",
+            "Example: search(\"web search\") → inspect(\"brave\") → shapeshift(\"brave\")",
+            "",
+        ]
 
     if current_form:
         lines.append(f"CURRENT FORM: {current_form}")
