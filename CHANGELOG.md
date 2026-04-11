@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 ---
 
-## [0.8.4] — 2026-04-11
+## [0.8.5] — 2026-04-11
 
 ### Fixed
 - **Circular import** between `registry.py` and `official_registry.py` — `_registry` is now
