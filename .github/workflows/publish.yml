@@ -47,8 +47,18 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Check NPM_TOKEN
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is empty or not set. Add it at: https://github.com/kaiser-data/kitsune-mcp/settings/secrets/actions"
+            exit 1
+          fi
+          echo "NPM_TOKEN is set (${#TOKEN} chars)"
+        env:
+          TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Authenticate with npm
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+        run: npm config set //registry.npmjs.org/:_authToken "${{ secrets.NPM_TOKEN }}"
 
       - name: Publish to npm
         run: npm publish --access public
