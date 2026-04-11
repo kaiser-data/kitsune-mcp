@@ -705,6 +705,18 @@ async def shapeshift(
             f"To always trust community: key(\"KITSUNE_TRUST\", \"community\")"
         )
 
+    # 2.5 Local install gate — running npx/uvx executes arbitrary code; require confirmation
+    if source == "local" and not confirm and not _trust_override:
+        install_cmd = srv.install_cmd or _infer_install_cmd(server_id)
+        cmd_str = " ".join(install_cmd)
+        return (
+            f"⚠️  source='local' will run: {cmd_str}\n\n"
+            f"This downloads and executes the package locally.\n"
+            f"Review first: inspect('{server_id}')\n\n"
+            f"To proceed: shapeshift('{server_id}', source='local', confirm=True)\n"
+            f"To always trust local installs: key(\"KITSUNE_TRUST\", \"community\")"
+        )
+
     # 3. Resolve credentials FIRST — don't drop form if we'll fail anyway
     resolved_config, missing = _resolve_config(srv.credentials, {})
     if missing:
