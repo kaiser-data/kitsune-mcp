@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.8.2] — 2026-04-11
+
+### Added
+- npm wrapper package — `npx kitsune-mcp` delegates to `uvx kitsune-mcp` (Python)
+- Official MCP registry listing (`server.json` for `mcp-publisher`)
+- `mcp-name` ownership tag in README for registry verification
+
+---
+
 ## [0.8.1] — 2026-04-11
 
 ### Fixed

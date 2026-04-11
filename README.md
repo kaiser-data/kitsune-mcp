@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.kaiser-data/kitsune-mcp -->
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>

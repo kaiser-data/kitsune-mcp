@@ -1,19 +1,46 @@
 {
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kaiser-data/kitsune-mcp",
-  "description": "The shape-shifting MCP hub — shapeshift() into 10,000+ MCP servers at runtime. One entry point, no restarts, 7 registries.",
-  "repository": "https://github.com/kaiser-data/kitsune-mcp",
-  "homepage": "https://github.com/kaiser-data/kitsune-mcp",
-  "license": "MIT",
+  "description": "Shape-shifting MCP hub — shapeshift() into 10,000+ servers at runtime. No restarts. 7 registries.",
+  "repository": {
+    "url": "https://github.com/kaiser-data/kitsune-mcp",
+    "source": "github"
+  },
+  "version": "0.8.2",
   "packages": [
     {
-      "registry_type": "pypi",
-      "name": "kitsune-mcp",
-      "version": "0.8.1"
+      "registryType": "npm",
+      "identifier": "kitsune-mcp",
+      "version": "0.8.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SMITHERY_API_KEY",
+          "description": "Smithery API key for accessing 3,000+ verified MCP servers. Get yours at smithery.ai/account/api-keys",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
     },
     {
-      "registry_type": "npm",
-      "name": "kitsune-mcp",
-      "version": "0.8.1"
+      "registryType": "pypi",
+      "identifier": "kitsune-mcp",
+      "version": "0.8.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SMITHERY_API_KEY",
+          "description": "Smithery API key for accessing 3,000+ verified MCP servers. Get yours at smithery.ai/account/api-keys",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
     }
   ]
 }
