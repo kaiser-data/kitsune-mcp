@@ -8,6 +8,11 @@ TIMEOUT_RESOURCE_LIST = 5.0
 TIMEOUT_RESOURCE_READ = 5.0
 TIMEOUT_TCP_PROBE     = 0.5
 TIMEOUT_FETCH_URL     = 15.0
+# Hard ceiling for any single registry's contribution to MultiRegistry.search.
+# Each underlying registry already passes TIMEOUT_FETCH_URL to its HTTP call,
+# but a hung TCP connect or slow DNS can stall an asyncio.gather past that.
+# This cap guarantees one slow registry can't block the others.
+TIMEOUT_REGISTRY_TASK = TIMEOUT_FETCH_URL + 5.0
 
 MAX_RESPONSE_TOKENS = 1500
 MAX_EXPLORE_DESC    = 80
@@ -35,6 +40,11 @@ GLAMA_REGISTRY_TTL    = 3600   # 1 hour
 PROVIDER_PARAM_SUFFIXES = ("provider", "engine", "backend", "service", "mode")
 
 TIMEOUT_PROMPT_LIST  = 5.0
+
+# asyncio.StreamReader buffer limit for stdio MCP subprocesses. Default is
+# 64 KiB which is smaller than the tools/list response of many real servers
+# (Notion, GitHub, Linear). 8 MiB gives ~130× headroom.
+STDIO_BUFFER_LIMIT = 8 * 1024 * 1024
 
 # Source trust tiers — used to gate warnings in shapeshift / call / connect output
 TRUST_HIGH   = {"official"}

@@ -11,3 +11,4 @@ build/
 .mcpregistry_*
 server.json.bak
 *.png
+graphify-out/

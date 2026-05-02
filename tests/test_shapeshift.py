@@ -167,8 +167,8 @@ class TestMorphUsesPersistentTransport:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", side_effect=fake_register), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockPersistent:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", side_effect=fake_register), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPersistent:
             mock_transport = MagicMock()
             mock_transport.list_tools = AsyncMock(return_value=[
                 {"name": "pool_tool", "description": "a tool", "inputSchema": {}}
@@ -443,10 +443,10 @@ class TestMorphRegistersAll:
             return []
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["a_tool"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", side_effect=fake_reg_resources) as mock_rr, \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockPST:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["a_tool"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", side_effect=fake_reg_resources) as mock_rr, \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[{"name": "a_tool", "description": "", "inputSchema": {}}])
             mock_t.list_resources = AsyncMock(return_value=[{"uri": "config://org/cfg", "name": "cfg"}])
@@ -479,10 +479,10 @@ class TestMorphRegistersAll:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["http_tool"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources") as mock_rr, \
-             patch("kitsune_mcp.tools._register_proxy_prompts") as mock_rp, \
-             patch("kitsune_mcp.tools.HTTPSSETransport"):
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["http_tool"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources") as mock_rr, \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts") as mock_rp, \
+             patch("kitsune_mcp.tools._state.HTTPSSETransport"):
             await shapeshift("http-org/http-server", ctx)
 
         mock_rr.assert_not_called()
@@ -508,8 +508,8 @@ class TestMorphRegistersAll:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["exc_tool"]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockPST:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["exc_tool"]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[{"name": "exc_tool", "description": "", "inputSchema": {}}])
             mock_t.list_resources = AsyncMock(side_effect=RuntimeError("timeout"))

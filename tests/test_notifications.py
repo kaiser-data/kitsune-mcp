@@ -42,8 +42,8 @@ class TestMorphNotifications:
         srv = _make_srv()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[])
@@ -59,10 +59,10 @@ class TestMorphNotifications:
         srv = _make_srv()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", return_value=[]), \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[])
@@ -78,10 +78,10 @@ class TestMorphNotifications:
         srv = _make_srv()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", return_value=["config://srv/r1"]), \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=["config://srv/r1"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[{"uri": "config://srv/r1", "name": "r1"}])
@@ -97,10 +97,10 @@ class TestMorphNotifications:
         srv = _make_srv()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", return_value=[]), \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[])
@@ -116,10 +116,10 @@ class TestMorphNotifications:
         srv = _make_srv()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", return_value=[]), \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=["my_prompt"]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=["my_prompt"]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[])
@@ -135,7 +135,7 @@ class TestMorphNotifications:
         srv = _make_srv()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[])  # no tools
             MockT.return_value = mt
@@ -165,10 +165,10 @@ class TestShedNotifications:
         """Helper: morph in a tool so shed() has something to remove."""
         srv = _make_srv()
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", return_value=[]), \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[])
@@ -191,10 +191,10 @@ class TestShedNotifications:
         ctx_morph = _make_ctx()
         srv = _make_srv()
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._register_proxy_tools", return_value=["tool_a"]), \
-             patch("kitsune_mcp.tools._register_proxy_resources", return_value=["config://srv/r1"]), \
-             patch("kitsune_mcp.tools._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["tool_a"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=["config://srv/r1"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mt = MagicMock()
             mt.list_tools = AsyncMock(return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}])
             mt.list_resources = AsyncMock(return_value=[{"uri": "config://srv/r1", "name": "r1"}])

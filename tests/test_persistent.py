@@ -460,7 +460,7 @@ class TestPoolEviction:
         key, entry = self._make_entry(returncode=1)  # dead process
         _process_pool[key] = entry
 
-        evicted = _evict_stale_pool_entries()
+        evicted = _evict_stale_pool_entries(force=True)
 
         assert key in evicted
         assert key not in _process_pool
@@ -472,7 +472,7 @@ class TestPoolEviction:
         key, entry = self._make_entry(returncode=None, last_used_offset=-(POOL_MAX_IDLE_SECONDS + 1))
         _process_pool[key] = entry
 
-        evicted = _evict_stale_pool_entries()
+        evicted = _evict_stale_pool_entries(force=True)
 
         assert key in evicted
         assert key not in _process_pool
@@ -482,7 +482,7 @@ class TestPoolEviction:
         key, entry = self._make_entry(returncode=None, last_used_offset=0.0)
         _process_pool[key] = entry
 
-        evicted = _evict_stale_pool_entries()
+        evicted = _evict_stale_pool_entries(force=True)
 
         assert key not in evicted
         assert key in _process_pool
@@ -505,9 +505,27 @@ class TestPoolEviction:
             )
             _process_pool[key] = entry
 
-        _evict_stale_pool_entries()
+        _evict_stale_pool_entries(force=True)
 
         assert len(_process_pool) == POOL_MAX_PROCESSES
+
+    def test_debounce_skips_repeat_sweeps(self):
+        from server import _evict_stale_pool_entries
+        key, entry = self._make_entry(returncode=1)
+        _process_pool[key] = entry
+
+        # First call (forced) sweeps and evicts.
+        assert _evict_stale_pool_entries(force=True) == [key]
+
+        # Re-add the same dead entry. A non-forced call within the debounce
+        # window must skip the sweep and leave it in place.
+        _process_pool[key] = entry
+        assert _evict_stale_pool_entries() == []
+        assert key in _process_pool
+
+        # Forced call clears it again.
+        assert _evict_stale_pool_entries(force=True) == [key]
+        assert key not in _process_pool
 
 
 class TestMidCallReconnect:
@@ -611,3 +629,39 @@ class TestMidCallReconnect:
             result = await transport.execute("tool", {}, {})
 
         assert "after reconnect" in result
+
+
+# ---------------------------------------------------------------------------
+# .env revision invariant
+# ---------------------------------------------------------------------------
+
+class TestDotenvRevisionInvariant:
+    """_dotenv_revision must be monotonically non-decreasing across reloads.
+
+    Pool eviction in transport._get_or_start compares an entry's stored
+    revision against this counter to decide whether a process predates a .env
+    change. If the counter is ever reset, stale processes look fresh and stale
+    env values stick.
+    """
+
+    def test_reload_never_decreases_revision(self, tmp_path, monkeypatch):
+        from kitsune_mcp import credentials as creds
+
+        # Point dotenv paths at a real (empty) tmp file we can mutate.
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+        monkeypatch.setattr(creds, "_DOTENV_PATHS", [env_file])
+        monkeypatch.setattr(creds, "_last_dotenv_mtimes", ())
+
+        before = creds._dotenv_revision
+
+        # Reload with no change — must not decrease.
+        creds._reload_dotenv()
+        assert creds._dotenv_revision >= before
+
+        # Touch the file (force a different mtime). Revision must strictly
+        # increase, never reset.
+        env_file.write_text("KITSUNE_TEST=1\n")
+        os.utime(env_file, (time.time() + 1, time.time() + 1))
+        creds._reload_dotenv()
+        assert creds._dotenv_revision > before

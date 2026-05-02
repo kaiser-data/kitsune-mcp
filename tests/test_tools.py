@@ -508,7 +508,7 @@ class TestLeanMorph:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockTransport:
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockTransport:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=all_tools)
             MockTransport.return_value = mock_t
@@ -543,7 +543,7 @@ class TestLeanMorph:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockTransport:
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockTransport:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=all_tools)
             MockTransport.return_value = mock_t
@@ -595,7 +595,7 @@ class TestMorphCredentialWarning:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=tools_with_cred)
             mock_t.list_resources = AsyncMock(return_value=[])
@@ -632,7 +632,7 @@ class TestMorphCredentialWarning:
             ctx.session.send_prompt_list_changed = AsyncMock()
 
             with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-                 patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+                 patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
                 mock_t = MagicMock()
                 mock_t.list_tools = AsyncMock(return_value=tools_with_cred)
                 mock_t.list_resources = AsyncMock(return_value=[])
@@ -661,8 +661,8 @@ class TestMorphCredentialWarning:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._probe_requirements", side_effect=RuntimeError("probe failed")), \
-             patch("kitsune_mcp.tools.PersistentStdioTransport") as MockT:
+             patch("kitsune_mcp.tools._state._probe_requirements", side_effect=RuntimeError("probe failed")), \
+             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[
                 {"name": "simple_tool", "description": "", "inputSchema": {}}

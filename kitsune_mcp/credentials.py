@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from kitsune_mcp.constants import CRED_SUFFIXES
+from kitsune_mcp.constants import CRED_SUFFIXES, TRUST_LOW, TRUST_MEDIUM
 
 # Read at import time (load_dotenv() must be called by entry point first)
 SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
@@ -21,6 +21,15 @@ _DOTENV_PATHS = [
 # Revision counter — increments whenever any .env file changes on disk.
 # Pool entries store their revision at spawn time; stale entries are evicted
 # and respawned so they pick up new credentials automatically.
+#
+# INVARIANT: _dotenv_revision is monotonically non-decreasing for the lifetime
+# of the process, including in tests. The pool eviction logic in
+# transport._get_or_start compares `entry.dotenv_revision != _dotenv_revision`
+# to decide whether a pool process predates a .env change. If this counter is
+# ever reset (e.g. `_dotenv_revision = 0` in a test fixture) while pool entries
+# exist, those entries become indistinguishable from freshly-spawned ones and
+# stale env values stick. Tests that need to simulate a .env change MUST
+# increment the counter, never reset it.
 _dotenv_revision: int = 0
 _last_dotenv_mtimes: tuple = ()
 
@@ -128,27 +137,39 @@ def _credentials_guide(server_id: str, credentials: dict, resolved: dict) -> str
     return "\n".join(lines)
 
 
-def _credentials_ready(credentials: dict) -> str:
-    """One-line credential status for search result rows."""
+def _credentials_ready(credentials: dict, source: str = "") -> str:
+    """One-line credential status. Describes what we verified — never predicts runtime auth."""
     if not credentials:
-        return "✅ ready"
+        if source in TRUST_LOW:
+            return "community — may need creds"
+        if source in TRUST_MEDIUM:
+            return "no creds declared (may use OAuth)"
+        return "no creds declared"
     _reload_dotenv()
     missing = [
         env for k in credentials
         for env in [_to_env_var(k)]
         if not os.getenv(env) and any(env.endswith(sfx) for sfx in CRED_SUFFIXES)
     ]
-    return "✅ ready" if not missing else f"✗ needs {', '.join(missing)}"
+    return "✓ env set" if not missing else f"✗ needs {', '.join(missing)}"
 
 
-def _credentials_inspect_block(credentials: dict, resolved: dict) -> list[str]:
+def _credentials_inspect_block(credentials: dict, resolved: dict, source: str = "") -> list[str]:
     """CREDENTIALS section lines for inspect() — shows ✓/✗ per key with .env hints."""
     if not credentials:
-        return ["CREDENTIALS: none required", ""]
+        lines = ["CREDENTIALS: none declared in registry"]
+        if source in TRUST_MEDIUM | TRUST_LOW:
+            lines += [
+                "  Note: declared ≠ actual. Servers may still require browser OAuth",
+                "  on first call, out-of-band setup (e.g., sharing Notion pages,",
+                "  granting scopes), or a valid unexpired token. Check the README.",
+            ]
+        lines.append("")
+        return lines
     envs = {k: _to_env_var(k) for k in credentials}
     lines = ["CREDENTIALS"]
     for cred_key, desc in credentials.items():
-        status = "✓ found" if resolved.get(cred_key) else "✗ missing"
+        status = "✓ env set" if resolved.get(cred_key) else "✗ missing"
         desc_str = f" — {desc[:60]}" if desc else ""
         lines.append(f"  {status}  {envs[cred_key]}{desc_str}")
     missing_envs = [envs[k] for k in credentials if not resolved.get(k)]

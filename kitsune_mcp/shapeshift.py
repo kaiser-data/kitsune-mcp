@@ -5,6 +5,7 @@ from collections.abc import Callable
 from mcp.server.fastmcp.prompts.base import Prompt as _Prompt
 from mcp.server.fastmcp.resources.types import FunctionResource as _FunctionResource
 
+from kitsune_mcp._fastmcp_compat import remove_prompt, remove_resource
 from kitsune_mcp.app import mcp
 from kitsune_mcp.session import session
 from kitsune_mcp.transport import BaseTransport
@@ -76,18 +77,12 @@ def _do_shed() -> list[str]:
             pass
     session["shapeshift_tools"] = []
 
-    # Remove proxied resources via _resource_manager internal dict
-    _rm = getattr(mcp, "_resource_manager", None)
     for uri in session.get("shapeshift_resources", []):
-        if _rm is not None:
-            _rm._resources.pop(uri, None)
+        remove_resource(mcp, uri)
     session["shapeshift_resources"] = []
 
-    # Remove proxied prompts via _prompt_manager internal dict
-    _pm = getattr(mcp, "_prompt_manager", None)
     for pname in session.get("shapeshift_prompts", []):
-        if _pm is not None:
-            _pm._prompts.pop(pname, None)
+        remove_prompt(mcp, pname)
     session["shapeshift_prompts"] = []
 
     session["current_form"] = None
@@ -181,6 +176,14 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
     return registered
 
 
+def _proxy_name_for(server_id: str, raw_name: str, base_tool_names: set | None) -> str:
+    """Translate a raw tool name to the name it will be registered under (handles collisions)."""
+    if base_tool_names and raw_name in base_tool_names:
+        sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())
+        return f"{sanitized}_{raw_name}"
+    return raw_name
+
+
 def _register_proxy_tools(
     server_id: str, tools: list, transport: "BaseTransport", config: dict,
     base_tool_names: set = None,
@@ -190,7 +193,6 @@ def _register_proxy_tools(
 
     only: if provided, only register tools whose names are in this set (lean shapeshift).
     """
-    sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())
     registered = []
     for tool_schema in tools:
         raw_name = tool_schema.get("name", "")
@@ -198,10 +200,7 @@ def _register_proxy_tools(
             continue
         if only is not None and raw_name not in only:
             continue
-        if base_tool_names and raw_name in base_tool_names:
-            proxy_name = f"{sanitized}_{raw_name}"
-        else:
-            proxy_name = raw_name
+        proxy_name = _proxy_name_for(server_id, raw_name, base_tool_names)
         proxy = _make_proxy(server_id, tool_schema, transport, config, proxy_name)
         try:
             mcp.add_tool(proxy)

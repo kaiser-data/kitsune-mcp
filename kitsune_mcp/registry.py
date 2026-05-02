@@ -12,6 +12,7 @@ from kitsune_mcp.constants import (
     MCP_REGISTRY_IO_TTL,
     MCP_REGISTRY_IO_URL,
     TIMEOUT_FETCH_URL,
+    TIMEOUT_REGISTRY_TASK,
 )
 from kitsune_mcp.credentials import _registry_headers, _smithery_available
 from kitsune_mcp.utils import _estimate_tokens, _get_http_client
@@ -43,6 +44,47 @@ class TTLCache(Generic[_T]):  # noqa: UP046
         self._expires = 0.0
 
 
+_K = TypeVar("_K")
+
+
+class TTLDict(Generic[_K, _T]):  # noqa: UP046
+    """Keyed time-to-live cache. Replaces ad-hoc `dict[K, (V, expires_at)]`.
+
+    Cache hits past expiry are treated as misses; expired entries are evicted
+    lazily on access. clear(key=None) drops everything; clear(key=k) drops
+    one entry; clear_prefix(predicate) drops anything matching.
+    """
+
+    __slots__ = ("_ttl", "_data")
+
+    def __init__(self, ttl: float) -> None:
+        self._ttl = ttl
+        self._data: dict[_K, tuple[_T, float]] = {}
+
+    def get(self, key: _K) -> _T | None:
+        entry = self._data.get(key)
+        if entry is None:
+            return None
+        value, expires = entry
+        if time.monotonic() >= expires:
+            self._data.pop(key, None)
+            return None
+        return value
+
+    def set(self, key: _K, value: _T) -> None:
+        self._data[key] = (value, time.monotonic() + self._ttl)
+
+    def clear(self, key: _K | None = None) -> None:
+        if key is None:
+            self._data.clear()
+        else:
+            self._data.pop(key, None)
+
+    def clear_where(self, predicate) -> None:
+        for k in [k for k in self._data if predicate(k)]:
+            del self._data[k]
+
+
 def _simple_search(servers: list["ServerInfo"], query: str, limit: int) -> list["ServerInfo"]:
     """Substring filter across name/description/id — used by registries that lack server-side search."""
     if not query:
@@ -54,7 +96,7 @@ def _simple_search(servers: list["ServerInfo"], query: str, limit: int) -> list[
     ][:limit]
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ServerInfo:
     id: str
     name: str
@@ -372,6 +414,11 @@ class GitHubRegistry(BaseRegistry):
 _CACHE_TTL_SERVER = 300.0   # 5 minutes — server metadata rarely changes
 _CACHE_TTL_SEARCH = 60.0    # 1 minute — search results can shift
 
+# Sentinel for negative caching. We want `get_server("does-not-exist")` to
+# remember the miss for ~5 min so a flurry of repeat lookups doesn't fan out
+# 6 parallel HTTP requests every time.
+_NOT_FOUND = object()
+
 
 class MultiRegistry(BaseRegistry):
     """Fan out to all registries, dedup by name, Official → GitHub → Smithery → npm priority."""
@@ -386,8 +433,10 @@ class MultiRegistry(BaseRegistry):
             GlamaRegistry(),
             NpmRegistry(),
         ]
-        self._server_cache: dict[tuple, tuple] = {}   # (id, source_pref) → (ServerInfo|None, expires_at)
-        self._search_cache: dict[tuple, tuple] = {} # (query, limit) → (list, expires_at)
+        # Server cache stores `_NOT_FOUND` sentinel for negative results so
+        # repeated misses don't re-fan-out across all registries.
+        self._server_cache: TTLDict[tuple, object] = TTLDict(_CACHE_TTL_SERVER)
+        self._search_cache: TTLDict[tuple, list[ServerInfo]] = TTLDict(_CACHE_TTL_SEARCH)
         self.last_registry_errors: dict[str, str] = {}
         self._reg_names = [type(r).__name__.replace("Registry", "").lower() for r in self._registries]
 
@@ -397,19 +446,22 @@ class MultiRegistry(BaseRegistry):
             self._server_cache.clear()
             self._search_cache.clear()
         else:
-            for key in [k for k in self._server_cache if k[0] == server_id]:
-                del self._server_cache[key]
+            self._server_cache.clear_where(lambda k: k[0] == server_id)
 
     async def search(self, query: str, limit: int) -> list:
         cache_key = (query, limit)
-        now = time.monotonic()
-        if cache_key in self._search_cache:
-            cached, expires = self._search_cache[cache_key]
-            if now < expires:
-                return cached
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
         self.last_registry_errors = {}
-        tasks = [reg.search(query, limit) for reg in self._registries]
+        # Per-registry timeout: prevents one stalled HTTP call from blocking
+        # the whole search. asyncio.wait_for raises TimeoutError on expiry,
+        # which gather's return_exceptions=True converts to a recorded error.
+        tasks = [
+            asyncio.wait_for(reg.search(query, limit), timeout=TIMEOUT_REGISTRY_TASK)
+            for reg in self._registries
+        ]
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
         seen: set[str] = set()
         candidates: list[ServerInfo] = []
@@ -424,19 +476,22 @@ class MultiRegistry(BaseRegistry):
                     candidates.append(srv)
         candidates.sort(key=lambda s: _relevance_score(s, query), reverse=True)
         result = candidates[:limit]
-        self._search_cache[cache_key] = (result, now + _CACHE_TTL_SEARCH)
+        self._search_cache.set(cache_key, result)
         return result
 
     async def get_server(self, id: str, source_preference: str | None = None):
-        now = time.monotonic()
         cache_key = (id, source_preference)
-        if cache_key in self._server_cache:
-            cached, expires = self._server_cache[cache_key]
-            if now < expires:
-                return cached
+        cached = self._server_cache.get(cache_key)
+        if cached is _NOT_FOUND:
+            return None
+        if cached is not None:
+            return cached
 
         results = await asyncio.gather(
-            *[reg.get_server(id) for reg in self._registries],
+            *[
+                asyncio.wait_for(reg.get_server(id), timeout=TIMEOUT_REGISTRY_TASK)
+                for reg in self._registries
+            ],
             return_exceptions=True,
         )
         valid = [r for r in results if r and not isinstance(r, Exception)]
@@ -453,7 +508,7 @@ class MultiRegistry(BaseRegistry):
         # If an official/high-trust source has tools, it wins over everything.
         candidates.sort(key=lambda r: (0 if r.tools else 1, _SOURCE_TIER.get(r.source, 99)))
         result = candidates[0] if candidates else None
-        self._server_cache[cache_key] = (result, now + _CACHE_TTL_SERVER)
+        self._server_cache.set(cache_key, result if result is not None else _NOT_FOUND)
         return result
 
 
@@ -702,8 +757,29 @@ class GlamaRegistry(BaseRegistry):
             return []
 
     async def get_server(self, id: str) -> ServerInfo | None:
+        # Fast path: look in the cached paginated list.
         servers = await self._all_servers()
-        return next((s for s in servers if s.id == id or s.name == id), None)
+        hit = next((s for s in servers if s.id == id or s.name == id), None)
+        if hit is not None:
+            return hit
+        # Slow path: Glama's paginated cache caps at 1000 servers; many IDs
+        # surfaced by search() live past that tail. Glama's ?query= matches
+        # against the display name (different from the slug), so we try
+        # both the namespace and the slug — usually one of them is a token
+        # in the human-readable name.
+        parts = id.split("/", 1)
+        candidates = [parts[-1]]
+        if len(parts) == 2:
+            candidates.insert(0, parts[0])
+        for term in candidates:
+            try:
+                results = await self.search(term, limit=25)
+            except Exception:
+                continue
+            hit = next((s for s in results if s.id == id or s.name == id), None)
+            if hit is not None:
+                return hit
+        return None
 
 
 class _LazyMultiRegistry:
