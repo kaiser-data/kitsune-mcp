@@ -572,10 +572,80 @@ def _relevance_score(srv: ServerInfo, query: str) -> float:
     return score
 
 
-class McpRegistryIO(BaseRegistry):
+class _PaginatedListRegistry(BaseRegistry):
+    """Base for registries that fetch the full server list over paginated HTTP and cache it.
+
+    Subclasses provide:
+      _URL                  — endpoint
+      _CACHE: TTLCache      — class-level cache instance
+      _MAX_PAGES            — page-loop ceiling
+      _initial_params(limit)               — params for the first page request
+      _next_params(cursor, limit)          — params for follow-up page requests
+      _extract_cursor(response_json)       — return next cursor or None to stop
+      _to_server_info(entry)               — entry dict → ServerInfo (or None)
+      _entries_key                         — JSON key holding the entry list (default 'servers')
+    """
+
+    _URL: str = ""
+    _CACHE: "TTLCache[list[ServerInfo]] | None" = None
+    _MAX_PAGES: int = 10
+    _entries_key: str = "servers"
+    _page_size: int = 50
+
+    def _initial_params(self) -> dict:
+        return {"limit": self._page_size}
+
+    def _next_params(self, cursor: str) -> dict:
+        return {"limit": self._page_size, "cursor": cursor}
+
+    def _extract_cursor(self, data: dict) -> str | None:
+        return (data.get("metadata") or {}).get("nextCursor")
+
+    @classmethod
+    def _to_server_info(cls, entry: dict) -> "ServerInfo | None":
+        raise NotImplementedError
+
+    async def _all_servers(self) -> list["ServerInfo"]:
+        cached = self._CACHE.get() if self._CACHE is not None else None
+        if cached is not None:
+            return cached
+
+        servers: list[ServerInfo] = []
+        cursor: str | None = None
+        client = _get_http_client()
+        for _ in range(self._MAX_PAGES):
+            params = self._next_params(cursor) if cursor else self._initial_params()
+            try:
+                r = await client.get(self._URL, params=params, timeout=TIMEOUT_FETCH_URL)
+                r.raise_for_status()
+                data = r.json()
+            except Exception:
+                break
+            for entry in data.get(self._entries_key) or []:
+                srv = self._to_server_info(entry)
+                if srv:
+                    servers.append(srv)
+            cursor = self._extract_cursor(data)
+            if not cursor:
+                break
+
+        if self._CACHE is not None:
+            self._CACHE.set(servers)
+        return servers
+
+    async def search(self, query: str, limit: int) -> list["ServerInfo"]:
+        return _simple_search(await self._all_servers(), query, limit)
+
+    async def get_server(self, id: str) -> "ServerInfo | None":
+        servers = await self._all_servers()
+        return next((s for s in servers if s.id == id or s.name == id), None)
+
+
+class McpRegistryIO(_PaginatedListRegistry):
     """Official MCP Protocol registry at registry.modelcontextprotocol.io — no auth required."""
 
-    _cache: TTLCache[list[ServerInfo]] = TTLCache(MCP_REGISTRY_IO_TTL)
+    _URL = MCP_REGISTRY_IO_URL
+    _CACHE: TTLCache[list[ServerInfo]] = TTLCache(MCP_REGISTRY_IO_TTL)
 
     @classmethod
     def _install_cmd(cls, server: dict) -> list[str]:
@@ -626,47 +696,24 @@ class McpRegistryIO(BaseRegistry):
             token_cost=0,
         )
 
-    async def _all_servers(self) -> list[ServerInfo]:
-        cached = self._cache.get()
-        if cached is not None:
-            return cached
-
-        servers: list[ServerInfo] = []
-        cursor: str | None = None
-        client = _get_http_client()
-        for _ in range(10):  # max 10 pages to avoid infinite loops
-            params: dict = {"limit": 50}
-            if cursor:
-                params["cursor"] = cursor
-            try:
-                r = await client.get(MCP_REGISTRY_IO_URL, params=params, timeout=TIMEOUT_FETCH_URL)
-                r.raise_for_status()
-                data = r.json()
-            except Exception:
-                break
-            for entry in data.get("servers") or []:
-                srv = self._to_server_info(entry)
-                if srv:
-                    servers.append(srv)
-            cursor = (data.get("metadata") or {}).get("nextCursor")
-            if not cursor:
-                break
-
-        McpRegistryIO._cache.set(servers)
-        return servers
-
-    async def search(self, query: str, limit: int) -> list[ServerInfo]:
-        return _simple_search(await self._all_servers(), query, limit)
-
-    async def get_server(self, id: str) -> ServerInfo | None:
-        servers = await self._all_servers()
-        return next((s for s in servers if s.id == id or s.name == id), None)
-
-
-class GlamaRegistry(BaseRegistry):
+class GlamaRegistry(_PaginatedListRegistry):
     """Glama MCP server directory — no auth required."""
 
-    _cache: TTLCache[list[ServerInfo]] = TTLCache(GLAMA_REGISTRY_TTL)
+    _URL = GLAMA_REGISTRY_URL
+    _CACHE: TTLCache[list[ServerInfo]] = TTLCache(GLAMA_REGISTRY_TTL)
+    _MAX_PAGES = 20  # Glama has many servers
+
+    def _initial_params(self) -> dict:
+        return {"first": self._page_size}
+
+    def _next_params(self, cursor: str) -> dict:
+        return {"first": self._page_size, "after": cursor}
+
+    def _extract_cursor(self, data: dict) -> str | None:
+        page_info = data.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            return None
+        return page_info.get("endCursor")
 
     @classmethod
     def _to_server_info(cls, entry: dict) -> ServerInfo | None:
@@ -704,40 +751,9 @@ class GlamaRegistry(BaseRegistry):
             token_cost=0,
         )
 
-    async def _all_servers(self) -> list[ServerInfo]:
-        cached = self._cache.get()
-        if cached is not None:
-            return cached
-
-        servers: list[ServerInfo] = []
-        cursor: str | None = None
-        client = _get_http_client()
-        for _ in range(20):  # Glama has many servers — up to 20 pages
-            params: dict = {"first": 50}
-            if cursor:
-                params["after"] = cursor
-            try:
-                r = await client.get(GLAMA_REGISTRY_URL, params=params, timeout=TIMEOUT_FETCH_URL)
-                r.raise_for_status()
-                data = r.json()
-            except Exception:
-                break
-            for entry in data.get("servers") or []:
-                srv = self._to_server_info(entry)
-                if srv:
-                    servers.append(srv)
-            page_info = data.get("pageInfo") or {}
-            if not page_info.get("hasNextPage"):
-                break
-            cursor = page_info.get("endCursor")
-            if not cursor:
-                break
-
-        GlamaRegistry._cache.set(servers)
-        return servers
-
     async def search(self, query: str, limit: int) -> list[ServerInfo]:
-        # Glama supports server-side query filtering
+        # Glama supports server-side query filtering — override the base
+        # _simple_search() which would walk the whole cached list.
         client = _get_http_client()
         try:
             r = await client.get(

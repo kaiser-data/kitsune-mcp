@@ -722,7 +722,7 @@ class TestMcpRegistryIO:
     async def test_search_returns_servers(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache.clear()
+        reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -735,7 +735,7 @@ class TestMcpRegistryIO:
     async def test_npm_package_gets_npx_install_cmd(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache.clear()
+        reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -748,7 +748,7 @@ class TestMcpRegistryIO:
     async def test_pypi_package_gets_uvx_install_cmd(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache.clear()
+        reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -761,7 +761,7 @@ class TestMcpRegistryIO:
     async def test_credentials_extracted_from_env_vars(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache.clear()
+        reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
@@ -774,7 +774,7 @@ class TestMcpRegistryIO:
     async def test_http_error_returns_empty(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
-        reg_mod.McpRegistryIO._cache.clear()
+        reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
                 return_value=httpx.Response(503, text="Unavailable")
