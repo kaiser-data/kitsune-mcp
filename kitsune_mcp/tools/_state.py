@@ -268,3 +268,86 @@ def _local_uninstall_cmd(install_cmd: list[str]) -> list[str] | None:
     if install_cmd and install_cmd[0] == "uvx" and len(install_cmd) >= 2:
         return ["uv", "tool", "uninstall", install_cmd[-1]]
     return None
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy server-id resolution (auto-recovery for typos / wrong namespaces)
+# ---------------------------------------------------------------------------
+
+_RESOLVE_PREFIXES = ("mcp-server-", "server-mcp-", "mcp-", "server-")
+_RESOLVE_SUFFIXES = ("-mcp-server", "-mcp")
+
+
+def _normalize_for_match(s: str) -> str:
+    """Strip @org/, leading mcp-server- / server-mcp- / mcp-, trailing -mcp[-server],
+    lowercase, then keep alphanumerics only.
+
+    Examples:
+      @modelcontextprotocol/server-time → "time"
+      mcp-server-time                   → "time"
+      @scope/foo-bar-mcp                → "foobar"
+    """
+    if not s:
+        return ""
+    s = s.lower()
+    if s.startswith("@") and "/" in s:
+        s = s.split("/", 1)[1]
+    for prefix in _RESOLVE_PREFIXES:
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    for suffix in _RESOLVE_SUFFIXES:
+        if s.endswith(suffix):
+            s = s[: -len(suffix)]
+            break
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+async def _resolve_server_id(server_id: str) -> tuple[str | None, list[str]]:
+    """Try fuzzy resolution of a missing server_id across all registries.
+
+    Returns (resolved_id, candidates):
+      - (resolved_id, [resolved_id]) if exactly one high-confidence match
+      - (None, [a, b, c])           if multiple plausible matches
+      - (None, [])                  if nothing close
+
+    "High confidence" = exact-equal normalized form first; if none, fall back
+    to substring overlap. Auto-resolution only fires when there's a single
+    match — multiple matches are listed for the caller to disambiguate, never
+    silently picked.
+    """
+    needle = _normalize_for_match(server_id)
+    if not needle:
+        return None, []
+    try:
+        candidates = await _registry.search(needle, limit=10)
+    except Exception:
+        return None, []
+    if not candidates:
+        return None, []
+
+    # Dedupe candidates by id — defends against any future case where the
+    # same canonical entry surfaces from multiple registries. (MultiRegistry
+    # already dedupes by name, but this layer should be robust anyway.)
+    seen_ids: set[str] = set()
+    deduped = []
+    for s in candidates:
+        if s.id not in seen_ids:
+            seen_ids.add(s.id)
+            deduped.append(s)
+
+    exact = [s for s in deduped if _normalize_for_match(s.id) == needle]
+    if len(exact) == 1:
+        return exact[0].id, [exact[0].id]
+    if len(exact) > 1:
+        return None, [s.id for s in exact[:3]]
+
+    substr = [
+        s for s in deduped
+        if needle in _normalize_for_match(s.id) or _normalize_for_match(s.id) in needle
+    ]
+    if len(substr) == 1:
+        return substr[0].id, [substr[0].id]
+    if len(substr) > 1:
+        return None, [s.id for s in substr[:3]]
+    return None, []

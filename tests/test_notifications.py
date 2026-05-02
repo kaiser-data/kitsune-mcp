@@ -141,7 +141,8 @@ class TestMorphNotifications:
             MockT.return_value = mt
             result = await shapeshift("org/notif-server", ctx)
 
-        assert "No tools" in result
+        assert "no tools found" in result.lower()
+        assert result.startswith("❌")  # machine-detectable failure marker
         ctx.session.send_tool_list_changed.assert_not_called()
 
     async def test_no_notifications_when_server_not_found(self):

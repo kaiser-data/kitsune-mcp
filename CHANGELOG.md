@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.10.0] — 2026-05-02
+
+### Added
+- **Auto-resolution of typo'd / wrong-namespace server IDs in `shapeshift()`** — `shapeshift("@modelcontextprotocol/server-time")` now silently resolves to the canonical `mcp-server-time` and proceeds, instead of returning a confusing "not found" error. Multiple plausible matches surface as a `Did you mean: a, b, c` suggestion list. Single high-confidence match auto-resolves on the first turn — agents recover without needing a retry. Closes #6 (the verified piece — see issue thread).
+- **Machine-detectable failure marker** — every `shapeshift()` failure response now starts with `❌ shapeshift failed:` so callers can detect failure with one prefix check instead of parsing prose. Successful responses still start with `Shapeshifted into '...'`.
+- **`_PaginatedListRegistry` base class** — `McpRegistryIO` and `GlamaRegistry` share a hookable paginated-fetch loop. New paginated registries now cost ~10 lines of overrides instead of ~30 lines of fresh page-loop code.
+- **`TTLDict[K, V]` cache primitive** — keyed time-to-live cache with lazy expiry; replaces the ad-hoc `dict[tuple, (value, expires_at)]` pattern that was scattered across `MultiRegistry`.
+- **`_fastmcp_compat` shim** — single point of contact for FastMCP private-API access (`_resource_manager._resources`, `_prompt_manager._prompts`). `_assert_internals(mcp)` runs at app startup so any future FastMCP refactor fails loudly at import rather than silently breaking `shiftback()`.
+- **Per-registry timeout in `MultiRegistry`** — `search()` and `get_server()` wrap each registry call in `asyncio.wait_for(..., TIMEOUT_REGISTRY_TASK)` so one stalled DNS/TCP-connect can't block the others.
+- **`_dotenv_revision` invariant** — documented as monotonically non-decreasing, with a guard test so future fixtures can't break pool eviction by resetting the counter.
+
+### Changed
+- **`kitsune_mcp/tools.py` (1782 lines) → `kitsune_mcp/tools/` package** with themed submodules: `discovery.py` (search/inspect/compare/status), `exec.py` (call/run/fetch/test/bench), `morph.py` (shapeshift/shiftback/craft/connect/release), `onboarding.py` (skill/key/auto/setup), `_state.py` (shared helpers + mocks-target namespace). All public imports preserved via `tools/__init__.py` re-exports — no breaking changes.
+- **`ServerInfo` is now `frozen=True, slots=True`** — eliminates cache-poisoning via mutation and saves ~30% memory per instance. `dataclasses.replace(srv, ...)` continues to work.
+- **`_SmitheryAuth` dataclass with `asyncio.Lock`** — replaces 4 module-level globals; concurrent `get_token()` / `get_namespace()` callers serialize on a lock with double-check, eliminating thundering-herd token refresh.
+- **`_evict_stale_pool_entries()` debounced** to once per 30s on the call hot path (force=True still available for tests). Pool sweep is no longer O(N) per tool call.
+
+### Fixed
+- **Test mock-patch surface unified** — all `kitsune_mcp.tools.X` patch sites now route through `kitsune_mcp.tools._state.X`, the canonical namespace for cross-cutting state. 133 patch sites updated; future submodule refactors won't silently invalidate tests.
+
+### Issue #6 follow-up (verification notes)
+The reported "Bug 1" (`current_form` not set after shapeshift) does not reproduce against a verified-valid server ID. The agent's repro used `@modelcontextprotocol/server-time` — which doesn't exist in any registry. shapeshift correctly returned a "not found" error which the agent misread as success, then was confused when downstream `call()` had no `current_form` to use. The auto-resolution work above fixes the underlying UX failure (typo'd ID → confusing error chain) so the same pattern can't happen again. The architectural claim that ~80% of clients are blind to dynamic tool changes is partially incorrect — the standard `mcp` Python SDK honors `notifications/tools/list_changed` (which Kitsune already sends), and verification confirms tools become visible to spec-compliant clients. Specific clients that don't honor the notification are the right targets to fix once verified — defensive-only code (Solution 1 / refresh tool) deferred until verified reports exist.
+
+---
+
 ## [0.9.0] — 2026-04-12
 
 ### Added

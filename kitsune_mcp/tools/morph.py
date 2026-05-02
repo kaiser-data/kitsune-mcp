@@ -49,7 +49,7 @@ async def _commit_shapeshift(
         server_id, tool_schemas, transport, resolved_config, _state._BASE_TOOL_NAMES, only
     )
     if not registered:
-        return f"No tools could be shapeshifted from '{server_id}'."
+        return f"❌ shapeshift failed: no tools could be registered from '{server_id}'."
 
     shapeshift_resources: list[str] = []
     shapeshift_prompts: list[str] = []
@@ -170,25 +170,47 @@ async def shapeshift(
     # Registry path — source controls which registries/transports are preferred
     if source == "smithery" and not _state._smithery_available():
         return (
-            f"Cannot use source='smithery' — SMITHERY_API_KEY is not set.\n\n"
+            f"❌ shapeshift failed: source='smithery' requires SMITHERY_API_KEY (not set).\n\n"
             f"Set it: key(\"SMITHERY_API_KEY\", \"your-key\")\n"
             f"Or use: shapeshift(\"{server_id}\", source=\"local\") to install locally."
         )
 
+    auto_resolved_from: str | None = None
     if server_id.startswith(("http://", "https://")):
         srv = _state._synthetic_http_server(server_id)
     else:
         reg_source = source if source in ("smithery", "official") else None
         srv = await _state._registry.get_server(server_id, source_preference=reg_source)
         if srv is None:
-            return f"Server '{server_id}' not found. Use search() to find servers, or connect() for local servers."
+            # Auto-recover from typos / wrong namespaces (e.g. "@modelcontextprotocol/server-time"
+            # → "mcp-server-time"). Only fires for a single high-confidence match;
+            # multiple candidates surface as suggestions, never silently picked.
+            resolved_id, candidates = await _state._resolve_server_id(server_id)
+            if resolved_id and resolved_id != server_id:
+                resolved_srv = await _state._registry.get_server(resolved_id, source_preference=reg_source)
+                if resolved_srv is not None:
+                    auto_resolved_from = server_id
+                    server_id = resolved_id
+                    srv = resolved_srv
+            if srv is None:
+                if candidates:
+                    suggestions = "\n".join(f"  - {c}" for c in candidates)
+                    return (
+                        f"❌ shapeshift failed: server '{server_id}' not found.\n"
+                        f"Did you mean one of these?\n{suggestions}\n"
+                        f"Retry: shapeshift(\"{candidates[0]}\")"
+                    )
+                return (
+                    f"❌ shapeshift failed: server '{server_id}' not found in any registry.\n"
+                    f"Use search() to find servers, or connect() for local servers."
+                )
 
     srv_source = srv.source
 
     # Check source constraint first — clearer error than the trust gate when source="official" resolves non-official
     if source == "official" and srv_source not in ("official", "mcpregistry"):
         return (
-            f"No official/verified listing found for '{server_id}' (resolved source: {srv_source}).\n"
+            f"❌ shapeshift failed: no official/verified listing for '{server_id}' (resolved source: {srv_source}).\n"
             f"Try: shapeshift(\"{server_id}\") for auto, or shapeshift(\"{server_id}\", source=\"local\")."
         )
 
@@ -225,7 +247,7 @@ async def shapeshift(
     resolved_config, missing = _state._resolve_config(srv.credentials, {})
     if missing:
         creds_msg = _credentials_guide(server_id, srv.credentials, resolved_config)
-        return f"Cannot shapeshift into '{server_id}' — missing credentials:\n\n{creds_msg}"
+        return f"❌ shapeshift failed: missing credentials for '{server_id}':\n\n{creds_msg}"
 
     _state._do_shed()
     session["current_form_local_install"] = None  # overwritten below for source="local"
@@ -252,13 +274,15 @@ async def shapeshift(
             tool_schemas = await transport.list_tools(resolved_config)
 
     if not tool_schemas:
-        return f"No tools found for '{server_id}'. Try inspect() first."
+        return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."
 
     transport_label = " via local npx/uvx" if srv.transport == "stdio" else ""
     if srv_source in TRUST_HIGH | TRUST_MEDIUM:
         trust_note = f"\n✓  Source: {srv_source}{transport_label}"
     else:
         trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry)"
+    if auto_resolved_from is not None:
+        trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
 
     return await _commit_shapeshift(
         server_id, transport, tool_schemas, resolved_config, tools, ctx,
