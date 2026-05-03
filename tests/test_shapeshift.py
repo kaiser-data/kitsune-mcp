@@ -114,6 +114,86 @@ class TestMakeProxy:
         fn = _make_proxy("test-server", schema, transport, {})
         assert len(fn.__doc__) <= 120
 
+    async def test_proxy_drops_none_optionals_before_forwarding(self):
+        """When the client omits optional non-string params, the proxy fills
+        them with None via __signature__ defaults. Forwarding None to the inner
+        server triggers `null is not of type 'integer'` errors. The proxy must
+        drop None-valued kwargs so the inner server applies its own defaults.
+
+        Regression check for the mcp-server-fetch failure observed during the
+        v0.10.0 setup-coverage tests.
+        """
+        from unittest.mock import AsyncMock
+
+        captured: dict = {}
+        transport = AsyncMock()
+
+        async def fake_execute(name, args, config):
+            captured["name"] = name
+            captured["args"] = args
+            return "ok"
+
+        transport.execute = fake_execute
+
+        schema = {
+            "name": "fetch",
+            "description": "Fetch a URL",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "max_length": {"type": "integer"},
+                    "start_index": {"type": "integer"},
+                    "raw": {"type": "boolean"},
+                },
+                "required": ["url"],
+            },
+        }
+        fn = _make_proxy("test-server", schema, transport, {})
+
+        # Caller supplies only the required arg; optional ones land as None
+        # via the signature defaults.
+        await fn(url="https://example.com", max_length=None, start_index=None, raw=None)
+
+        assert captured["name"] == "fetch"
+        assert captured["args"] == {"url": "https://example.com"}
+        # None-valued keys must be filtered out, not present-and-None
+        assert "max_length" not in captured["args"]
+        assert "start_index" not in captured["args"]
+        assert "raw" not in captured["args"]
+
+    async def test_proxy_keeps_explicitly_set_optionals(self):
+        """Filtering should only drop None — explicit values must pass through."""
+        from unittest.mock import AsyncMock
+
+        captured: dict = {}
+        transport = AsyncMock()
+
+        async def fake_execute(name, args, config):
+            captured["args"] = args
+            return "ok"
+
+        transport.execute = fake_execute
+
+        schema = {
+            "name": "fetch",
+            "description": "Fetch a URL",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "max_length": {"type": "integer"},
+                    "raw": {"type": "boolean"},
+                },
+                "required": ["url"],
+            },
+        }
+        fn = _make_proxy("test-server", schema, transport, {})
+
+        # Falsy-but-not-None values (0, False, "") must be preserved
+        await fn(url="x", max_length=0, raw=False)
+        assert captured["args"] == {"url": "x", "max_length": 0, "raw": False}
+
 
 class TestCollisionDetection:
     """Test that shapeshift() prefixes tool names that collide with base tools."""

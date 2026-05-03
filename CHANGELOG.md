@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.10.1] — 2026-05-03
+
+### Fixed
+- **`_make_proxy` no longer forwards `None` for omitted optional params.** When a client called a shapeshifted tool without supplying optional non-string args (integers, booleans, arrays), the proxy filled them with `None` from its `__signature__` defaults and forwarded those `None`s to the inner MCP server, which rejected them with `Input validation error: None is not of type 'integer'` (JSON Schema doesn't permit null for typed params unless explicitly declared as `["type", "null"]`). Affected most non-trivial servers — `mcp-server-fetch` (`max_length`, `start_index`, `raw`), GitHub (`per_page`, `page`), Postgres/SQLite (`limit`, `offset`), Filesystem (`head`, `tail`). The proxy now drops `None`-valued kwargs so the inner server applies its own defaults instead. Falsy-but-not-None values (`0`, `False`, `""`) are preserved. Surfaced during the v0.10.0 setup-coverage tests against `mcp-server-fetch`.
+
+---
+
 ## [0.10.0] — 2026-05-02
 
 ### Added

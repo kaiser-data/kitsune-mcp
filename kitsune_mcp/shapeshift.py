@@ -55,7 +55,14 @@ def _make_proxy(
         ))
 
     async def proxy_fn(**kwargs) -> str:
-        return await transport.execute(original_name, kwargs, config)
+        # Optional params get default=None in our signature so FastMCP/pydantic
+        # accept calls that omit them. But forwarding `None` to the inner
+        # MCP server fails its schema validation: JSON Schema rejects null for
+        # typed params unless explicitly declared as ["type", "null"], which is
+        # rare. Drop None-valued kwargs so the inner server applies its own
+        # defaults instead of seeing a poison value.
+        cleaned = {k: v for k, v in kwargs.items() if v is not None}
+        return await transport.execute(original_name, cleaned, config)
 
     proxy_fn.__name__ = fn_name
     proxy_fn.__doc__ = (tool_schema.get("description") or "")[:120]
