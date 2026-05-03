@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.10.2] — 2026-05-03
+
+### Hotfix
+- **`kitsune_mcp/oauth.py` is now actually shipped.** v0.10.0 and v0.10.1 wheels were missing the module on PyPI and npm. `transport.py` imports it at line 13 and calls `oauth.ensure_token` / `oauth.delete_tokens` / `oauth._origin` from `HTTPSSETransport(direct=True)`, so every fresh `npx -y kitsune-mcp` and `pip install kitsune-mcp` hit `ImportError: cannot import name 'oauth' from 'kitsune_mcp'` at startup. Local development was unaffected because the file existed on disk; the file was authored locally but never staged. Closes #8 (Bug 1).
+- **OAuth 2.1 device/browser flow** for direct HTTP MCP servers (`HTTPSSETransport(direct=True)`) is now functional in installed packages. 29 tests cover the flow end-to-end (`tests/test_oauth.py`).
+- **CI guard added** — `tests/test_release_smoke.py` imports every `kitsune_mcp.*` module and asserts `kitsune_mcp.oauth` exports the symbols `transport.py` calls. Any future missing-module-on-publish bug will fail CI before reaching PyPI/npm.
+
+---
+
 ## [0.10.1] — 2026-05-03
 
 ### Fixed
