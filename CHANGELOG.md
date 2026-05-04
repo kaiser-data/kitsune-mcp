@@ -4,6 +4,38 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.11.0] — 2026-05-04
+
+Provider-aware onboarding — closes the rest of issue #8. Configure providers once up front, explore freely. Hermes-style agents now reach a working tool call in ≤3 steps with zero API keys.
+
+### Added
+- **`onboard()` tool** — first-run wizard. Shows provider auth state, recommends 5 zero-config servers (`mcp-server-time`, `@modelcontextprotocol/server-memory`, `mcp-server-fetch`, `@modelcontextprotocol/server-filesystem`, `@upstash/context7-mcp`), and ends with a 3-step verification flow. Optional Smithery upgrade path with a direct link to API key setup. (Issue #8 acceptance: "new user reaches working tool call in ≤3 steps".)
+- **Multi-provider fallback in `auto()`** — when no `server_hint` is pinned and the chosen provider returns auth-failure response (`"Auth failed"`, `401`, `unauthorized`, etc.), `auto()` walks through the remaining `search()` candidates whose creds it can satisfy. The user asked for "web search", not Provider X.
+- **Argument inference in `auto()`** — when `auto()` implicit-selects a tool but caller passed no `arguments`, fills the primary string param (`query`/`q`/`prompt`/`text`/etc., or single required string) from `task`. Without this, every implicit-select search tool failed with `query: undefined`. Existing explicit `arguments` are never overridden.
+
+### Changed
+- **`_credentials_ready()` returns three explicit tiers** instead of the ambiguous "no creds declared":
+  - `✅ free – no key` for official sources without declared creds
+  - `🔑 needs SMITHERY_API_KEY` (or other key name) for Smithery-hosted servers AND any server with declared creds — Smithery is checked unconditionally because per-server creds may be empty but `SMITHERY_API_KEY` is always required
+  - `⚠️  community — may need creds` for npm/pypi/github undeclared
+  - `🔑 may need OAuth or registry key` for mcpregistry/glama undeclared
+  Closes the issue-#8 misread where "no creds" looked like "free".
+- **`status()` headline reordered** — `PROVIDERS` section now appears immediately after the title, before everything else. PID/memory/perf stats moved below. Auth state is the actionable info; perf stats aren't.
+- **`shapeshift()` pre-flight gate for Smithery-hosted servers** — fails fast with `❌ shapeshift failed: '...' is hosted on Smithery and needs SMITHERY_API_KEY` *before* tools are loaded, instead of letting the user discover the auth wall on the first tool call. Bypassed with `confirm=True`. Includes a direct link to `smithery.ai/account/api-keys` and an offered workaround (`source="local"`).
+
+### Acceptance criteria from issue #8
+
+- ✅ `oauth.py` present and importable (v0.10.2)
+- ✅ OAuth 2.1 flow works for direct HTTP servers (v0.10.2)
+- ✅ New user reaches working tool call in ≤3 steps with zero API keys (`onboard()` + free-tier list)
+- ✅ Search results never show Smithery-hosted as "no creds" (3-tier labels)
+- ✅ `shapeshift()` warns before loading server with unconfigured creds (Smithery pre-flight gate)
+- ✅ `status()` shows provider auth state primarily (reorder)
+- ✅ `auto()` falls back across providers silently on auth failure (multi-provider walk)
+- ✅ `auto()` correctly passes args to npm-based servers (argument inference + bug verified absent)
+
+---
+
 ## [0.10.2] — 2026-05-03
 
 ### Hotfix

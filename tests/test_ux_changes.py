@@ -31,17 +31,48 @@ class TestCredentialsReady:
         os.environ.pop("API_KEY", None)
         os.environ.pop("TEST_TOKEN", None)
 
-    def test_no_credentials_official_source(self):
+    def test_no_credentials_official_source_is_free(self):
+        # v0.11.0: official sources without creds are explicit "free", not the
+        # ambiguous "no creds declared" that misled users in v0.10.x.
         from kitsune_mcp.credentials import _credentials_ready
-        assert _credentials_ready({}, "official") == "no creds declared"
+        result = _credentials_ready({}, "official")
+        assert "free" in result
+        assert "✅" in result
 
-    def test_no_credentials_smithery_hints_oauth(self):
+    def test_smithery_without_key_says_needs_smithery_api_key(self):
+        # v0.11.0 fix for issue #8: Smithery-hosted servers always need
+        # SMITHERY_API_KEY regardless of whether per-server creds are declared.
+        # Old "no creds declared (may use OAuth)" silently led users into walls.
+        from unittest.mock import patch
         from kitsune_mcp.credentials import _credentials_ready
-        assert "OAuth" in _credentials_ready({}, "smithery")
+        # Patch _smithery_available so the test isn't affected by a real .env
+        # file that may have a key set.
+        with patch("kitsune_mcp.credentials._smithery_available", return_value=False):
+            result = _credentials_ready({}, "smithery")
+        assert "SMITHERY_API_KEY" in result
+        assert "🔑" in result
 
-    def test_no_credentials_community_source(self):
+    def test_smithery_with_key_set_shows_env_set(self):
+        from unittest.mock import patch
         from kitsune_mcp.credentials import _credentials_ready
-        assert "community" in _credentials_ready({}, "npm")
+        with patch("kitsune_mcp.credentials._smithery_available", return_value=True):
+            result = _credentials_ready({}, "smithery")
+        assert "env set" in result
+        assert "✓" in result
+
+    def test_no_credentials_community_source_warns(self):
+        # npm/pypi/github without declared creds — undeclared ≠ free.
+        from kitsune_mcp.credentials import _credentials_ready
+        result = _credentials_ready({}, "npm")
+        assert "community" in result
+        assert "⚠" in result
+
+    def test_glama_without_creds_warns(self):
+        # mcpregistry/glama without declared creds — same warning tier.
+        from kitsune_mcp.credentials import _credentials_ready
+        result = _credentials_ready({}, "glama")
+        # mcpregistry/glama are TRUST_MEDIUM but not Smithery-tagged → may need OAuth
+        assert "🔑" in result
 
     def test_credential_present_in_env_returns_set(self):
         from kitsune_mcp.credentials import _credentials_ready
@@ -57,7 +88,7 @@ class TestCredentialsReady:
         from kitsune_mcp.credentials import _credentials_ready
         os.environ.pop("API_KEY", None)
         result = _credentials_ready({"apiKey": "Your API key"})
-        assert "✗" in result
+        assert "🔑" in result
         assert "API_KEY" in result
 
     def test_multiple_missing_shows_all(self):
@@ -66,7 +97,7 @@ class TestCredentialsReady:
         os.environ.pop("AUTH_TOKEN", None)
         # Use creds that generate env vars matching CRED_SUFFIXES patterns
         result = _credentials_ready({"apiKey": "key", "authToken": "tok"})
-        assert "✗" in result
+        assert "🔑" in result
         assert "API_KEY" in result
         assert "AUTH_TOKEN" in result
 
@@ -152,9 +183,29 @@ class TestStatusOnboarding:
         session["shapeshift_tools"] = []
         try:
             result = await status()
-            assert "Welcome to Kitsune" in result
-            assert "search(" in result
-            assert "shapeshift(" in result
+            # v0.11.0: clean-session preamble points users to the onboard() tool
+            # rather than embedding tutorial text directly.
+            assert "onboard()" in result
+            # PROVIDERS section is now headlined regardless of session state
+            assert "PROVIDERS" in result
+        finally:
+            for k, v in original.items():
+                session[k] = v
+
+    async def test_providers_section_appears_before_perf_stats(self):
+        """v0.11.0 commit 6: PROVIDERS is the headline section."""
+        from kitsune_mcp.session import session
+        from kitsune_mcp.tools import status
+
+        original = {k: session[k] for k in ("explored", "grown", "stats", "current_form", "shapeshift_tools")}
+        session["explored"] = {}
+        session["grown"] = {}
+        session["stats"] = {"total_calls": 0, "tokens_sent": 0, "tokens_received": 0, "tokens_saved_browse": 0}
+        session["current_form"] = None
+        session["shapeshift_tools"] = []
+        try:
+            result = await status()
+            assert result.index("PROVIDERS") < result.index("PERFORMANCE STATS")
         finally:
             for k, v in original.items():
                 session[k] = v

@@ -16,7 +16,7 @@ from kitsune_mcp.tools import _state  # noqa: F401  (re-exported)
 from kitsune_mcp.tools.discovery import compare, inspect, search, status  # noqa: F401
 from kitsune_mcp.tools.exec import bench, call, fetch, run, test  # noqa: F401
 from kitsune_mcp.tools.morph import connect, craft, release, shapeshift, shiftback  # noqa: F401
-from kitsune_mcp.tools.onboarding import auto, key, setup, skill  # noqa: F401
+from kitsune_mcp.tools.onboarding import auto, key, onboard, setup, skill  # noqa: F401
 
 # Backward-compat re-exports of names that tests / server.py imported from
 # the old monolithic kitsune_mcp/tools.py module.

@@ -243,6 +243,21 @@ async def shapeshift(
             f"To always trust local installs: key(\"KITSUNE_TRUST\", \"community\")"
         )
 
+    # Pre-flight gate: Smithery-hosted servers always need SMITHERY_API_KEY
+    # regardless of whether srv.credentials declares per-server creds. This
+    # prevents the most common first-run failure where the agent shapeshifts
+    # successfully, then hits "Auth failed" on the first tool call.
+    if srv_source == "smithery" and not _state._smithery_available() and not confirm:
+        return (
+            f"❌ shapeshift failed: '{server_id}' is hosted on Smithery and needs SMITHERY_API_KEY.\n"
+            f"\n"
+            f"  → Get a key: https://smithery.ai/account/api-keys\n"
+            f'  → Then: key("SMITHERY_API_KEY", "sm-...") and retry shapeshift("{server_id}")\n'
+            f"\n"
+            f'  Or use: shapeshift("{server_id}", source="local", confirm=True)\n'
+            f"        to install locally without a Smithery key (community trust gate applies)."
+        )
+
     # All gates passed — resolve credentials before dropping current form
     resolved_config, missing = _state._resolve_config(srv.credentials, {})
     if missing:

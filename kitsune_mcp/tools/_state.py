@@ -54,7 +54,7 @@ _DUMMY_VALUES = {"string": "test", "integer": 0, "boolean": False, "number": 0.0
 _BASE_TOOL_NAMES = {
     "search", "inspect", "call", "run", "fetch",
     "skill", "key", "auto", "status", "shapeshift", "shiftback", "craft",
-    "connect", "release", "test", "bench", "setup", "compare",
+    "connect", "release", "test", "bench", "setup", "compare", "onboard",
 }
 
 # Used by compare() to estimate token cost when a probe is gated/failed but

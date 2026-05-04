@@ -138,20 +138,36 @@ def _credentials_guide(server_id: str, credentials: dict, resolved: dict) -> str
 
 
 def _credentials_ready(credentials: dict, source: str = "") -> str:
-    """One-line credential status. Describes what we verified — never predicts runtime auth."""
+    """One-line credential status. Describes what we verified.
+
+    Three tiers, all explicit (never just "no creds declared"):
+      ✅ free – no key       — official/npm/pypi sources without declared creds
+      🔑 key required        — Smithery-hosted servers (always need SMITHERY_API_KEY)
+                               or any server with declared creds
+      ⚠️  key unknown         — community sources (glama/github) without declared creds —
+                               undeclared ≠ free; runtime auth may still fail
+    """
+    # Smithery-hosted servers always require SMITHERY_API_KEY regardless of
+    # whether the registry entry declares per-server creds. This is the most
+    # common first-run failure source — "no creds declared" misled users.
+    if source == "smithery":
+        return "✓ env set" if _smithery_available() else "🔑 needs SMITHERY_API_KEY"
+
     if not credentials:
         if source in TRUST_LOW:
-            return "community — may need creds"
+            return "⚠️  community — may need creds"
         if source in TRUST_MEDIUM:
-            return "no creds declared (may use OAuth)"
-        return "no creds declared"
+            return "🔑 may need OAuth or registry key"
+        # TRUST_HIGH (official) without declared creds: most likely truly free
+        return "✅ free – no key"
+
     _reload_dotenv()
     missing = [
         env for k in credentials
         for env in [_to_env_var(k)]
         if not os.getenv(env) and any(env.endswith(sfx) for sfx in CRED_SUFFIXES)
     ]
-    return "✓ env set" if not missing else f"✗ needs {', '.join(missing)}"
+    return "✓ env set" if not missing else f"🔑 needs {', '.join(missing)}"
 
 
 def _credentials_inspect_block(credentials: dict, resolved: dict, source: str = "") -> list[str]:

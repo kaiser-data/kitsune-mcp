@@ -345,7 +345,15 @@ async def compare(query: str, limit: int = 6, probe: bool = False) -> str:
 
 @mcp.tool()
 async def status() -> str:
-    """Show current form, active connections, token stats."""
+    """Show provider auth state, current form, active connections, token stats.
+
+    Provider section is shown first because the most common first-run failure
+    is reaching for a server whose auth requirements are unmet — that's
+    actionable info, performance stats are not.
+    """
+    import os
+    from kitsune_mcp.credentials import _smithery_available
+
     explored = session["explored"]
     skills_data = session["skills"]
     grown = session["grown"]
@@ -355,17 +363,25 @@ async def status() -> str:
 
     lines = ["KITSUNE MCP STATUS", ""]
 
+    # PROVIDERS section — front and center. Headlines auth state per registry.
+    smithery_ok = _smithery_available()
+    lines.append("PROVIDERS")
+    lines.append(
+        f"  {'✓' if smithery_ok else '🔑'}  Smithery"
+        f"  {'(SMITHERY_API_KEY set)' if smithery_ok else '(no key — run onboard() for setup)'}"
+    )
+    lines.append("  ✓  Official MCP Registry  (no key required)")
+    lines.append("  ✓  npm + PyPI  (no key required)")
+    lines.append("  ✓  Glama  (no key required)")
+    if os.getenv("KITSUNE_TRUST", "").lower() in ("community", "all", "low"):
+        lines.append("  ⚠️  KITSUNE_TRUST=community  (community-source confirmation gate is OFF)")
+    lines.append("")
+
     # First-run onboarding — show once when session is completely clean
     is_first_run = not explored and not grown and stats["total_calls"] == 0
     if is_first_run:
         lines += [
-            "✨ Welcome to Kitsune!",
-            "",
-            "Try: auto(\"web search\", \"search\", {\"query\": \"your question\"})",
-            "Or:  search(\"web search\") → shapeshift(\"duckduckgo-websearch\", confirm=True)",
-            "Free servers, no key needed: duckduckgo-websearch, firecrawl-mcp, context7",
-            "",
-            "Tip: shapeshift loads a server; the first tool call tests real auth/setup.",
+            "✨ New here? Run onboard() for the 3-step quickstart.",
             "",
         ]
 

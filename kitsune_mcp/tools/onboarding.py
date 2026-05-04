@@ -18,6 +18,7 @@ from kitsune_mcp.constants import (
 from kitsune_mcp.credentials import (
     _registry_headers,
     _save_to_env,
+    _smithery_available,
     _to_env_var,
 )
 from kitsune_mcp.probe import _format_setup_guide
@@ -161,6 +162,11 @@ async def auto(
     for env_var, value in keys.items():
         _save_to_env(env_var.upper(), str(value))
 
+    # When the caller pins a server, single-shot. Otherwise search and try
+    # candidates in order, skipping ones that are unreachable due to missing
+    # creds we can't fill. The user asked for "web search" — they don't care
+    # which provider answers, only that one of them does.
+    candidates: list = []  # list[ServerInfo] from registry, or [] if server_hint path
     if server_hint:
         srv = await _state._registry.get_server(server_hint)
         if srv:
@@ -168,13 +174,21 @@ async def auto(
         else:
             server_id, server_name, credentials = server_hint, server_hint, {}
     else:
-        servers = await _state._registry.search(task, limit=3)
-        if not servers:
+        candidates = list(await _state._registry.search(task, limit=3))
+        if not candidates:
             return f"No servers found for '{task}'. Use search() or provide server_hint."
-        best = servers[0]
-        server_id, server_name, credentials = best.id, best.name, best.credentials
+        # Pick the first candidate whose creds we can satisfy. If none, fall
+        # through to the first overall — call() will surface the missing-cred
+        # message which the agent can act on.
+        chosen = next(
+            (s for s in candidates if not _state._resolve_config(s.credentials, {})[1]),
+            candidates[0],
+        )
+        server_id, server_name, credentials = chosen.id, chosen.name, chosen.credentials
+        # Remove the chosen one from the fallback queue
+        candidates = [s for s in candidates if s.id != chosen.id]
         session["explored"][server_id] = {
-            "name": server_name, "desc": best.description, "status": "harvested"
+            "name": server_name, "desc": chosen.description, "status": "harvested"
         }
 
     resolved_config, missing = _state._resolve_config(credentials, {})
@@ -193,6 +207,7 @@ async def auto(
         ]
         return "\n".join(lines)
 
+    selected_tool_schema: dict | None = None
     if not tool_name:
         srv = await _state._registry.get_server(server_id)
         tools = (srv.tools if srv else []) or []
@@ -211,6 +226,7 @@ async def auto(
         # Auto-select: only one tool → use it; multiple → pick best match for task
         if len(tools) == 1:
             tool_name = tools[0]["name"]
+            selected_tool_schema = tools[0]
         else:
             task_lc = task.lower()
             task_words = set(re.split(r'\W+', task_lc))
@@ -229,6 +245,7 @@ async def auto(
             best_score = _tool_score(scored[0])
             if best_score > 0:
                 tool_name = scored[0]["name"]
+                selected_tool_schema = scored[0]
             else:
                 # No match — list tools and ask user to pick
                 tool_lines = [f"  {t['name']} — {(t.get('description') or '')[:80]}" for t in tools]
@@ -240,12 +257,89 @@ async def auto(
                     f'Call: auto("{task}", "<tool>", args, server_hint="{server_id}")',
                 ])
 
-    srv = await _state._registry.get_server(server_id)
-    transport: BaseTransport = _state._get_transport(server_id, srv)
-    result = await transport.execute(tool_name, arguments, resolved_config)
+    # If caller picked a tool implicitly and supplied no arguments, fill the
+    # primary required string param from `task`. Common case: auto("web search")
+    # with auto-selected `search(query: string)` — without this, every search
+    # tool fails with "query: undefined". Only triggers when arguments is empty
+    # AND we have a schema to inspect AND there's exactly one obvious string
+    # field to fill.
+    if not arguments and selected_tool_schema:
+        arguments = _infer_args_from_task(selected_tool_schema, task)
 
-    _state._track_call(server_id, tool_name)
-    return result
+    # Execute with fallback: if the chosen server returns an auth-failure
+    # response and the caller didn't pin via server_hint, try the next candidate.
+    # Wall-clock cap of 5s per provider is enforced by transport timeouts already.
+    attempted: list[tuple[str, str]] = []
+    last_result: str = ""
+    while True:
+        srv = await _state._registry.get_server(server_id)
+        transport: BaseTransport = _state._get_transport(server_id, srv)
+        last_result = await transport.execute(tool_name, arguments, resolved_config)
+        _state._track_call(server_id, tool_name)
+        attempted.append((server_id, tool_name))
+
+        # Auth-failure detection — surfaces from the inner server's text response
+        # (which arrives via Kitsune's transport.execute as a string body).
+        # We only fall back when the caller didn't pin a server AND there are
+        # candidates left.
+        is_auth_fail = any(
+            kw in last_result.lower()
+            for kw in ("auth failed", "unauthorized", "401", "403", "invalid token", "smithery_api_key")
+        )
+        if not is_auth_fail or not candidates:
+            break
+
+        # Try the next candidate
+        nxt = candidates.pop(0)
+        # Skip candidates whose creds we still can't satisfy
+        cfg2, missing2 = _state._resolve_config(nxt.credentials, {})
+        if missing2:
+            continue
+        server_id, server_name, credentials = nxt.id, nxt.name, nxt.credentials
+        resolved_config = cfg2
+        # If a different server is chosen, the previously picked tool_name may
+        # not exist there. Reset selection so the loop's tool-pick logic runs
+        # again — but that logic is in the section above the loop. Simpler:
+        # retry only when the new server has a same-named tool. Otherwise stop
+        # and report what we tried.
+        new_srv = await _state._registry.get_server(server_id)
+        new_tools = (new_srv.tools if new_srv else []) or []
+        if not any(t.get("name") == tool_name for t in new_tools):
+            # Different schema — append a hint to the failure response
+            attempted_str = ", ".join(f"{sid}/{t}" for sid, t in attempted)
+            return (
+                f"{last_result}\n\n"
+                f"⚠️  auto() tried {attempted_str}; remaining candidates have different tool names. "
+                f'Retry with: auto("{task}", server_hint="<id>")'
+            )
+
+    return last_result
+
+
+def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
+    """When auto() implicit-selects a tool but caller passed no arguments,
+    infer the primary string param from `task`. Returns {} if no clear winner.
+
+    Picks the first required string-typed param whose name matches a search-like
+    convention (`query`, `q`, `text`, `prompt`, `input`). Strict on purpose —
+    we don't fill creative-named params silently; better to surface the
+    schema-validation error and let the agent retry with explicit args.
+    """
+    schema = (tool_schema.get("inputSchema") or {})
+    props = schema.get("properties") or {}
+    required = set(schema.get("required") or [])
+    common_query_names = ("query", "q", "text", "prompt", "input", "search", "term")
+    for pname in common_query_names:
+        if pname in required and props.get(pname, {}).get("type") == "string":
+            return {pname: task}
+    # If exactly one required string param and no explicit args, fill it from task.
+    string_required = [
+        p for p in required
+        if props.get(p, {}).get("type") == "string"
+    ]
+    if len(string_required) == 1:
+        return {string_required[0]: task}
+    return {}
 
 
 @mcp.tool()
@@ -286,5 +380,70 @@ async def setup(name: str) -> str:
 
     if not reqs["resource_scan"]:
         lines.append("\n(No resource docs found — probe based on tool schemas only.)")
+
+    return "\n".join(lines)
+
+
+# Free-tier servers verified to work without any API key. Curated list — these
+# are zero-config wins for new users. Updated when new free servers ship.
+_FREE_TIER_SERVERS = [
+    ("mcp-server-time", "Time queries + timezone conversions (419 timezones)"),
+    ("@modelcontextprotocol/server-memory", "Persistent KG memory across calls"),
+    ("mcp-server-fetch", "Fetch web pages, get clean markdown"),
+    ("@modelcontextprotocol/server-filesystem", "Read/write local files"),
+    ("@upstash/context7-mcp", "Up-to-date library docs (no key needed)"),
+]
+
+
+@mcp.tool()
+async def onboard() -> str:
+    """First-run wizard — show provider auth state + the fastest path to a working tool call.
+
+    Run once at the start of a new session if `kitsune:status` shows you're
+    in base form with nothing explored. Returns provider health + a curated
+    list of zero-config servers you can shapeshift into immediately.
+    """
+    import os
+    lines = [
+        "🦊  Welcome to Kitsune.",
+        "",
+        "PROVIDERS",
+    ]
+
+    # Active providers — check auth state explicitly
+    smithery_ok = _smithery_available()
+    lines.append(f"  {'✓' if smithery_ok else '🔑'}  Smithery"
+                 f"  {'(SMITHERY_API_KEY set — 3000+ verified servers)' if smithery_ok else '(unconfigured — get a key at smithery.ai/account/api-keys to unlock 3000+ servers)'}")
+    lines.append("  ✓  Official MCP Registry  (modelcontextprotocol.io — no key needed)")
+    lines.append("  ✓  npm + PyPI  (community servers, no key needed)")
+    lines.append("  ✓  Glama  (community directory, no key needed)")
+    if os.getenv("KITSUNE_TRUST", "").lower() in ("community", "all", "low"):
+        lines.append("  ⚠️  KITSUNE_TRUST=community  (community-source confirmation gate is OFF)")
+    lines.append("")
+
+    # Recommended starting point — the free tier
+    lines.append("FASTEST PATH TO A WORKING TOOL CALL (no API keys required)")
+    for sid, desc in _FREE_TIER_SERVERS:
+        lines.append(f"  shapeshift(\"{sid}\")")
+        lines.append(f"    → {desc}")
+    lines.append("")
+
+    # The "3 step" promise
+    lines.append("3-STEP CHECK")
+    lines.append("  1. shapeshift(\"mcp-server-time\")")
+    lines.append("  2. call(\"get_current_time\", arguments={\"timezone\": \"UTC\"})")
+    lines.append("  3. shiftback()")
+    lines.append("  → If step 2 returns a timestamp, your install works end-to-end.")
+    lines.append("")
+
+    # Optional upgrade
+    if not smithery_ok:
+        lines.append("UPGRADE PATH")
+        lines.append("  Get more servers (incl. GitHub, Notion, Linear, Slack, …):")
+        lines.append("    1. Sign up at https://smithery.ai/account/api-keys")
+        lines.append("    2. key(\"SMITHERY_API_KEY\", \"sm-...\")")
+        lines.append("    3. search(\"<what you need>\")")
+    else:
+        lines.append("All providers active — explore freely with search() / shapeshift().")
 
     return "\n".join(lines)
