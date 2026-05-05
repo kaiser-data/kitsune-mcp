@@ -1,6 +1,7 @@
 """Execution tools: call, run, fetch, test, bench."""
 
 import asyncio
+import json
 import time
 
 from kitsune_mcp.app import mcp
@@ -53,7 +54,15 @@ async def call(
     if missing:
         return _credentials_guide(server_id, credentials, resolved_config)
 
-    transport: BaseTransport = _state._get_transport(server_id, srv)
+    # When call() targets the currently shapeshifted form, prefer the pooled transport
+    # that shapeshift() created — this respects source='local' and other overrides that
+    # _get_transport() can't see (it re-resolves from registry and picks HTTP for
+    # Smithery servers regardless of what shapeshift set up).
+    pool_key = session.get("current_form_pool_key")
+    if server_id == session.get("current_form") and pool_key:
+        transport: BaseTransport = _state.PersistentStdioTransport(json.loads(pool_key))
+    else:
+        transport = _state._get_transport(server_id, srv)
     result = await transport.execute(tool_name, arguments, resolved_config)
 
     _state._track_call(server_id, tool_name)

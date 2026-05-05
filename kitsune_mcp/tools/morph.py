@@ -267,7 +267,21 @@ async def shapeshift(
     _state._do_shed()
     session["current_form_local_install"] = None  # overwritten below for source="local"
 
+    _original_transport = srv.transport  # track before local override for honest labelling
     if source == "local":
+        # HTTP-only servers (Smithery-hosted) have no install_cmd — can't run locally.
+        # Give a clear error rather than silently using a Smithery qualified name as an
+        # npm package (e.g. "upstash/context7-mcp" → npx can't resolve it).
+        if srv.transport == "http" and not srv.install_cmd:
+            return (
+                f"❌ source='local' not available for '{server_id}'.\n\n"
+                f"This server is HTTP-only on Smithery — no local stdio package is listed.\n"
+                f"Options:\n"
+                f"  • shapeshift(\"{server_id}\") — use Smithery Connect (needs SMITHERY_API_KEY)\n"
+                f"  • search(\"{server_id.split('/')[-1]}\") — find a stdio/npm alternative\n"
+                f"  • If an npm package exists, shapeshift it directly:\n"
+                f'    shapeshift("@scope/pkg-name", source="local", confirm=True)'
+            )
         install_cmd = srv.install_cmd or _state._infer_install_cmd(server_id)
         srv = dataclasses.replace(srv, transport="stdio", install_cmd=install_cmd)
         session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
@@ -291,7 +305,11 @@ async def shapeshift(
     if not tool_schemas:
         return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."
 
-    transport_label = " via local npx/uvx" if srv.transport == "stdio" else ""
+    # Only show "via local npx/uvx" when a real local process was started (source="local"
+    # or the registry listed a stdio install_cmd). Prevents the misleading label when
+    # source="local" fell back to HTTP (now blocked above, but kept defensive).
+    _actually_local = source == "local" or _original_transport == "stdio"
+    transport_label = " via local npx/uvx" if _actually_local and srv.transport == "stdio" else ""
     if srv_source in TRUST_HIGH | TRUST_MEDIUM:
         trust_note = f"\n✓  Source: {srv_source}{transport_label}"
     else:
