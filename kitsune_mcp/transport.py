@@ -621,8 +621,10 @@ class StdioTransport(BaseTransport):
             result = tool_resp.get("result", {})
             raw = _extract_content(result)
 
+            tokens_out = _estimate_tokens({"tool": tool, "args": args})
             tokens_in = _estimate_tokens(raw)
             session["stats"]["total_calls"] += 1
+            session["stats"]["tokens_sent"] += tokens_out
             session["stats"]["tokens_received"] += tokens_in
 
             return _truncate(_clean_response(raw))
@@ -837,8 +839,10 @@ class PersistentStdioTransport(BaseTransport):
                 result = tool_resp.get("result", {})
                 raw = _extract_content(result)
 
+                tokens_out = _estimate_tokens({"tool": tool, "args": args})
                 tokens_in = _estimate_tokens(raw)
                 session["stats"]["total_calls"] += 1
+                session["stats"]["tokens_sent"] += tokens_out
                 session["stats"]["tokens_received"] += tokens_in
                 return _truncate(_clean_response(raw))
 
@@ -899,8 +903,10 @@ class WebSocketTransport(BaseTransport):
         result = msg.get("result", {})
         raw_text = _extract_content(result)
 
+        tokens_out = _estimate_tokens({"tool": tool, "args": args})
         tokens_in = _estimate_tokens(raw_text)
         session["stats"]["total_calls"] += 1
+        session["stats"]["tokens_sent"] += tokens_out
         session["stats"]["tokens_received"] += tokens_in
         return _truncate(_clean_response(raw_text))
 
