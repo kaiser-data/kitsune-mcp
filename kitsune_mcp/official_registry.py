@@ -65,6 +65,14 @@ _SEED_SERVERS: list[dict] = [
         "transport": "stdio",
         "install_cmd": ["uvx", "mcp-server-fetch"],
     },
+    {
+        "id": "notion-hosted",
+        "name": "Notion (hosted)",
+        "description": "Notion's official hosted MCP server. Authenticates via OAuth 2.1 in the browser on first use; no API key required.",
+        "transport": "http",
+        "install_cmd": [],
+        "url": "https://mcp.notion.com/mcp",
+    },
 ]
 
 _SEED_BY_ID: dict[str, dict] = {s["id"]: s for s in _SEED_SERVERS}
@@ -85,7 +93,7 @@ def _server_from_seed(entry: dict) -> ServerInfo:
         description=entry["description"],
         source="official",
         transport=entry["transport"],
-        url="",
+        url=entry.get("url", ""),
         install_cmd=entry["install_cmd"],
         credentials={},
         tools=[],

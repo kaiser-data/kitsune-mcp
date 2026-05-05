@@ -82,6 +82,7 @@ from kitsune_mcp.tools import (  # noqa: E402, F401
     auto,
     bench,
     call,
+    compare,
     connect,
     craft,
     fetch,
@@ -125,7 +126,7 @@ from kitsune_mcp.utils import (  # noqa: E402, F401
 # ── Tool profile selection ────────────────────────────────────────────────────
 # All tools registered above via @mcp.tool(). Prune to the requested profile.
 
-_LEAN_TOOLS = {"shapeshift", "shiftback", "search", "inspect", "key", "status", "call"}
+_LEAN_TOOLS = {"shapeshift", "shiftback", "search", "inspect", "compare", "key", "status", "call", "auto"}
 _KITSUNE_TOOLS_ENV = os.getenv("KITSUNE_TOOLS", "")
 
 if _KITSUNE_TOOLS_ENV.lower() == "all":

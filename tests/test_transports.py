@@ -284,3 +284,130 @@ class TestValidateInstallCmd:
         transport = PersistentStdioTransport(["../../evil"])
         with pytest.raises(RuntimeError, match="Path traversal"):
             await transport._start_process()
+
+
+class TestHTTPSSETransportDirectOAuth:
+    """HTTPSSETransport in direct=True mode uses oauth.ensure_token, bypassing Smithery."""
+
+    async def test_connect_endpoint_returns_url_and_oauth_token(self):
+        from kitsune_mcp import oauth, transport as _t
+        url = "https://mcp.notion.com/mcp"
+        transport = HTTPSSETransport(url, direct=True)
+        with patch.object(oauth, "ensure_token", AsyncMock(return_value="tok-oauth-1")):
+            endpoint, token = await transport._connect_endpoint({})
+        assert endpoint == url
+        assert token == "tok-oauth-1"
+
+    async def test_connect_failure_message_mentions_well_known(self):
+        transport = HTTPSSETransport("https://bad.example/mcp", direct=True)
+        msg = transport._connect_failure_message()
+        assert ".well-known" in msg
+
+    async def test_401_triggers_delete_retry_with_new_token(self):
+        from kitsune_mcp import oauth
+        import httpx
+        import respx
+        url = "https://mcp.example/mcp"
+        transport = HTTPSSETransport(url, direct=True)
+        # First call returns token-1; after delete, second call returns token-2.
+        ensure_tokens = AsyncMock(side_effect=["tok-1", "tok-2"])
+        delete_spy = MagicMock()
+        payload = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        init_payload = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "x", "version": "1"}}}
+        with patch.object(oauth, "ensure_token", ensure_tokens), \
+             patch.object(oauth, "delete_tokens", delete_spy), \
+             patch.object(oauth, "_origin", return_value="mcp.example"):
+            with respx.mock:
+                route = respx.post(url).mock(
+                    side_effect=[
+                        httpx.Response(401, text=""),                                    # initialize → 401
+                        httpx.Response(200, text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
+                                       headers={"mcp-session-id": "s"}),
+                        httpx.Response(200, text=""),                                    # notifications/initialized
+                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n"),      # tools/call OK
+                    ]
+                )
+                result = await transport.execute("my_tool", {}, {})
+        assert "ok" in result
+        delete_spy.assert_called_once_with("mcp.example")
+        # ensure_token called twice: once in _connect_endpoint, once on 401 retry.
+        assert ensure_tokens.await_count == 2
+
+    async def test_connect_endpoint_returns_none_when_ensure_token_raises(self):
+        from kitsune_mcp import oauth
+        transport = HTTPSSETransport("https://no-oauth.example/mcp", direct=True)
+        with patch.object(oauth, "ensure_token", AsyncMock(side_effect=RuntimeError("no well-known"))):
+            result = await transport._connect_endpoint({})
+        assert result is None
+
+
+class TestGetTransportURLEscapeHatch:
+    """_get_transport should treat bare URLs as direct HTTP MCP with OAuth."""
+
+    def test_bare_https_url_returns_direct_httpsse(self):
+        from kitsune_mcp.tools import _get_transport
+        t = _get_transport("https://mcp.notion.com/mcp", None)
+        assert isinstance(t, HTTPSSETransport)
+        assert t.direct is True
+        assert t.deployment_url == "https://mcp.notion.com/mcp"
+
+    def test_bare_http_url_returns_direct_httpsse(self):
+        from kitsune_mcp.tools import _get_transport
+        t = _get_transport("http://127.0.0.1:9000/mcp", None)
+        assert isinstance(t, HTTPSSETransport)
+        assert t.direct is True
+
+    def test_registry_http_run_tools_stays_smithery(self):
+        """A registry-declared HTTP server on *.run.tools is still Smithery-mediated."""
+        from kitsune_mcp.tools import _get_transport
+        srv = MagicMock(transport="http", url="https://brave.run.tools", id="brave")
+        t = _get_transport("brave", srv)
+        assert isinstance(t, HTTPSSETransport)
+        assert t.direct is False
+
+    def test_registry_http_direct_url_becomes_direct(self):
+        """A registry-declared HTTP server NOT on run.tools uses direct OAuth."""
+        from kitsune_mcp.tools import _get_transport
+        srv = MagicMock(transport="http", url="https://mcp.notion.com/mcp", id="notion-hosted")
+        t = _get_transport("notion-hosted", srv)
+        assert isinstance(t, HTTPSSETransport)
+        assert t.direct is True
+
+
+class TestStdioBufferLimit:
+    """Both stdio spawn sites must pass limit= so readline() can handle large JSON-RPC lines."""
+
+    @staticmethod
+    def _mock_proc():
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdin.write = MagicMock()
+        mock_proc.stdin.drain = AsyncMock()
+        mock_proc.stdin.close = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.readline = AsyncMock(return_value=b"")  # EOF
+        mock_proc.returncode = None
+        mock_proc.kill = MagicMock()
+        mock_proc.wait = AsyncMock(return_value=0)
+        return mock_proc
+
+    async def test_stdio_transport_passes_limit_kwarg(self):
+        from kitsune_mcp.constants import STDIO_BUFFER_LIMIT
+        spy = AsyncMock(return_value=self._mock_proc())
+        with patch("asyncio.create_subprocess_exec", spy):
+            transport = StdioTransport(["echo"])
+            await transport.execute("tool", {}, {})
+        assert spy.call_args.kwargs["limit"] == STDIO_BUFFER_LIMIT
+
+    async def test_persistent_stdio_transport_passes_limit_kwarg(self):
+        from kitsune_mcp.constants import STDIO_BUFFER_LIMIT
+        from server import PersistentStdioTransport
+        spy = AsyncMock(return_value=self._mock_proc())
+        with patch("asyncio.create_subprocess_exec", spy):
+            transport = PersistentStdioTransport(["echo"])
+            try:
+                await transport._start_process()
+            except RuntimeError:
+                # Expected — the mock proc has no valid initialize response.
+                pass
+        assert spy.call_args.kwargs["limit"] == STDIO_BUFFER_LIMIT

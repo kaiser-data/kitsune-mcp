@@ -494,6 +494,11 @@ class MultiRegistry(BaseRegistry):
             ],
             return_exceptions=True,
         )
+        self.last_registry_errors = {
+            name: type(r).__name__
+            for name, r in zip(self._reg_names, results, strict=False)
+            if isinstance(r, Exception)
+        }
         valid = [r for r in results if r and not isinstance(r, Exception)]
         # Source preference filtering — applied before the smithery-key filter
         if source_preference:

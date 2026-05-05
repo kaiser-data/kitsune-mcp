@@ -71,6 +71,65 @@ Base overhead: **7 tools, ~650 tokens** ([measured](examples/benchmark.py)). Eac
 
 ---
 
+## vs. always-on connectors (Claude.ai, ChatGPT, Cursor)
+
+Most clients now offer a "connector marketplace" — Notion, Gmail, Drive, Slack, Linear, etc. — one click to enable. The catch: **every enabled connector loads its full tool surface into the system prompt of every message, for the lifetime of the conversation.** You pay for it whether you use it or not.
+
+Kitsune is lazy and parallel: one entry, every server reachable on demand, only the tools you actively call sit in context.
+
+### Notion, head to head (numbers measured live in this session)
+
+| Setup | Resting context (every turn) | One Notion search | After cleanup |
+|---|---:|---:|---:|
+| Always-on Notion connector | **13,733 tokens** | 13,733 + reply | 13,733 forever |
+| Kitsune — full Notion mounted | 3,000 tokens | 16,733 + reply | 3,000 |
+| Kitsune — `shapeshift("notion-hosted", tools=["notion-search"])` | 3,000 tokens | **4,540** + reply | 3,000 (after `shiftback`) |
+
+Over a 50-turn conversation:
+
+- Always-on connector: 50 × 13,733 = **686,650 tokens** of repeated Notion overhead
+- Kitsune lean: 50 × 3,000 + 5 turns × 1,540 = **157,700 tokens**
+
+**77% reduction for the same workflow.** And Notion is just one connector.
+
+### The "but it's just one" trap
+
+Real-world enabled-connector token costs (typical hosted MCPs):
+
+- Notion ~13.7K · Gmail ~8K · Drive ~10K · Slack ~7K · Calendar ~5K
+
+**Five connectors enabled = ~43K tokens per turn**, every turn, whether you mention them or not. Same five via Kitsune lean: ~3K resting, with a brief spike only on the turn where you actually use one.
+
+For a 100-turn dev session: 4.3M tokens of waste vs ~310K. **You can have a 14× longer conversation before hitting context limits.**
+
+### The killer demo
+
+```
+> compare("notion")
+
+   tokens  tools  src         status              id
+   13,733     14  official    live (oauth)        notion-hosted
+   18,349     22  npm         live                @notionhq/notion-mcp-server
+   ...
+
+💡 Cheapest ready-to-use: notion-hosted
+
+> shapeshift("notion-hosted", tools=["notion-search"])
+   ✓ Mounted notion-search (~1,540 tokens)
+
+> call("notion-search", {"query": "roadmap"})
+   [results]
+
+> shiftback()
+   ✓ Released. Context returned to baseline.
+```
+
+One tool. On demand. Off again. Same OAuth, same Notion endpoint (`mcp.notion.com/mcp`) — but tokens stay in `~/.kitsune/oauth/`, not on a third-party's servers.
+
+> **Connectors charge rent. Kitsune charges per use.**
+
+---
+
 ## Built for two audiences
 
 ### Adaptive agents
@@ -98,6 +157,23 @@ Beyond MCP Inspector's basic schema viewer, Kitsune MCP gives you a full develop
 | Compare two servers side by side | shapeshift into one, test, shiftback, shapeshift into the other |
 
 No separate web UI. No isolated test environment. Test how your server actually behaves when an AI uses it.
+
+---
+
+## Why MCP — not a CLI skill
+
+A CLI-based agent skill gives every agent the same surface. An MCP lets you design a completely different surface for each agent — down to the individual tool.
+
+**1. Surgical token budgets.**
+`shapeshift("brave-search", tools=["web_search"])` loads exactly one tool — ~300 tokens — instead of the full server schema. A specialized research agent can be wired to see only the three tools it ever needs. A coding agent sees a different three. Same underlying servers; different, purpose-built surfaces. Token overhead stays flat because context is opt-in, not always-on.
+
+**2. On-the-fly server creation.**
+CLI skills require something to already exist on disk. An MCP can be generated mid-session. An agent can call `craft(name, description, params, url)` to define a new tool backed by any HTTP endpoint — no install, no config change, no restart. One conversation. Any problem. New capability spun up and available to the same agent immediately.
+
+**3. Fine-tune the surface via the Forge.**
+`kitsune-forge` exposes the full toolkit — inspect, benchmark, craft, and test. You can prototype a tool, measure its latency, compare two competing servers, and lock in exactly the shape you want before your production agent ever sees it. The Forge is the workbench; the lean `kitsune-mcp` entry is what the agent runs with after you've dialed it in.
+
+> The result: agents that carry only the tools they need for the current problem, can extend themselves on demand, and never waste tokens on capability they aren't using.
 
 ---
 
@@ -290,6 +366,23 @@ Before spawning any subprocess, Kitsune MCP validates the executable name:
 - Blocks path traversal (`../`) — prevents escaping to arbitrary binaries
 
 Arguments are passed directly to `asyncio.create_subprocess_exec` (never a shell), so they are not subject to shell interpretation.
+
+### OAuth 2.1 for hosted MCP servers
+
+Many hosted MCP servers (Notion, Linear, Cloudflare) authenticate via OAuth 2.1 with Dynamic Client Registration rather than a static API key. Kitsune supports this automatically — pass the server URL directly:
+
+```python
+inspect("https://mcp.notion.com/mcp")
+# First use: browser opens, you approve, tokens are cached.
+# Subsequent runs: cached token loaded silently, refreshed when expired.
+
+shapeshift("https://mcp.notion.com/mcp")
+call("notion-search", {"query": "..."})
+```
+
+Kitsune probes `/.well-known/oauth-authorization-server` on the server origin; if present, it registers a client (RFC 7591) and runs the authorization code flow with PKCE S256. Tokens and client registrations are stored at `~/.kitsune/oauth/<origin>/` with mode `0600` — never in `.env`.
+
+Headless or no-browser environments: set `KITSUNE_NO_BROWSER=1` to have Kitsune print the authorize URL for you to paste manually (a loopback listener still captures the callback).
 
 ### Credential warnings
 

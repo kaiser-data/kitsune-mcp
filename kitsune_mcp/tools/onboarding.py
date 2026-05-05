@@ -143,7 +143,8 @@ async def key(env_var: str, value: str) -> str:
     var = env_var.upper().replace(" ", "_")
     _save_to_env(var, value)
     _state._registry.bust_cache()  # credentials changed — invalidate cached server records
-    return f"Saved: {var} written to .env and active for this session."
+    preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
+    return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
 
 
 @mcp.tool()
@@ -221,7 +222,21 @@ async def auto(
                 )
 
         if not tools:
-            return f"{server_id} ready (no tools listed). Use call() to call tools directly."
+            reg_errors = getattr(_state._registry, "last_registry_errors", {})
+            lines = [f"{server_id} — could not fetch tool schema."]
+            if reg_errors:
+                err_summary = ", ".join(f"{n} {e}" for n, e in reg_errors.items())
+                lines.append(f"Registry fetch failures: {err_summary}.")
+            from kitsune_mcp.credentials import _smithery_available
+            if srv and getattr(srv, "source", None) == "smithery" and not _smithery_available():
+                lines += [
+                    "This server is Smithery-hosted and requires SMITHERY_API_KEY.",
+                    "→ key('SMITHERY_API_KEY', 'sm-...') then retry,"
+                    " or search() for a free alternative.",
+                ]
+            else:
+                lines.append("Use call() to invoke tools directly if the server is running.")
+            return "\n".join(lines)
 
         # Auto-select: only one tool → use it; multiple → pick best match for task
         if len(tools) == 1:
@@ -328,18 +343,14 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     schema = (tool_schema.get("inputSchema") or {})
     props = schema.get("properties") or {}
     required = set(schema.get("required") or [])
+    string_required = [p for p in required if props.get(p, {}).get("type") == "string"]
+    if len(string_required) != 1:
+        return {}
     common_query_names = ("query", "q", "text", "prompt", "input", "search", "term")
     for pname in common_query_names:
         if pname in required and props.get(pname, {}).get("type") == "string":
             return {pname: task}
-    # If exactly one required string param and no explicit args, fill it from task.
-    string_required = [
-        p for p in required
-        if props.get(p, {}).get("type") == "string"
-    ]
-    if len(string_required) == 1:
-        return {string_required[0]: task}
-    return {}
+    return {string_required[0]: task}
 
 
 @mcp.tool()

@@ -361,7 +361,8 @@ async def status() -> str:
     current_form = session["current_form"]
     shapeshifted = session["shapeshift_tools"]
 
-    lines = ["KITSUNE MCP STATUS", ""]
+    from kitsune_mcp import __version__
+    lines = [f"KITSUNE MCP  v{__version__}", ""]
 
     # PROVIDERS section — front and center. Headlines auth state per registry.
     smithery_ok = _smithery_available()

@@ -878,6 +878,76 @@ class TestGlamaRegistry:
         assert results == []
 
 
+class TestGlamaGetServerFallback:
+    """GlamaRegistry.get_server falls back to ?query= when the cached pagination misses."""
+
+    @staticmethod
+    def _srv(server_id: str):
+        from server import ServerInfo
+        return ServerInfo(
+            id=server_id, name=server_id.rsplit("/", 1)[-1],
+            description="", source="glama", transport="stdio",
+        )
+
+    async def test_cache_hit_returns_without_calling_search(self):
+        from unittest.mock import AsyncMock, patch
+        from server import GlamaRegistry
+        reg = GlamaRegistry()
+        cached = [self._srv("author/slug-a"), self._srv("author/slug-b")]
+        with patch.object(reg, "_all_servers", AsyncMock(return_value=cached)), \
+             patch.object(reg, "search", AsyncMock()) as search_spy:
+            hit = await reg.get_server("author/slug-b")
+        assert hit is not None and hit.id == "author/slug-b"
+        search_spy.assert_not_called()
+
+    async def test_cache_miss_falls_back_to_server_side_query(self):
+        from unittest.mock import AsyncMock, patch
+        from server import GlamaRegistry
+        reg = GlamaRegistry()
+        target = self._srv("deep/catalog-entry")
+        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
+             patch.object(reg, "search", AsyncMock(return_value=[target])) as search_spy:
+            hit = await reg.get_server("deep/catalog-entry")
+        assert hit is target
+        search_spy.assert_awaited_once()
+        # First attempt uses namespace (more likely to match Glama's name field).
+        assert search_spy.call_args[0][0] == "deep"
+
+    async def test_falls_back_to_slug_when_namespace_misses(self):
+        from unittest.mock import AsyncMock, patch
+        from server import GlamaRegistry
+        reg = GlamaRegistry()
+        target = self._srv("vague-org/uniquetool")
+
+        async def fake_search(term, limit):
+            return [target] if term == "uniquetool" else []
+
+        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
+             patch.object(reg, "search", side_effect=fake_search) as search_spy:
+            hit = await reg.get_server("vague-org/uniquetool")
+        assert hit is target
+        # Tried namespace first, then slug.
+        assert [c.args[0] for c in search_spy.call_args_list] == ["vague-org", "uniquetool"]
+
+    async def test_query_fallback_with_no_match_returns_none(self):
+        from unittest.mock import AsyncMock, patch
+        from server import GlamaRegistry
+        reg = GlamaRegistry()
+        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
+             patch.object(reg, "search", AsyncMock(return_value=[self._srv("other/thing")])):
+            hit = await reg.get_server("missing/thing")
+        assert hit is None
+
+    async def test_search_exception_returns_none(self):
+        from unittest.mock import AsyncMock, patch
+        from server import GlamaRegistry
+        reg = GlamaRegistry()
+        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
+             patch.object(reg, "search", AsyncMock(side_effect=RuntimeError("boom"))):
+            hit = await reg.get_server("any/id")
+        assert hit is None
+
+
 # ---------------------------------------------------------------------------
 # Relevance score: credential preference
 # ---------------------------------------------------------------------------

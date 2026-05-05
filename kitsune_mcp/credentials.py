@@ -95,6 +95,7 @@ def _save_to_env(env_var: str, value: str) -> None:
             lines.append(f"{env_var}={value}\n")
         with open(ENV_PATH, 'w') as f:
             f.writelines(lines)
+        os.chmod(ENV_PATH, 0o600)
     except OSError:
         pass
     os.environ[env_var] = value
