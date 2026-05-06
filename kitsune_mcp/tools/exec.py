@@ -60,7 +60,10 @@ async def call(
     # Smithery servers regardless of what shapeshift set up).
     pool_key = session.get("current_form_pool_key")
     if server_id == session.get("current_form") and pool_key:
-        transport: BaseTransport = _state.PersistentStdioTransport(json.loads(pool_key))
+        try:
+            transport: BaseTransport = _state.PersistentStdioTransport(json.loads(pool_key))
+        except (json.JSONDecodeError, TypeError):
+            transport = _state._get_transport(server_id, srv)
     else:
         transport = _state._get_transport(server_id, srv)
     result = await transport.execute(tool_name, arguments, resolved_config)

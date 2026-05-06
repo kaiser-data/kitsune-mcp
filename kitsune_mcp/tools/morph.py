@@ -11,7 +11,7 @@ import shlex
 import httpx
 from mcp.server.fastmcp import Context
 
-from kitsune_mcp.app import mcp
+from kitsune_mcp.app import _registry_lock, mcp
 from kitsune_mcp.constants import (
     TIMEOUT_PROMPT_LIST,
     TIMEOUT_RESOURCE_LIST,
@@ -264,63 +264,65 @@ async def shapeshift(
         creds_msg = _credentials_guide(server_id, srv.credentials, resolved_config)
         return f"❌ shapeshift failed: missing credentials for '{server_id}':\n\n{creds_msg}"
 
-    _state._do_shed()
-    session["current_form_local_install"] = None  # overwritten below for source="local"
+    # Validate source="local" against HTTP-only servers BEFORE shedding — returning an
+    # error after _do_shed() would drop the user's current form silently.
+    if source == "local" and srv.transport == "http" and not srv.install_cmd:
+        return (
+            f"❌ source='local' not available for '{server_id}'.\n\n"
+            f"This server is HTTP-only on Smithery — no local stdio package is listed.\n"
+            f"Options:\n"
+            f"  • shapeshift(\"{server_id}\") — use Smithery Connect (needs SMITHERY_API_KEY)\n"
+            f"  • search(\"{server_id.split('/')[-1]}\") — find a stdio/npm alternative\n"
+            f"  • If an npm package exists, shapeshift it directly:\n"
+            f'    shapeshift("@scope/pkg-name", source="local", confirm=True)'
+        )
 
-    _original_transport = srv.transport  # track before local override for honest labelling
-    if source == "local":
-        # HTTP-only servers (Smithery-hosted) have no install_cmd — can't run locally.
-        # Give a clear error rather than silently using a Smithery qualified name as an
-        # npm package (e.g. "upstash/context7-mcp" → npx can't resolve it).
-        if srv.transport == "http" and not srv.install_cmd:
-            return (
-                f"❌ source='local' not available for '{server_id}'.\n\n"
-                f"This server is HTTP-only on Smithery — no local stdio package is listed.\n"
-                f"Options:\n"
-                f"  • shapeshift(\"{server_id}\") — use Smithery Connect (needs SMITHERY_API_KEY)\n"
-                f"  • search(\"{server_id.split('/')[-1]}\") — find a stdio/npm alternative\n"
-                f"  • If an npm package exists, shapeshift it directly:\n"
-                f'    shapeshift("@scope/pkg-name", source="local", confirm=True)'
-            )
-        install_cmd = srv.install_cmd or _state._infer_install_cmd(server_id)
-        srv = dataclasses.replace(srv, transport="stdio", install_cmd=install_cmd)
-        session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
+    # _registry_lock serialises all shed→register sequences. Without it a concurrent
+    # shapeshift() could interleave: A sheds, B sheds (no-op), A registers, B registers —
+    # leaving both servers' tools mounted while session only tracks B's tools.
+    async with _registry_lock:
+        _state._do_shed()
+        session["current_form_local_install"] = None  # overwritten below for source="local"
 
-    if srv.transport == "stdio":
-        cmd = srv.install_cmd or ["npx", "-y", server_id]
-        # PersistentStdioTransport keeps the process alive for subsequent tool calls
-        transport = _state.PersistentStdioTransport(cmd)
-        pool_key: str | None = json.dumps(cmd, sort_keys=True)
-        tool_schemas = srv.tools or []
+        _original_transport = srv.transport  # track before local override for honest labelling
+        if source == "local":
+            install_cmd = srv.install_cmd or _state._infer_install_cmd(server_id)
+            srv = dataclasses.replace(srv, transport="stdio", install_cmd=install_cmd)
+            session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
+
+        if srv.transport == "stdio":
+            cmd = srv.install_cmd or ["npx", "-y", server_id]
+            # PersistentStdioTransport keeps the process alive for subsequent tool calls
+            transport = _state.PersistentStdioTransport(cmd)
+            pool_key: str | None = json.dumps(cmd, sort_keys=True)
+            tool_schemas = srv.tools or []
+            if not tool_schemas:
+                with contextlib.suppress(Exception):
+                    tool_schemas = await transport.list_tools()
+        else:
+            transport = _state._get_transport(server_id, srv)
+            pool_key = None
+            tool_schemas = srv.tools or []
+            if not tool_schemas and hasattr(transport, "list_tools"):
+                tool_schemas = await transport.list_tools(resolved_config)
+
         if not tool_schemas:
-            with contextlib.suppress(Exception):
-                tool_schemas = await transport.list_tools()
-    else:
-        transport = _state._get_transport(server_id, srv)
-        pool_key = None
-        tool_schemas = srv.tools or []
-        if not tool_schemas and hasattr(transport, "list_tools"):
-            tool_schemas = await transport.list_tools(resolved_config)
+            return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."
 
-    if not tool_schemas:
-        return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."
+        # Only show "via local npx/uvx" when a real local process was started.
+        _actually_local = source == "local" or _original_transport == "stdio"
+        transport_label = " via local npx/uvx" if _actually_local and srv.transport == "stdio" else ""
+        if srv_source in TRUST_HIGH | TRUST_MEDIUM:
+            trust_note = f"\n✓  Source: {srv_source}{transport_label}"
+        else:
+            trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry)"
+        if auto_resolved_from is not None:
+            trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
 
-    # Only show "via local npx/uvx" when a real local process was started (source="local"
-    # or the registry listed a stdio install_cmd). Prevents the misleading label when
-    # source="local" fell back to HTTP (now blocked above, but kept defensive).
-    _actually_local = source == "local" or _original_transport == "stdio"
-    transport_label = " via local npx/uvx" if _actually_local and srv.transport == "stdio" else ""
-    if srv_source in TRUST_HIGH | TRUST_MEDIUM:
-        trust_note = f"\n✓  Source: {srv_source}{transport_label}"
-    else:
-        trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry)"
-    if auto_resolved_from is not None:
-        trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
-
-    return await _commit_shapeshift(
-        server_id, transport, tool_schemas, resolved_config, tools, ctx,
-        pool_key, trust_note, lean_eligible=True,
-    )
+        return await _commit_shapeshift(
+            server_id, transport, tool_schemas, resolved_config, tools, ctx,
+            pool_key, trust_note, lean_eligible=True,
+        )
 
 
 @mcp.tool()
@@ -331,18 +333,20 @@ async def shiftback(ctx: Context, kill: bool = False, uninstall: bool = False) -
     uninstall=True also uninstall the locally installed package (implies kill=True;
                    only applies when shapeshifted via source='local')
     """
-    has_tools = bool(session["shapeshift_tools"])
-    has_resources = bool(session.get("shapeshift_resources"))
-    has_prompts = bool(session.get("shapeshift_prompts"))
-    if not has_tools and not has_resources and not has_prompts:
-        return "Already in base form."
+    async with _registry_lock:
+        has_tools = bool(session["shapeshift_tools"])
+        has_resources = bool(session.get("shapeshift_resources"))
+        has_prompts = bool(session.get("shapeshift_prompts"))
+        if not has_tools and not has_resources and not has_prompts:
+            return "Already in base form."
 
-    form = session["current_form"]
-    local_install = session.pop("current_form_local_install", None)
-    # Snapshot counts before _do_shed() clears the lists
-    n_res = len(session.get("shapeshift_resources", []))
-    n_prompts = len(session.get("shapeshift_prompts", []))
-    removed = _state._do_shed()
+        form = session["current_form"]
+        local_install = session.pop("current_form_local_install", None)
+        # Snapshot counts before _do_shed() clears the lists
+        n_res = len(session.get("shapeshift_resources", []))
+        n_prompts = len(session.get("shapeshift_prompts", []))
+        removed = _state._do_shed()
+    # Lock released — kill/uninstall I/O runs outside the lock
 
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
