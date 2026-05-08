@@ -1,567 +1,434 @@
-# Chameleon MCP — 7.5 → 9.0 Roadmap
+# KitsuneMCP — Implementation Plan (v0.12.0)
+
+Generated after deep audit. Execute in order — each section is self-contained.
+Start a fresh Claude Code session, say "implement PLAN.md" and work through the checklist.
 
 ---
 
-## Assessment
+## Current state
 
-**What is strong:**
-- Core MCP tool proxying via `morph()` / `shed()` — sound and well-tested
-- Registry fan-out (official, mcpregistry, glama, npm, pypi, github, smithery)
-- Lean profile + forge profile split — good token cost story
-- `bench()`, `test()`, `setup()` — real developer value
-
-**What is missing for 9/10:**
-- MCP is tools + **resources** + **prompts** — morph() only proxies tools today
-- No safety model for spawning arbitrary npm/pip/GitHub/Docker processes
-- Missing credentials surface as cryptic runtime errors instead of upfront warnings
-- Token savings claims are unverified — no runnable benchmark
-- `send_tool_list_changed()` is called but client compatibility is untested and undocumented
+- Version: `0.11.0` (pyproject.toml + package.json) — needs bump to `0.12.0`
+- Git: `main`, 6 commits ahead of `v0.11.0` tag, 405 tests green
+- Entry points: `server.py` (lean, 9 tools ~650 tokens), `server_forge.py` (all tools ~1700 tokens)
+- Open issue: #9 (parameter aliasing for convert_time — external server)
+- Workflow rule: test → stage → commit → push as one motion. Never force-push.
 
 ---
 
-## Roadmap
+## Item 1 — MCP Registry publish fix (SMALL — do first)
 
-| # | Item | Phase | Effort |
-|---|------|-------|--------|
-| 1 | Full MCP proxying: resources + prompts in morph() | 1 | medium |
-| 2 | Install command validation + source trust warnings | 1 | small |
-| 3 | Proactive credential warning at morph() time | 1 | small |
-| 4 | Reproducible benchmark script (`examples/benchmark.py`) | 2 | medium |
-| 5 | Notification call tests + compatibility matrix | 2 | small |
-| 6 | Provenance in search/inspect/morph/call output | 2 | small |
-| 7 | `status()` measured token savings (not estimated) | 3 | small |
-| 8 | README claims cleanup + benchmark link | 3 | small |
+**Root cause:** `.github/workflows/publish.yml` pins `mcp-publisher` at `v1.5.0`.
+The MCP Registry changed OIDC audience binding in `v1.7.6` (2026-04-30).
+Every publish since v0.8.x has silently skipped the registry leg. PyPI and npm work fine.
+
+**Fix:** In `.github/workflows/publish.yml`, find the line downloading
+`mcp-publisher_linux_amd64.tar.gz` at version `v1.5.0` and bump it to the latest
+release (check https://github.com/modelcontextprotocol/registry/releases).
+
+**After tagging v0.12.0**, backfill all missing versions:
+```bash
+gh workflow run publish.yml --ref v0.9.0
+gh workflow run publish.yml --ref v0.10.0
+gh workflow run publish.yml --ref v0.10.1
+gh workflow run publish.yml --ref v0.10.2
+gh workflow run publish.yml --ref v0.11.0
+gh workflow run publish.yml --ref v0.12.0
+```
+PyPI/npm legs have `skip-existing: true` — they no-op; only the registry leg runs.
 
 ---
 
-## Phase 1 — Highest-impact fixes
+## Item 2 — Merge Dependabot PRs (TRIVIAL)
 
-### 1. Full MCP proxying: resources + prompts in morph()
+Two open PRs:
+- PR #1: `actions/setup-python` v5 → v6
+- PR #2: `actions/checkout` v4 → v6
 
-MCP exposes three first-class concepts — tools, resources, prompts. After `morph()`, the AI should have access to all three. `shed()` cleans up all three.
+Both safe — no API-breaking changes, CI passes, SHA-pinned.
 
-**Verified FastMCP 3.0.1 API (tested):**
-```python
-from fastmcp.resources import FunctionResource
-from fastmcp.prompts import FunctionPrompt
-
-# Resources
-r = FunctionResource.from_function(fn, uri="data://srv/x", name="X", mime_type="text/plain")
-mcp.add_resource(r)
-mcp._local_provider.remove_resource(str(r.uri))   # use str(r.uri) — normalized AnyUrl
-
-# Prompts
-p = FunctionPrompt.from_function(fn, name="my_prompt", description="...")
-mcp.add_prompt(p)
-mcp._local_provider.remove_prompt(p.name)
-
-# Notifications
-await ctx.session.send_resource_list_changed()
-await ctx.session.send_prompt_list_changed()
+```bash
+gh pr merge 1 --merge
+gh pr merge 2 --merge
 ```
 
-**Files to change:**
+---
 
-`kitsune_mcp/constants.py`
+## Item 3 — SSRF protection in `fetch()` and `craft()` (SMALL — security)
+
+**Problem:** `skill()` in `kitsune_mcp/tools/onboarding.py:32` has `_is_safe_url()`
+blocking private IPs (127.x, 10.x, 192.168.x, 169.254.x). `fetch()` in `exec.py`
+and the `_endpoint_proxy` closure in `craft()` (`morph.py`) have no such check —
+inconsistency, not intentional design.
+
+`_is_safe_url` is already defined at `kitsune_mcp/tools/onboarding.py:32`.
+
+### Fix `fetch()` — `kitsune_mcp/tools/exec.py`
+
+Add at the top of `fetch()` before the HTTP call:
 ```python
-TIMEOUT_PROMPT_LIST = 5.0
+from kitsune_mcp.tools.onboarding import _is_safe_url
+if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+    return (
+        f"Blocked: '{url}' resolves to a private/loopback address. "
+        "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
+    )
 ```
 
-`kitsune_mcp/transport.py` — add to `PersistentStdioTransport` (after `read_resource()`, line ~451):
-```python
-async def list_prompts(self) -> list[dict]:
-    entry = await self._get_or_start()
-    async with entry.lock:
-        msg_id = entry.next_id; entry.next_id += 1
-        entry.proc.stdin.write(self._frame(
-            {"jsonrpc": "2.0", "id": msg_id, "method": "prompts/list", "params": {}}
-        ))
-        await entry.proc.stdin.drain()
-        resp = await StdioTransport._read_response(entry.proc.stdout, expected_id=msg_id, timeout=10.0)
-        if not resp or "error" in resp:
-            return []
-        return resp.get("result", {}).get("prompts", [])
+### Fix `craft()` — `kitsune_mcp/tools/morph.py`
 
-async def get_prompt(self, name: str, arguments: dict) -> list[dict]:
-    entry = await self._get_or_start()
-    async with entry.lock:
-        msg_id = entry.next_id; entry.next_id += 1
-        entry.proc.stdin.write(self._frame(
-            {"jsonrpc": "2.0", "id": msg_id, "method": "prompts/get",
-             "params": {"name": name, "arguments": arguments}}
-        ))
-        await entry.proc.stdin.drain()
-        resp = await StdioTransport._read_response(entry.proc.stdout, expected_id=msg_id, timeout=10.0)
-        if not resp or "error" in resp:
-            return []
-        return resp.get("result", {}).get("messages", [])
+Add after the existing `url.startswith(...)` check (around line 424):
+```python
+from kitsune_mcp.tools.onboarding import _is_safe_url
+if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+    return (
+        f"Blocked: '{url}' is a private/loopback address. "
+        "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
+    )
 ```
 
-`kitsune_mcp/session.py` — add after `"morphed_tools"`:
+### Tests
+Add to `tests/test_ssrf.py` (new file):
+- `fetch("http://127.0.0.1/")` → returns "Blocked"
+- `fetch("http://169.254.169.254/latest/meta-data/")` → returns "Blocked"
+- `fetch("https://example.com")` → passes (mock httpx)
+- Same assertions for a crafted tool with a private URL
+
+---
+
+## Item 4 — Issue #9: Parameter aliasing in proxy_fn (SMALL — high user value)
+
+**Problem:** `convert_time` from `mcp-server-time` expects `source_timezone` /
+`target_timezone`. Users write `from_timezone` / `to_timezone`. The upstream server
+can't be changed. This causes 2+ failed attempts for every new user of the time server.
+
+**File:** `kitsune_mcp/shapeshift.py` — in `_make_proxy()`, the `proxy_fn` closure.
+
+### Add alias map (module-level constant near top of shapeshift.py)
+
 ```python
-"morphed_resources": [],    # normalized URI strings
-"morphed_prompts": [],      # prompt names
+# Common param name synonyms. Applied only when the key is absent from the
+# tool schema — never overwrites a key the schema actually declares.
+_PARAM_ALIASES: dict[str, str] = {
+    "from": "source",
+    "to": "target",
+    "from_timezone": "source_timezone",
+    "to_timezone": "target_timezone",
+    "src": "source",
+    "dst": "target",
+    "dest": "target",
+    "origin": "source",
+    "destination": "target",
+    "from_lang": "source_language",
+    "to_lang": "target_language",
+    "input_lang": "source_language",
+    "output_lang": "target_language",
+}
 ```
 
-`kitsune_mcp/morph.py` — new imports + two new functions + extend `_do_shed()`:
+### Modify `proxy_fn` (after the None-cleaning and realpath steps, before execute)
 
 ```python
-from fastmcp.resources import FunctionResource
-from fastmcp.prompts import FunctionPrompt
-
-_URI_TEMPLATE_RE = re.compile(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}')  # detect {param} patterns
-
-def _register_proxy_resources(transport, resources: list[dict]) -> list[str]:
-    """Proxy static resources. Returns normalized URI strings registered."""
-    registered = []
-    for res in resources:
-        uri = res.get("uri", "")
-        if not uri or _URI_TEMPLATE_RE.search(uri):
-            continue   # skip missing or template URIs
-        name = res.get("name") or uri
-        description = (res.get("description") or "")[:120]
-        mime_type = res.get("mimeType") or "text/plain"
-        _uri, _t = uri, transport
-
-        async def _proxy(_u=_uri, _tr=_t) -> str:
-            try:
-                return await _tr.read_resource(_u)
-            except Exception as e:
-                return f"[Resource unavailable: {e}]"
-
-        _proxy.__name__ = name
-        try:
-            r = FunctionResource.from_function(
-                fn=_proxy, uri=_uri, name=name, description=description, mime_type=mime_type,
-            )
-            mcp.add_resource(r)
-            registered.append(str(r.uri))
-        except Exception:
-            pass
-    return registered
-
-def _register_proxy_prompts(transport, prompts: list[dict]) -> list[str]:
-    """Proxy prompts. Returns list of registered names."""
-    import inspect as _inspect
-    registered = []
-    for prompt_schema in prompts:
-        name = prompt_schema.get("name", "")
-        if not name:
-            continue
-        description = (prompt_schema.get("description") or "")[:120]
-        args_schema = prompt_schema.get("arguments", [])
-        _name, _t = name, transport
-
-        async def _proxy(**kwargs):
-            messages = await _t.get_prompt(_name, kwargs)
-            return "\n---\n".join(
-                f"[{m.get('role','user')}]: {m.get('content', {}).get('text', '')}"
-                for m in messages if isinstance(m, dict)
-            )
-
-        # Build named parameter signature so FunctionPrompt sees correct arguments
-        params = []
-        for arg in args_schema:
-            arg_name = arg.get("name", "")
-            if not arg_name:
+# Alias normalization — remap common synonyms when the original key is not
+# in the schema but its alias is. Helps servers with non-intuitive param names
+# (e.g. source_timezone vs from_timezone in mcp-server-time).
+_schema_props = set(props.keys())  # props is already in scope from _make_proxy
+if any(k in _PARAM_ALIASES and k not in _schema_props for k in cleaned):
+    remapped = {}
+    for k, v in cleaned.items():
+        if k not in _schema_props and k in _PARAM_ALIASES:
+            canonical = _PARAM_ALIASES[k]
+            if canonical in _schema_props:
+                remapped[canonical] = v
                 continue
-            default = _inspect.Parameter.empty if arg.get("required") else ""
-            params.append(_inspect.Parameter(
-                arg_name, _inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                default=default, annotation=str,
-            ))
-        _proxy.__signature__ = _inspect.Signature(params)
-        _proxy.__name__ = name
-        _proxy.__doc__ = description
+        remapped[k] = v
+    cleaned = remapped
+```
 
+Note: `props` is already computed in `_make_proxy` at the outer scope — use it directly.
+
+### Tests
+Add to a new `tests/test_param_aliases.py`:
+```python
+def test_from_to_timezone_aliased():
+    from kitsune_mcp.shapeshift import _PARAM_ALIASES
+    # Simulate the alias logic
+    props = {"source_timezone", "target_timezone", "time"}
+    cleaned = {"from_timezone": "UTC", "to_timezone": "Asia/Tokyo", "time": "09:00"}
+    remapped = {}
+    for k, v in cleaned.items():
+        if k not in props and k in _PARAM_ALIASES and _PARAM_ALIASES[k] in props:
+            remapped[_PARAM_ALIASES[k]] = v
+        else:
+            remapped[k] = v
+    assert remapped == {"source_timezone": "UTC", "target_timezone": "Asia/Tokyo", "time": "09:00"}
+
+def test_alias_does_not_override_valid_key():
+    # If user passes both "from" and "source", only "source" wins (it's in schema)
+    props = {"source", "target"}
+    cleaned = {"source": "A", "from": "B"}  # "source" is valid; "from" is alias
+    # After aliasing: "from" -> "source" only if "source" not in cleaned
+    # Since "source" is already there, "from" should be ignored or kept as-is
+    ...
+```
+
+---
+
+## Item 5 — Surface silent registration failures (SMALL — debuggability)
+
+**Problem:** In `kitsune_mcp/shapeshift.py`, `_register_proxy_tools()` wraps
+`mcp.add_tool()` in `except Exception: pass`. Tools silently fail to register.
+
+**Fix:** Change `_register_proxy_tools()` to return `(list[str], list[tuple[str, str]])`.
+
+### `kitsune_mcp/shapeshift.py` — change `_register_proxy_tools` return type
+
+```python
+def _register_proxy_tools(
+    server_id: str, tools: list, transport, config: dict,
+    base_tool_names: set = None,
+    only: set[str] | None = None,
+) -> tuple[list[str], list[tuple[str, str]]]:
+    registered = []
+    failed = []
+    for tool_schema in tools:
+        raw_name = tool_schema.get("name", "")
+        if not raw_name:
+            continue
+        if only is not None and raw_name not in only:
+            continue
+        proxy_name = _proxy_name_for(server_id, raw_name, base_tool_names)
+        proxy = _make_proxy(server_id, tool_schema, transport, config, proxy_name)
         try:
-            p = FunctionPrompt.from_function(fn=_proxy, name=name, description=description)
-            mcp.add_prompt(p)
-            registered.append(name)
-        except Exception:
-            pass
-    return registered
+            mcp.add_tool(proxy)
+            registered.append(proxy_name)
+        except Exception as e:
+            failed.append((raw_name, str(e)[:120]))
+    return registered, failed
 ```
 
-Extend `_do_shed()` — add after tool removal loop:
+### `kitsune_mcp/tools/morph.py` — update `_commit_shapeshift`
+
+Find where `_register_proxy_tools` is called (~line 48) and unpack both values:
 ```python
-for uri in session.get("morphed_resources", []):
-    try:
-        mcp._local_provider.remove_resource(uri)
-    except Exception:
-        pass
-session["morphed_resources"] = []
-
-for pname in session.get("morphed_prompts", []):
-    try:
-        mcp._local_provider.remove_prompt(pname)
-    except Exception:
-        pass
-session["morphed_prompts"] = []
+registered, reg_failures = _state._register_proxy_tools(
+    server_id, tool_schemas, transport, resolved_config, _state._BASE_TOOL_NAMES, only
+)
 ```
 
-`kitsune_mcp/tools.py` — update import + both morph() paths + shed():
-
-Add to import: `_register_proxy_resources, _register_proxy_prompts`
-
-In both morph() code paths, after `session["morphed_tools"] = registered`:
+Then in the output block (after the tool list):
 ```python
-morphed_resources, morphed_prompts = [], []
-if hasattr(transport, "list_resources"):
-    try:
-        raw_res = await asyncio.wait_for(transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST)
-        morphed_resources = _register_proxy_resources(transport, raw_res)
-    except Exception:
-        pass
-if hasattr(transport, "list_prompts"):
-    try:
-        raw_prompts = await asyncio.wait_for(transport.list_prompts(), timeout=TIMEOUT_PROMPT_LIST)
-        morphed_prompts = _register_proxy_prompts(transport, raw_prompts)
-    except Exception:
-        pass
-session["morphed_resources"] = morphed_resources
-session["morphed_prompts"] = morphed_prompts
-
-with contextlib.suppress(Exception):
-    await ctx.session.send_tool_list_changed()
-if morphed_resources:
-    with contextlib.suppress(Exception):
-        await ctx.session.send_resource_list_changed()
-if morphed_prompts:
-    with contextlib.suppress(Exception):
-        await ctx.session.send_prompt_list_changed()
+if reg_failures:
+    lines.append(f"\n⚠️  {len(reg_failures)} tool(s) failed to register:")
+    for name, err in reg_failures:
+        lines.append(f"  {name}: {err}")
 ```
 
-Extend morph() output:
+Also update the pool-connection branch in `shapeshift()` which calls `_register_proxy_tools` directly — unpack and discard failures there (or surface them too).
+
+---
+
+## Item 6 — `auto()` prefers stdio over HTTP when all else equal (1 LINE)
+
+**File:** `kitsune_mcp/tools/onboarding.py` — `_candidate_rank()` function (around line 183).
+
+**Current:**
 ```python
-extras = []
-if morphed_resources: extras.append(f"{len(morphed_resources)} resource(s)")
-if morphed_prompts:   extras.append(f"{len(morphed_prompts)} prompt(s)")
-extra_note = f" + {', '.join(extras)}" if extras else ""
-# "Received form of 'X' — 10 tool(s) + 3 resource(s), 1 prompt(s):"
+return (has_missing, is_smithery_http, not is_official)
 ```
 
-In shed(): read counts before `_do_shed()`, send notifications, extend output:
+**Fix:**
 ```python
-n_res = len(session.get("morphed_resources", []))
-n_prompts = len(session.get("morphed_prompts", []))
-removed = _do_shed()
-with contextlib.suppress(Exception):
-    await ctx.session.send_tool_list_changed()
-if n_res:
-    with contextlib.suppress(Exception):
-        await ctx.session.send_resource_list_changed()
-if n_prompts:
-    with contextlib.suppress(Exception):
-        await ctx.session.send_prompt_list_changed()
+return (has_missing, is_smithery_http, not is_official, not (s.transport == "stdio"))
 ```
 
-**Tests to add (`tests/test_morph.py`)** — ~13 new tests:
-- `TestRegisterProxyResources`: registers resource, skips URI templates (regex), skips empty URI, read failure returns error string, proxy calls transport
-- `TestRegisterProxyPrompts`: registers prompt with args in signature, no-arg prompt, skips empty name, proxy calls transport, message format
-- `TestDoShedAll`: removes tools + resources + prompts from FastMCP, tolerates already-removed items
-- `TestMorphRegistersAll`: resources registered when transport supports it, skipped for HTTP transport, graceful on list_resources exception
-
-**Edge cases / API notes:**
-- Use `str(r.uri)` (Pydantic AnyUrl normalized) for resource removal key, not raw input string
-- `mcp._local_provider` is private — wrap in `getattr(mcp, '_local_provider', None)` defensively
-- URI template regex `\{[a-zA-Z_][a-zA-Z0-9_]*\}` — more precise than checking `{` alone
-- Prompt proxy message format: convert to string via join — loses multi-turn structure but is reliable across FastMCP versions
+Effect: `mcp-server-time` (official, stdio, free) → `(False, False, False, False)` beats a
+hypothetical official HTTP server `(False, False, False, True)`. One character, correct
+server selection for all time/weather/utility queries where local and remote versions exist.
 
 ---
 
-### 2. Install command validation + source trust warnings
+## Item 7 — Session persistence for crafted tools and connections (MEDIUM)
 
-**Why it matters:** `transport.py` calls `asyncio.create_subprocess_exec(*install_cmd)` with zero validation. Shell injection and path traversal are real risks for team deployments.
+**Problem:** Everything in `session` is lost on restart except `skills`. Specifically:
+- `crafted_tools` — user defined these HTTP endpoint tools with explicit effort
+- `connections` metadata — user's named server aliases (sans PIDs, which are dead)
 
-**Files to change:**
+**What NOT to persist:** `current_form`, `shapeshift_tools` (process is dead), PIDs.
 
-`kitsune_mcp/constants.py`:
-```python
-TRUST_HIGH   = {"official"}
-TRUST_MEDIUM = {"mcpregistry", "glama", "smithery"}
-TRUST_LOW    = {"npm", "pypi", "github"}
-```
-
-`kitsune_mcp/transport.py` — add before any subprocess spawn:
-```python
-_SHELL_METACHAR_RE = re.compile(r'[&;|$`\n]')
-_PATH_TRAVERSAL_RE = re.compile(r'\.\.[/\\]')
-
-def _validate_install_cmd(cmd: list[str]) -> None:
-    if not cmd:
-        raise ValueError("Empty install command")
-    argv0 = cmd[0]
-    if _SHELL_METACHAR_RE.search(argv0):
-        raise ValueError(f"Shell metacharacter in command: {argv0!r}")
-    if _PATH_TRAVERSAL_RE.search(argv0):
-        raise ValueError(f"Path traversal in command: {argv0!r}")
-```
-
-Call `_validate_install_cmd(install_cmd)` in `StdioTransport.execute()`, `PersistentStdioTransport._get_or_start()`, and `DockerTransport.execute()` before subprocess creation.
-
-`kitsune_mcp/tools.py` — in `morph()`, `call()`, `connect()` output: append trust note:
-```python
-from kitsune_mcp.constants import TRUST_HIGH, TRUST_MEDIUM
-source = srv.source if srv else "unknown"
-if source not in TRUST_HIGH and source not in TRUST_MEDIUM:
-    trust_note = f"\n⚠️  Source: {source} (community — not verified by official MCP registry)"
-else:
-    trust_note = f"\n✓  Source: {source}"
-```
-
-**Tests (`tests/test_transports.py`):**
-- `test_validate_install_cmd_rejects_shell_injection`
-- `test_validate_install_cmd_rejects_path_traversal`
-- `test_validate_install_cmd_accepts_valid_npx`
-- `test_validate_install_cmd_rejects_empty`
-
----
-
-### 3. Proactive credential warning at morph() time
-
-**Why it matters:** Missing credentials cause cryptic runtime errors. `_probe_requirements()` and `_credentials_guide()` already exist but are only called by `setup()` and `inspect()`. Surface them in `morph()` output.
-
-**Files to change:**
-
-`kitsune_mcp/tools.py` — in morph(), after tool registration (best-effort, non-blocking):
-```python
-try:
-    reqs = _probe_requirements(raw_tools, resource_text or "")
-    cred_guide = _credentials_guide(srv.credentials or {})
-    missing_env = reqs.get("missing_env", {})
-    if cred_guide or missing_env:
-        lines.append("\n⚠️  Credentials may be required before calling tools:")
-        if cred_guide:
-            lines.append(cred_guide)
-        for var in missing_env:
-            if var not in (cred_guide or ""):
-                lines.append(f'  key("{var}", "your-value")')
-except Exception:
-    pass
-```
-
-**Tests (`tests/test_tools.py`):**
-- `test_morph_warns_on_missing_credentials`
-- `test_morph_no_warning_when_credentials_set`
-- `test_morph_still_succeeds_when_credential_probe_fails`
-
----
-
-## Phase 2 — Credibility and trust upgrades
-
-### 4. Reproducible benchmark script
-
-**Why it matters:** README claims "~240 tokens overhead", "~825 tokens", "65% reduction" — unverified. One runnable script turns marketing into engineering.
-
-**New file: `examples/benchmark.py`**
-
-Measures (no network needed):
-- Token overhead: load actual tool schemas via `server.py` imports, run `_estimate_tokens()` on lean vs forge tool lists
-- Token savings: compare `_estimate_tokens(tools_for_N_servers)` vs always-on baseline
-- Latency: mock transport timing for morph()/shed() cycle
-
-Output:
-```
-=== Token overhead (measured from actual schemas) ===
-chameleon-mcp lean (6 tools):      XXX tokens
-chameleon-forge full (17 tools):   XXX tokens
-static config 5 servers avg:       XXX tokens
-
-=== Savings: lazy morph vs always-on ===
-2 servers lazy:   saves ~X tokens/request
-5 servers lazy:   saves ~X tokens/request
-```
-
-Also add `docs/benchmarks.md` with methodology and a reference run output.
-
-Update README to link: `> See [examples/benchmark.py](examples/benchmark.py) for methodology.`
-
----
-
-### 5. Notification tests + compatibility matrix
-
-**New file: `tests/test_notifications.py`**
-- Mock `ctx.session` with `AsyncMock`
-- Verify `send_tool_list_changed()` called exactly once per morph, once per shed
-- Verify `send_resource_list_changed()` called iff `morphed_resources` non-empty
-- Verify `send_prompt_list_changed()` called iff `morphed_prompts` non-empty
-- Verify no notification sent if morph fails
-
-**New file: `docs/compatibility.md`**
-
-| Client | Tool refresh on morph | Tool refresh on shed | Resource refresh | Notes |
-|--------|----------------------|---------------------|-----------------|-------|
-| Claude Code | ✅ tested | ✅ tested | ? | |
-| Claude Desktop | ✅ tested | ✅ tested | ? | |
-| Cursor | ? | ? | ? | help wanted |
-| Cline | ? | ? | ? | help wanted |
-| OpenClaw | ? | ? | ? | help wanted |
-
-Include manual test protocol so contributors can fill in rows.
-
----
-
-### 6. Provenance in search/inspect/morph/call output
-
-**Why it matters:** Users need to know where a server comes from before running it.
-
-**Files to change (`kitsune_mcp/tools.py` output formatting only):**
-- `search()`: ensure `source:` appears on every result line (audit current format)
-- `inspect()`: add `Source: {srv.source}` as first line of output
-- `morph()`: source note already added in step 2 — verify it appears
-- `call()`: add `(source: {source})` when server is resolved from registry
-
----
-
-## Phase 3 — Proof, adoption, and polish ✅ COMPLETE (2026-04-07)
-
-### 7. `status()` measured token savings ✅
-
-- `inspect()` now stores `token_cost = _estimate_tokens(tools)` (measured, not registry estimate)
-- `status()` sums stored costs for inspected servers NOT currently morphed
-- Output: `Saved vs always-on: ~X tokens [based on N inspected schema(s)]`
-
-### 8. README claims cleanup ✅
-
-- Token numbers updated to measured values (~450 lean, ~1,700 forge)
-- Added benchmark link note: `> Token numbers measured — see examples/benchmark.py`
-- Removed "first MCP hub" overstatement
-- Tool counts verified: 6 lean tools, 17 forge tools ✓
-
----
-
-## Phase 4 — Agent Specialization & Minimal Profiles
-
-**Core insight:** Agents running in production don't need dynamic discovery — they need exactly the tools for their task, nothing more. Token overhead should be a known constant, not a variable. An agent that always uses `read_file` + `web_search` should pay for exactly those two tools, not a general-purpose hub.
-
-Pattern: **observe → profile → specialize → production**
-
-| # | Item | Effort |
-|---|------|--------|
-| 9  | Tool usage tracking — persist call frequency per tool across sessions | small |
-| 10 | Profile format — YAML/JSON declaring Chameleon tools + per-server tool lists | small |
-| 11 | Profile-aware morph — auto-apply tool filter from active profile | medium |
-| 12 | Profile generation — suggest minimal profile from observed usage | small |
-| 13 | `chameleon-light` entry point — minimal server from a profile file | medium |
-
----
-
-### 9. Tool usage tracking
-
-**Why:** To know which tools an agent actually uses, you need data across sessions — not just within one.
-
-`session["grown"]` already tracks calls per server. Extend to per-tool granularity and persist to `.chameleon_usage.json` alongside `.env`.
-
-```json
-{
-  "@modelcontextprotocol/server-filesystem": {
-    "read_file": 47,
-    "write_file": 12,
-    "list_directory": 8,
-    "create_directory": 0,
-    "delete_file": 0
-  }
-}
-```
-
-`status()` shows top tools per server. After N sessions, the data speaks for itself.
-
----
-
-### 10. Profile format
-
-A profile is a YAML file declaring exactly which tools an agent needs:
-
-```yaml
-# profiles/code_reviewer.yaml
-chameleon_tools: [morph, shed, key]   # only 3 of 6 lean tools
-servers:
-  "@modelcontextprotocol/server-filesystem":
-    tools: [read_file, list_directory]
-  "@modelcontextprotocol/server-github":
-    tools: [get_file_contents, list_pull_requests, get_pull_request]
-```
-
-Token cost for this profile: ~245 (Chameleon) + ~150 (5 tools) = **~395 tokens** — known before the session starts.
-
----
-
-### 11. Profile-aware morph
-
-When a profile is active, `morph("filesystem")` automatically applies `tools=["read_file", "list_directory"]` from the profile — no manual lean filter needed. The agent just calls `morph()` and gets exactly what the profile allows.
+### `kitsune_mcp/session.py` — add save/load functions
 
 ```python
-CHAMELEON_PROFILE=profiles/code_reviewer.yaml chameleon-mcp
-```
+import json
+from pathlib import Path
 
-`morph()` output shows: `Received form of 'filesystem' [profile: code_reviewer] — 2 tool(s) registered`
+_KITSUNE_HOME = Path(os.getenv("KITSUNE_HOME", Path.home() / ".kitsune"))
+_STATE_PATH = _KITSUNE_HOME / "state.json"
 
----
-
-### 12. Profile generation from usage data
-
-After N sessions with tracking enabled:
-
-```
-status()
-→ Suggested profile (based on 12 sessions):
-    filesystem: read_file (47 calls), write_file (12 calls), list_directory (8 calls)
-    github: get_file_contents (31 calls), list_pull_requests (9 calls)
-    Unused: create_directory, delete_file, move_file (0 calls each)
-    → Lean morph would save ~620 tokens/request vs full morph
-
-  profile("my_agent")   ← saves suggested profile to profiles/my_agent.yaml
-```
-
----
-
-### 13. `chameleon-light` entry point
-
-A minimal server that reads a profile and exposes only what's declared:
-
-```json
-{
-  "mcpServers": {
-    "agent": {
-      "command": "chameleon-light",
-      "args": ["--profile", "profiles/code_reviewer.yaml"]
+def _save_state() -> None:
+    _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
+    state = {
+        "crafted_tools": session.get("crafted_tools", {}),
+        # Strip runtime fields (pid, started_at) — they're dead after restart
+        "connections": {
+            k: {f: v for f, v in conn.items() if f not in ("pid", "started_at")}
+            for k, conn in session.get("connections", {}).items()
+        },
+        # Cap explored history to 100 entries (keep most recent)
+        "explored": dict(list(session.get("explored", {}).items())[-100:]),
     }
-  }
-}
+    try:
+        with open(_STATE_PATH, "w") as f:
+            json.dump(state, f, indent=2)
+    except OSError:
+        pass
+
+def _load_state() -> None:
+    try:
+        with open(_STATE_PATH) as f:
+            state = json.load(f)
+        session.setdefault("crafted_tools", {}).update(state.get("crafted_tools", {}))
+        session.setdefault("connections", {}).update(state.get("connections", {}))
+        session.setdefault("explored", {}).update(state.get("explored", {}))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
 ```
 
-Token overhead: as low as **200–400 tokens** depending on the profile. Fixed, predictable, auditable.
+### Hook into existing lifecycle
 
-The permission boundary is structural — a code review agent with this profile physically cannot call `delete_file` or `send_email` because those tools are never registered.
+- Call `_load_state()` at the end of `_load_skills()` (which runs at module init)
+- Call `_save_state()` at the end of `_save_skills()` (which runs when skills are modified)
+- Call `_save_state()` in the `atexit` handler in `transport.py` alongside `_kill_all_pool_processes()`
+
+### Re-register crafted tools on startup
+
+After `_load_state()`, re-register loaded `crafted_tools` with the FastMCP app.
+The `_endpoint_proxy` closure can be reconstructed from stored `url`, `method`, `description`, `params`.
+Add a `_restore_crafted_tools()` function in `session.py` that calls `mcp.add_tool()` for each.
+Call it from `server.py` after all imports (but the `mcp` import creates a circular dep risk — 
+use a lazy import inside the function or move it to `app.py`).
+
+### Tests
+
+```python
+def test_save_load_crafted_tools(tmp_path):
+    # Mock _STATE_PATH to tmp_path / "state.json"
+    session["crafted_tools"] = {"my_tool": {"url": "https://example.com", ...}}
+    _save_state()
+    session["crafted_tools"] = {}
+    _load_state()
+    assert "my_tool" in session["crafted_tools"]
+
+def test_pids_not_persisted(tmp_path):
+    session["connections"] = {"key": {"name": "test", "pid": 12345, "command": "npx foo"}}
+    _save_state()
+    session["connections"] = {}
+    _load_state()
+    assert "pid" not in session["connections"]["key"]
+```
 
 ---
 
-## What to defer
+## Item 8 — CHANGELOG + version bump to v0.12.0 (MEDIUM — do last before tagging)
 
-- URI template resource proxying (`file:///{path}`) — complex parameter binding, low adoption
-- `resources/subscribe` change notifications — very few servers implement this
-- Multi-turn prompt message structure — v2 of prompt proxying
-- Blocking spawns from untrusted sources (vs warning) — too disruptive for current users
-- WebSocket resource/prompt support — negligible current usage
+### Files to update
+
+| File | Change |
+|---|---|
+| `CHANGELOG.md` | Prepend v0.12.0 section (see below) |
+| `pyproject.toml` | `version = "0.11.0"` → `"0.12.0"` |
+| `package.json` | `"version": "0.11.0"` → `"0.12.0"` |
+| `server.json` | version field if present |
+
+### Commits being documented (6 commits, 30+ issues fixed)
+
+```
+a6290d1  fix issues #23 #24 #25 #26 #27 #28 #29 #30 #31 #32
+6ffdb0f  fix issues #17 #18 #19 #20 #21 #22
+b221d90  fix: async lock on tool registry + pre-shed validation for source='local'
+d28c660  fix #16: source='local' on HTTP-only servers + call() ignoring shapeshift transport
+33e42fe  fix #10: tokens_sent in all transport execute() methods
+88c6852  fix issues #12 #13 #14 #15 + README why-MCP section
+```
+
+### v0.12.0 CHANGELOG section — key points
+
+**Security:**
+- `fetch()` and `craft()` now block private/loopback URLs (SSRF protection, consistent with `skill()`). Override with `KITSUNE_ALLOW_LOCAL_FETCH=1`.
+
+**New features:**
+- `server_args` parameter on `shapeshift()` — pass CLI arguments to stdio servers (e.g. `shapeshift("server-filesystem", server_args=["/private/tmp"])`)
+- Parameter aliasing in proxy tools — `from_timezone` is silently remapped to `source_timezone`, `to` to `target`, etc. Works for any MCP server with non-intuitive param names.
+- Shapeshifted tool registration failures now surface in the output instead of being silently swallowed.
+- `crafted_tools` and `connections` metadata now persist across server restarts in `~/.kitsune/state.json`.
+
+**Reliability:**
+- `_registry_lock` (`asyncio.Lock`) prevents concurrent shapeshifts from leaving orphaned tools in the registry. Without it, two concurrent shapeshifts could interleave shed and register, leaving both servers' tools mounted while session only tracked one.
+- `atexit` handler kills all pooled processes on interpreter exit — fixes memory leak (#11) and "RuntimeError: Event loop is closed" teardown noise (#23).
+- Probe processes from `inspect()`/`compare()` are killed immediately after `list_tools()` returns — each probe held 200-300MB idle.
+- Registry paginated fetch no longer caches empty/partial results on transient failures — returns stale cache instead of poisoning TTL window.
+- `shiftback(kill=True)` no longer mass-kills unrelated `connect()` sessions when pool key is missing — warns instead.
+- `source='local'` on HTTP-only Smithery servers now returns a clear error BEFORE shedding the current form.
+- `call()` uses the shapeshifted session's pooled transport instead of re-resolving from registry (which always picked HTTP for Smithery servers regardless of `shapeshift(source='local')`).
+
+**UX:**
+- `auto()` prefers official stdio servers over Smithery HTTP — `mcp-server-time` beats `timely` when no Smithery key is set.
+- `auto()` surfaces registry fetch failures instead of silently returning "no tools listed".
+- `compare()` shows `—` instead of `?` for unknown values; error labels are human-readable ("HTTP error" not "HTTPStatusError").
+- `search()` warning uses actual exception class per registry, not hardcoded "timeout".
+- `shapeshift()` output includes wall-clock timing — cold npm installs show "12.3s — warm calls will be instant".
+- Filesystem server shapeshift proactively hints about `server_args` when no allowed dirs are passed.
+- macOS `/tmp` → `/private/tmp` symlink resolved in proxy args before forwarding to inner server.
+- `shlex.split()` used consistently in pool-connection shapeshift branch (was `str.split()`).
+- httpx INFO logging suppressed by default (`KITSUNE_DEBUG_HTTP=1` to re-enable).
+
+**Correctness:**
+- `tokens_sent` now tracked in `StdioTransport`, `PersistentStdioTransport`, `WebSocketTransport` (was only `HTTPSSETransport`).
+- `key()` masks secret value in response — raw value no longer appears in conversation context. `.env` written with `0o600` permissions.
+- `_infer_args_from_task` returns `{}` when tool has multiple required string params — no partial fills.
+- `__version__` exposed via `importlib.metadata`, shown as first line of `status()`.
+
+**Testing:**
+- 6 integration tests for lean vs forge tool surface (prevents silent profile drift).
+- `_registry_lock` concurrency tests prove the race is eliminated.
+- `tokens_sent` tests for all three previously-broken transports.
+- SSRF tests for `fetch()` and `craft()`.
+- Parameter alias tests for `proxy_fn`.
 
 ---
 
-## Critical files summary
+## Execution checklist
 
-| File | Changes |
-|------|---------|
-| `kitsune_mcp/constants.py` | `TIMEOUT_PROMPT_LIST`, trust tier sets |
-| `kitsune_mcp/transport.py` | `list_prompts()`, `get_prompt()`, `_validate_install_cmd()` |
-| `kitsune_mcp/morph.py` | `_register_proxy_resources()`, `_register_proxy_prompts()`, extend `_do_shed()` |
-| `kitsune_mcp/tools.py` | morph() + shed() resource/prompt blocks, trust warning, cred warning, provenance |
-| `kitsune_mcp/session.py` | `morphed_resources`, `morphed_prompts` keys |
-| `server.py` | re-export new functions |
-| `examples/benchmark.py` | new — reproducible token/latency measurements |
-| `docs/benchmarks.md` | new — benchmark methodology + reference output |
-| `docs/compatibility.md` | new — client matrix + manual test protocol |
-| `README.md` | claims cleanup, benchmark link |
-| `tests/test_morph.py` | ~13 new tests for resources + prompts |
-| `tests/test_transports.py` | ~4 new tests for install command validation |
-| `tests/test_tools.py` | ~3 new tests for credential warning |
-| `tests/test_notifications.py` | new — notification call count tests |
+```
+[ ] Item 1: Bump mcp-publisher version in .github/workflows/publish.yml
+[ ] Item 2: Merge Dependabot PRs (#1 and #2)
+[ ] Item 3: SSRF fix — fetch() and craft(), add tests/test_ssrf.py
+[ ] Item 4: Parameter aliasing — shapeshift.py proxy_fn, close issue #9
+[ ] Item 5: Surface registration failures — shapeshift.py + morph.py
+[ ] Item 6: auto() ranking — add stdio preference (1 line in onboarding.py)
+[ ] Item 7: Session persistence — session.py save/load, re-register crafted_tools
+[ ] Item 8: CHANGELOG + version bump (pyproject.toml, package.json, server.json)
+[ ] Run: python3 -m pytest tests/ -q  (should be 420+ passing)
+[ ] Tag: git tag v0.12.0 && git push origin v0.12.0
+[ ] Verify: pip install kitsune-mcp==0.12.0 && python3 -c "import kitsune_mcp; print(kitsune_mcp.__version__)"
+[ ] Backfill MCP Registry for v0.9.0 through v0.12.0
+[ ] Close issue #9
+```
+
+---
+
+## Key files reference
+
+| Area | File |
+|---|---|
+| Proxy tool creation, param aliasing | `kitsune_mcp/shapeshift.py` |
+| shapeshift / shiftback / craft / connect | `kitsune_mcp/tools/morph.py` |
+| auto() / key() / onboard() | `kitsune_mcp/tools/onboarding.py` |
+| search / inspect / compare / status | `kitsune_mcp/tools/discovery.py` |
+| call / run / fetch / test / bench | `kitsune_mcp/tools/exec.py` |
+| Session state + persistence | `kitsune_mcp/session.py` |
+| Transport / process pool / atexit | `kitsune_mcp/transport.py` |
+| Registry fan-out + TTL cache | `kitsune_mcp/registry.py` |
+| HTTP client / token estimate | `kitsune_mcp/utils.py` |
+| FastMCP app + registry lock | `kitsune_mcp/app.py` |
+| Lean profile + tool pruning | `server.py` |
+| CI publish workflow | `.github/workflows/publish.yml` |
