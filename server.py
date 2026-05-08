@@ -3,12 +3,13 @@
 All logic lives in the kitsune_mcp package. This file:
   1. Loads .env before any kitsune_mcp imports read os.getenv() at module level.
   2. Imports all modules so their @mcp.tool() decorators register with the shared mcp instance.
-  3. Prunes tools based on KITSUNE_TOOLS env var (default: lean 7-tool profile).
+  3. Prunes tools based on KITSUNE_TOOLS env var (default: lean profile).
   4. Re-exports public names so existing tests (from server import ...) continue to work.
 
 KITSUNE_TOOLS env var controls which tools are registered:
-  (not set)                     — lean profile: shapeshift, shiftback, search, inspect, key, status, call
-  KITSUNE_TOOLS=all           — all 17 tools (forge / evaluator mode)
+  (not set)  — lean profile: shapeshift, shiftback, search, inspect, compare,
+                              call, auto, key, status  (~650 tokens overhead)
+  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~1700 tokens)
   KITSUNE_TOOLS=shapeshift,shiftback — exactly those tools
 """
 

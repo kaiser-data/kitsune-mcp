@@ -164,7 +164,16 @@ async def search(query: str, registry: str = "all", limit: int = 5) -> str:
     if registry == "all":
         errors = getattr(_state._registry, "last_registry_errors", {})
         if errors:
-            failed = ", ".join(f"{n} (timeout)" for n in errors)
+            _ERR_LABELS = {
+                "TimeoutError": "timeout", "asyncio.TimeoutError": "timeout",
+                "ReadTimeout": "timeout", "ConnectTimeout": "timeout",
+                "HTTPStatusError": "HTTP error", "ConnectError": "unreachable",
+                "RemoteProtocolError": "protocol error",
+            }
+            failed = ", ".join(
+                f"{n} ({_ERR_LABELS.get(exc, exc)})"
+                for n, exc in errors.items()
+            )
             lines.insert(1, f"⚠️  Skipped: {failed}\n")
     for s in servers:
         cred_status = _credentials_ready(s.credentials, s.source)

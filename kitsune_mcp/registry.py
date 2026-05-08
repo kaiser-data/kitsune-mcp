@@ -618,6 +618,7 @@ class _PaginatedListRegistry(BaseRegistry):
         servers: list[ServerInfo] = []
         cursor: str | None = None
         client = _get_http_client()
+        completed_cleanly = False
         for _ in range(self._MAX_PAGES):
             params = self._next_params(cursor) if cursor else self._initial_params()
             try:
@@ -625,16 +626,21 @@ class _PaginatedListRegistry(BaseRegistry):
                 r.raise_for_status()
                 data = r.json()
             except Exception:
-                break
+                # Transient failure — return stale cache if available, otherwise
+                # return whatever we have so far but do NOT cache it. Caching a
+                # partial/empty result would poison the TTL window and cause false
+                # negatives until expiry.
+                return cached if cached is not None else servers
             for entry in data.get(self._entries_key) or []:
                 srv = self._to_server_info(entry)
                 if srv:
                     servers.append(srv)
             cursor = self._extract_cursor(data)
             if not cursor:
+                completed_cleanly = True
                 break
 
-        if self._CACHE is not None:
+        if self._CACHE is not None and completed_cleanly:
             self._CACHE.set(servers)
         return servers
 

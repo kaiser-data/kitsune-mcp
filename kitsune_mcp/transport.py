@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import contextlib
 import datetime
 import json
@@ -108,6 +109,25 @@ class _PoolEntry:
 
 
 _process_pool: dict[str, _PoolEntry] = {}   # keyed by json(install_cmd, sort_keys=True)
+
+
+def _kill_all_pool_processes() -> None:
+    """Kill every pooled subprocess synchronously.
+
+    Registered as an atexit handler so:
+    - Orphaned stdio servers are cleaned up when the MCP server exits (#11)
+    - BaseSubprocessTransport.__del__ never fires after the event loop is gone,
+      eliminating "RuntimeError: Event loop is closed" teardown noise (#23)
+    """
+    for entry in list(_process_pool.values()):
+        try:
+            entry.proc.kill()
+        except Exception:
+            pass
+    _process_pool.clear()
+
+
+atexit.register(_kill_all_pool_processes)
 
 # Debounce: skip the O(N) pool sweep if it ran in the last EVICT_DEBOUNCE_SECONDS.
 # A hot pool serving 1 call/sec was sweeping every entry on every call; the

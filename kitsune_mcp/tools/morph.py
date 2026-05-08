@@ -7,6 +7,7 @@ import inspect as _inspect
 import json
 import os
 import shlex
+import time
 
 import httpx
 from mcp.server.fastmcp import Context
@@ -130,6 +131,17 @@ async def _commit_shapeshift(
             f"\n💡 {len(registered)} tools loaded (~{tool_cost:,} tokens). "
             f"For lean mounting: shapeshift(\"{server_id}\", tools=[\"{registered[0]}\"])"
         )
+    # Filesystem server needs allowed directories as CLI args — proactively hint
+    # so users don't see a confusing "Access denied" without knowing the fix.
+    if "filesystem" in server_id and pool_key:
+        import json as _json
+        cmd = _json.loads(pool_key)
+        # Only show hint if no directories were passed (cmd ends at the package name)
+        if not any(arg.startswith("/") or arg.startswith("~") for arg in cmd[2:]):
+            lines.append(
+                "\n💡 Filesystem server: no allowed directories set — all paths will be denied.\n"
+                f'   Fix: shapeshift("{server_id}", server_args=["/your/path"])'
+            )
     return "\n".join(lines)
 
 
@@ -153,7 +165,9 @@ async def shapeshift(
     # Pool connections (from connect()) take priority — user already vetted these, bypass trust gates
     for _pk, conn in session["connections"].items():
         if conn.get("name") == server_id or conn.get("command") == server_id:
-            cmd = conn["command"].split()
+            # Prefer pre-parsed argv stored at connect() time; fall back to shlex.split()
+            # so quoted paths (e.g. "/path with spaces") are never mangled.
+            cmd = conn.get("install_cmd") or shlex.split(conn["command"])
             tool_names = conn.get("tools", [])
             _state._do_shed()
             session["current_form_local_install"] = None
@@ -279,6 +293,8 @@ async def shapeshift(
             f'    shapeshift("@scope/pkg-name", source="local", confirm=True)'
         )
 
+    _shapeshift_started = time.monotonic()
+
     # _registry_lock serialises all shed→register sequences. Without it a concurrent
     # shapeshift() could interleave: A sheds, B sheds (no-op), A registers, B registers —
     # leaving both servers' tools mounted while session only tracks B's tools.
@@ -314,10 +330,12 @@ async def shapeshift(
         # Only show "via local npx/uvx" when a real local process was started.
         _actually_local = source == "local" or _original_transport == "stdio"
         transport_label = " via local npx/uvx" if _actually_local and srv.transport == "stdio" else ""
+        elapsed = time.monotonic() - _shapeshift_started
+        timing = f" ({elapsed:.1f}s{'  — warm calls will be instant' if elapsed > 3 else ''})"
         if srv_source in TRUST_HIGH | TRUST_MEDIUM:
-            trust_note = f"\n✓  Source: {srv_source}{transport_label}"
+            trust_note = f"\n✓  Source: {srv_source}{transport_label}{timing}"
         else:
-            trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry)"
+            trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry){timing}"
         if auto_resolved_from is not None:
             trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
 
@@ -369,10 +387,17 @@ async def shiftback(ctx: Context, kill: bool = False, uninstall: bool = False) -
     result_lines = [f"Shifted back from '{form}'. Removed: {', '.join(removed)}{extra_note}"]
 
     if (kill or uninstall) and form:
-        # Use the exact pool key stored at shapeshift() time — no fragile string matching needed
+        # Use the exact pool key stored at shapeshift() time. If missing (stale session /
+        # edge case), do NOT fall back to killing all pool entries — that would terminate
+        # unrelated connect() sessions. Surface a warning instead.
         exact_key = session.pop("current_form_pool_key", None)
         killed = []
-        keys_to_check = [exact_key] if exact_key else list(_process_pool.keys())
+        if not exact_key:
+            result_lines.append(
+                "⚠️  Could not identify the backing process (pool key missing) — "
+                "use release() to kill specific connections by name."
+            )
+        keys_to_check = [exact_key] if exact_key else []
         for pool_key in keys_to_check:
             entry = _process_pool.get(pool_key)
             if entry is None:
@@ -541,6 +566,7 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
     session["connections"][pool_key] = {
         "name": friendly,
         "command": command,
+        "install_cmd": install_cmd,  # parsed argv — avoids shlex.split() at shapeshift time
         "pid": entry.pid(),
         "started_at": entry.started_at,
         "tools": tool_names,
