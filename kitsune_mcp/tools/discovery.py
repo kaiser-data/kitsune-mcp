@@ -18,8 +18,23 @@ from kitsune_mcp.credentials import (
 )
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import _ping
+from kitsune_mcp.transport import _ping, _process_pool
 from kitsune_mcp.utils import _estimate_tokens, _rss_mb
+
+
+def _kill_probe(pool_key: str) -> None:
+    """Kill and evict a probe process immediately after use.
+
+    Probe processes are one-shot (list_tools only) — keeping them alive wastes
+    200-300 MB each. We kill synchronously; the OS reclaims the child on next
+    event-loop tick.
+    """
+    entry = _process_pool.pop(pool_key, None)
+    if entry is not None:
+        try:
+            entry.proc.kill()
+        except Exception:
+            pass
 
 
 async def _compare_probe(srv, allow_low_trust: bool) -> dict:
@@ -67,14 +82,14 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
             # Empty tools list without exception — endpoint reachable but auth
             # or config issue we can't diagnose from here.
             if srv.source == "smithery":
-                row["status"] = "smithery: server not in account?"
+                row["status"] = "reachable — no tools returned (check account)"
                 row["action"] = f'inspect("{srv.id}")  # diagnose smithery setup'
             else:
-                row["status"] = "http probe empty"
+                row["status"] = "HTTP-only (no tools via probe)"
                 row["action"] = f'inspect("{srv.id}")  # diagnose'
         except Exception as e:
             last_err = _state._humanize_probe_error(str(e))
-            row["status"] = f"http: {last_err}"
+            row["status"] = f"unreachable: {last_err}"
             row["action"] = f'inspect("{srv.id}")  # see full error'
 
     # 3. Stdio probe via install_cmd — gated by trust unless overridden.
@@ -82,12 +97,14 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
         allow_probe, gate_reason = _state._probe_trust_ok(srv)
         if allow_probe or allow_low_trust:
             try:
+                _probe_transport = _state.PersistentStdioTransport(
+                    srv.install_cmd, probe_env=_state._probe_env(srv)
+                )
                 tools = await asyncio.wait_for(
-                    _state.PersistentStdioTransport(
-                        srv.install_cmd, probe_env=_state._probe_env(srv)
-                    ).list_tools(),
+                    _probe_transport.list_tools(),
                     timeout=TIMEOUT_STDIO_INIT,
                 )
+                _kill_probe(_probe_transport._pool_key)
                 if tools:
                     row["tools"] = len(tools)
                     row["tokens"] = _estimate_tokens(tools)
@@ -214,12 +231,14 @@ async def inspect(server_id: str, probe: bool = False) -> str:
                     transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
                 )
             else:
+                _probe_t = _state.PersistentStdioTransport(
+                    srv.install_cmd, probe_env=_state._probe_env(srv)
+                )
                 live_tools = await asyncio.wait_for(
-                    _state.PersistentStdioTransport(
-                        srv.install_cmd, probe_env=_state._probe_env(srv)
-                    ).list_tools(),
+                    _probe_t.list_tools(),
                     timeout=TIMEOUT_STDIO_INIT,
                 )
+                _kill_probe(_probe_t._pool_key)
             if live_tools:
                 tools = live_tools
                 live_source = True
@@ -307,8 +326,8 @@ async def compare(query: str, limit: int = 6, probe: bool = False) -> str:
     lines.append(header)
     lines.append("-" * 84)
     for r in rows:
-        tokens_s = f"{r['tokens']:,}" if r["tokens"] is not None else "?"
-        tools_s = str(r["tools"]) if r["tools"] is not None else "?"
+        tokens_s = f"{r['tokens']:,}" if r["tokens"] is not None else "—"
+        tools_s = str(r["tools"]) if r["tools"] is not None else "—"
         src = r["source"][:11]
         status = r["status"][:24]
         lines.append(f"{tokens_s:>9}  {tools_s:>5}  {src:<11}  {status:<24}  {r['id']}")

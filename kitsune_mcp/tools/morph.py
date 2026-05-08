@@ -140,11 +140,13 @@ async def shapeshift(
     tools: list[str] | None = None,
     confirm: bool = False,
     source: str = "auto",
+    server_args: list[str] | None = None,
 ) -> str:
     """Shapeshift into a server's form. The fox takes on the server's shape — its tools become available natively in the session.
 
     source: "auto" (default) | "local" (force npx/uvx install) | "smithery" (force HTTP via Smithery) | "official" (official/mcpregistry only)
     tools: load only specific tools instead of everything
+    server_args: extra CLI arguments appended to the install command (e.g. ["/private/tmp"] for server-filesystem)
     confirm: proceed with community (npm/pypi/github) sources after reviewing
     KITSUNE_TRUST=community env var skips the community trust gate globally
     """
@@ -234,7 +236,7 @@ async def shapeshift(
         )
 
     if source == "local" and not confirm and not _trust_override:
-        install_cmd = srv.install_cmd or _state._infer_install_cmd(server_id)
+        install_cmd = (srv.install_cmd or _state._infer_install_cmd(server_id)) + (server_args or [])
         return (
             f"⚠️  source='local' will run: {' '.join(install_cmd)}\n\n"
             f"This downloads and executes the package locally.\n"
@@ -291,7 +293,7 @@ async def shapeshift(
             session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
 
         if srv.transport == "stdio":
-            cmd = srv.install_cmd or ["npx", "-y", server_id]
+            cmd = (srv.install_cmd or ["npx", "-y", server_id]) + (server_args or [])
             # PersistentStdioTransport keeps the process alive for subsequent tool calls
             transport = _state.PersistentStdioTransport(cmd)
             pool_key: str | None = json.dumps(cmd, sort_keys=True)

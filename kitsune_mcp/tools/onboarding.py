@@ -175,16 +175,20 @@ async def auto(
         else:
             server_id, server_name, credentials = server_hint, server_hint, {}
     else:
-        candidates = list(await _state._registry.search(task, limit=3))
+        candidates = list(await _state._registry.search(task, limit=5))
         if not candidates:
             return f"No servers found for '{task}'. Use search() or provide server_hint."
-        # Pick the first candidate whose creds we can satisfy. If none, fall
-        # through to the first overall — call() will surface the missing-cred
-        # message which the agent can act on.
-        chosen = next(
-            (s for s in candidates if not _state._resolve_config(s.credentials, {})[1]),
-            candidates[0],
-        )
+        # Rank candidates: prefer local (stdio + no missing creds) over Smithery HTTP.
+        # This avoids routing to a Smithery server when a free local alternative exists.
+        def _candidate_rank(s) -> tuple:
+            _, missing = _state._resolve_config(s.credentials, {})
+            has_missing = bool(missing)
+            is_smithery_http = s.source == "smithery" and s.transport == "http"
+            is_official = s.source in ("official", "mcpregistry")
+            # Lower tuple = higher priority
+            return (has_missing, is_smithery_http, not is_official)
+        candidates.sort(key=_candidate_rank)
+        chosen = candidates[0]
         server_id, server_name, credentials = chosen.id, chosen.name, chosen.credentials
         # Remove the chosen one from the fallback queue
         candidates = [s for s in candidates if s.id != chosen.id]

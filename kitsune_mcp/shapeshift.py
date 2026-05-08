@@ -1,4 +1,5 @@
 import inspect as _inspect
+import os
 import re
 from collections.abc import Callable
 
@@ -62,6 +63,15 @@ def _make_proxy(
         # rare. Drop None-valued kwargs so the inner server applies its own
         # defaults instead of seeing a poison value.
         cleaned = {k: v for k, v in kwargs.items() if v is not None}
+        # Resolve symlinks on path-typed arguments before forwarding. Many stdio
+        # servers call realpath() on their allowed-dir list at startup but do NOT
+        # resolve incoming request paths — causing /tmp → /private/tmp mismatches
+        # on macOS. Normalising here makes the comparison succeed on both sides.
+        for k, v in list(cleaned.items()):
+            if isinstance(v, str) and "path" in k.lower():
+                resolved = os.path.realpath(v)
+                if resolved != v and os.path.exists(resolved):
+                    cleaned[k] = resolved
         return await transport.execute(original_name, cleaned, config)
 
     proxy_fn.__name__ = fn_name

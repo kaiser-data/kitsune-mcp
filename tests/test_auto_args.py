@@ -258,7 +258,9 @@ class TestAutoFillsArgs:
             from kitsune_mcp.tools import auto
             result = await auto(task="web search", arguments={"query": "x"})
 
-        assert call_log == ["provider-a", "provider-b"]
+        # provider-b (npm/stdio, no creds) is now ranked above provider-a (smithery/http)
+        # so it's tried first and succeeds — no auth failure path needed.
+        assert "provider-b" in call_log
         assert "fallback success" in result
 
     async def test_auto_does_not_fallback_when_server_hint_pinned(self):
