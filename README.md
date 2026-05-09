@@ -17,17 +17,16 @@
 
 ---
 
-## What's new in v0.9.0
+## What's new in v0.12.0
 
-Friction-reduction release focused on first-run onboarding, credential visibility, and agent workflows.
+Security, reliability, and quality-of-life release.
 
-- **`search()` shows credential status per result** — `✅ ready` or `✗ needs BRAVE_API_KEY` inline, so you know before you shapeshift
-- **`shapeshift(server_id, source="local", confirm=True)`** — force a local `npx`/`uvx` install without a Smithery key; `source="smithery"` forces HTTP; `source="official"` requires a verified registry listing
-- **`shiftback(uninstall=True)`** — optionally removes the locally installed package (uvx fully removed via `uv tool uninstall`; npx cache clears automatically)
-- **`KITSUNE_TRUST=community`** env var — skip the `confirm=True` gate permanently for trusted users and agents; set once via `key("KITSUNE_TRUST", "community")`
-- **First-run onboarding in `status()`** — clean sessions now show a 5-step getting-started guide with an example flow
-- **Lean-mounting hint** — after a heavy `shapeshift()` the output suggests `tools=[...]` with a concrete tool name and token cost
-- **Registry failure reporting** — `search()` now shows `⚠️ Skipped: <name> (timeout)` when one registry is slow, so you know results are partial instead of silently incomplete
+- **SSRF protection** — `fetch()` and `craft()` now block requests to private/loopback addresses (127.x, 10.x, 192.168.x, 169.254.x, localhost), consistent with `skill()`. Set `KITSUNE_ALLOW_LOCAL_FETCH=1` to allow local URLs in dev environments.
+- **Parameter aliasing** — `from_timezone` is automatically remapped to `source_timezone`, `to` to `target`, `src`/`dst`/`dest` to `source`/`target`, and language variants. Works transparently for any server with non-intuitive param names (e.g. `mcp-server-time`). Closes #9.
+- **Session persistence** — `crafted_tools` and named `connect()` sessions survive server restarts. State is written to `~/.kitsune/state.json` on exit and restored on startup. Crafted tools are re-registered automatically.
+- **Registration failures surface** — if `mcp.add_tool()` throws during `shapeshift()`, the error is now shown inline (`⚠️ N tool(s) failed to register`) instead of being silently swallowed.
+- **`auto()` prefers free stdio over Smithery HTTP** — `mcp-server-time` (official, local, free) beats a Smithery HTTP equivalent when both match a query.
+- **MCP Registry backfill** — all versions back to v0.9.0 are now listed in the MCP Registry (previously silently failing due to an OIDC change in the publisher tool).
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list plus internal refactors and bug fixes.
 
