@@ -8,7 +8,7 @@ All logic lives in the kitsune_mcp package. This file:
 
 KITSUNE_TOOLS env var controls which tools are registered:
   (not set)  — lean profile: shapeshift, shiftback, search, inspect, compare,
-                              call, auto, key, status  (~650 tokens overhead)
+                              call, auto, key, status, onboard  (~650 tokens overhead)
   KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~1700 tokens)
   KITSUNE_TOOLS=shapeshift,shiftback — exactly those tools
 """
@@ -129,7 +129,7 @@ from kitsune_mcp.utils import (  # noqa: E402, F401
 # ── Tool profile selection ────────────────────────────────────────────────────
 # All tools registered above via @mcp.tool(). Prune to the requested profile.
 
-_LEAN_TOOLS = {"shapeshift", "shiftback", "search", "inspect", "compare", "key", "status", "call", "auto"}
+_LEAN_TOOLS = {"shapeshift", "shiftback", "search", "inspect", "compare", "key", "status", "call", "auto", "onboard"}
 _KITSUNE_TOOLS_ENV = os.getenv("KITSUNE_TOOLS", "")
 
 if _KITSUNE_TOOLS_ENV.lower() == "all":

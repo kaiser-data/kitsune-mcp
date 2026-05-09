@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.15.0] — 2026-05-09
+
+### Fixed — `auto()` arg inference and routing (continued from v0.14.0)
+
+- **Issue #1 fixed — optional search params now filled.** Many Smithery servers declare all params as optional (`required=[]`) but still reject calls without the primary query argument. `_infer_args_from_task` now fills the first `SEARCH_PARAM_NAMES` property (`query`, `q`, `text`, etc.) even when `required` is empty, preventing `query=undefined` errors on `web_search_exa` and similar tools.
+- **Issue #3 continued — `"current"` context queries blocked.** Added `"current"`, `"latest"`, `"today"`, `"now"` to `_NL_STARTERS` so `auto("current time in Berlin")` returns `{}` for `timezone` instead of forwarding the full phrase.
+- **Path params protected.** New Rule 2a: `path`/`file`/`directory` params are never filled unless the task string looks like a filesystem path (`/…`, `~/…`, `./…`). Prevents `auto("web search for X")` from routing to `mcp-server-git` and calling `search_files(path="web search for X")`.
+- **Issue #4 fully fixed — `onboard()` added to lean profile.** `onboard` is now in `_LEAN_TOOLS` so the `auto("onboard") → "call it directly → onboard()"` redirect actually works. Also distinguishes lean vs forge tool names in the redirect message.
+
+### Testing
+- Updated `test_auto_args.py` and `test_tool_surface.py` to reflect new behavior.
+- Total: **481 tests** (was 480).
+
+---
+
 ## [0.14.0] — 2026-05-09
 
 ### Fixed — `auto()` routing

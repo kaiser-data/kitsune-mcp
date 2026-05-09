@@ -145,16 +145,21 @@ async def auto(
     # Guard: built-in Kitsune tool names must be called directly, not routed
     # to an external MCP server. auto("onboard") would otherwise search the
     # registry for a server named "onboard" and fail confusingly.
-    _KITSUNE_BUILTINS: frozenset[str] = frozenset({
-        "auto", "bench", "call", "compare", "connect", "craft",
-        "fetch", "inspect", "key", "onboard", "release", "run",
-        "search", "setup", "shapeshift", "shiftback", "skill",
-        "status", "test",
+    # Core lean-profile tools always available; forge extras only with KITSUNE_TOOLS=all
+    _KITSUNE_LEAN: frozenset[str] = frozenset({
+        "auto", "call", "compare", "inspect", "key", "onboard",
+        "search", "shapeshift", "shiftback", "status",
     })
+    _KITSUNE_FORGE: frozenset[str] = frozenset({
+        "bench", "connect", "craft", "fetch", "release", "run",
+        "setup", "skill", "test",
+    })
+    _KITSUNE_BUILTINS = _KITSUNE_LEAN | _KITSUNE_FORGE
     task_stripped = task.strip().lower()
     if task_stripped in _KITSUNE_BUILTINS:
+        note = "" if task_stripped in _KITSUNE_LEAN else " (forge profile — set KITSUNE_TOOLS=all)"
         return (
-            f"'{task}' is a built-in Kitsune tool — call it directly.\n"
+            f"'{task}' is a built-in Kitsune tool — call it directly{note}.\n"
             f"Example: {task_stripped}()"
         )
 
@@ -348,8 +353,8 @@ _SEARCH_PARAM_NAMES: frozenset[str] = frozenset({
 
 # Structured params whose value is a code/identifier (timezone name, currency
 # code, language tag, etc.) — must NOT receive a full NL sentence verbatim.
-# Only used by Rule 2 in _infer_args_from_task when the task starts with a
-# NL question word.
+# Used by Rule 2 in _infer_args_from_task when the task starts with a
+# NL question/context word.
 _STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset({
     "timezone", "time_zone", "source_timezone", "target_timezone",
     "from_timezone", "to_timezone",
@@ -361,12 +366,22 @@ _STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset({
     "format", "mode", "type", "encoding",
 })
 
-# Words that signal the task is a natural-language question rather than a bare
+# Path-like params that must receive a filesystem path value. If the task
+# doesn't look like a path, these params are never filled — a bare task like
+# "web search for X" must not become path="/Users/.../web search for X".
+_PATH_PARAM_NAMES: frozenset[str] = frozenset({
+    "path", "file", "directory", "dir", "filename", "filepath",
+    "folder", "root", "base_path", "target_path", "source_path",
+})
+
+# Words that signal the task is a natural-language phrase rather than a bare
 # value. Used only when the matched param is in _STRUCTURED_PARAM_NAMES.
 _NL_STARTERS: frozenset[str] = frozenset({
     "what", "whats", "when", "where", "who", "how", "why",
     "tell", "show", "find", "is", "are", "does", "can", "could",
     "give", "get", "list", "fetch", "check",
+    # Context/state queries — "current time", "current weather", "latest price"
+    "current", "latest", "today", "now", "todays",
 })
 
 # Stop-words stripped from NL tasks before they're passed to registry search.
@@ -420,8 +435,21 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     required = set(schema.get("required") or [])
     string_required = [p for p in required if props.get(p, {}).get("type") == "string"]
 
-    # Rule 0 — ambiguous multi-string schema
-    if len(string_required) != 1:
+    # Rule 0a — ambiguous multi-string schema: can't know which to fill
+    if len(string_required) > 1:
+        return {}
+
+    # Rule 0b — no required string params: check for optional search-like params.
+    # Many Smithery servers declare all params as optional (required=[]) but
+    # still reject calls without the primary query param. Fill the first
+    # SEARCH_PARAM_NAMES match found in the properties.
+    if len(string_required) == 0:
+        optional_search = [
+            p for p in props
+            if p in _SEARCH_PARAM_NAMES and props[p].get("type") == "string"
+        ]
+        if optional_search:
+            return {optional_search[0]: task}
         return {}
 
     pname = string_required[0]
@@ -430,7 +458,14 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     if pname in _SEARCH_PARAM_NAMES:
         return {pname: task}
 
-    # Rule 2 — structured param + NL question: refuse to forward verbatim
+    # Rule 2a — path param: only fill if task looks like an actual filesystem path
+    if pname in _PATH_PARAM_NAMES:
+        stripped = task.strip()
+        if stripped.startswith(("/", "~", "./", "../")) or (len(stripped) > 1 and stripped[1] == ":"):
+            return {pname: stripped}
+        return {}
+
+    # Rule 2b — structured param + NL context phrase: refuse to forward verbatim
     first_word = task.split()[0].lower() if task.split() else ""
     if pname in _STRUCTURED_PARAM_NAMES and first_word in _NL_STARTERS:
         return {}

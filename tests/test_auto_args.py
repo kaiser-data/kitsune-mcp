@@ -83,11 +83,25 @@ class TestInferArgsFromTask:
         }
         assert self._fn()(schema, "convert this") == {}
 
-    def test_returns_empty_when_no_required(self):
+    def test_fills_optional_search_param_when_no_required(self):
+        # Many Smithery servers declare all params optional (required=[]) but
+        # still fail without a query. Rule 0b: fill optional SEARCH_PARAM_NAMES
+        # params so calls succeed instead of sending empty args.
         schema = {
             "inputSchema": {
                 "type": "object",
                 "properties": {"q": {"type": "string"}},
+                "required": [],
+            },
+        }
+        assert self._fn()(schema, "anything") == {"q": "anything"}
+
+    def test_returns_empty_when_no_required_and_no_search_param(self):
+        # When no required params and no SEARCH_PARAM_NAMES props, return {}
+        schema = {
+            "inputSchema": {
+                "type": "object",
+                "properties": {"objective": {"type": "string"}},
                 "required": [],
             },
         }

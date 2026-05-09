@@ -70,7 +70,8 @@ LEAN_REQUIRED = {
 # Tools that must NOT appear in lean (forge-only)
 FORGE_ONLY = {
     "run", "fetch", "craft", "connect", "release",
-    "test", "bench", "setup", "onboard",
+    "test", "bench", "setup",
+    # onboard moved to lean (v0.14.0) — users need first-run wizard without KITSUNE_TOOLS=all
 }
 
 ALL_TOOLS = LEAN_REQUIRED | FORGE_ONLY
@@ -118,7 +119,7 @@ def test_lean_tools_documented_count():
     """Lean profile size is documented in server.py header — catch silent drift."""
     from server import _LEAN_TOOLS
     # If this changes, update the server.py docstring and this assertion together.
-    assert len(_LEAN_TOOLS) == 9, (
+    assert len(_LEAN_TOOLS) == 10, (
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
     )
