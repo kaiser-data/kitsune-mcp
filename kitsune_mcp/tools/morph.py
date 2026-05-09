@@ -68,6 +68,9 @@ async def _commit_shapeshift(
     session["shapeshift_prompts"] = shapeshift_prompts
     session["current_form"] = server_id
     session["current_form_pool_key"] = pool_key
+    # True only for stdio transports that own a real subprocess; HTTP/SSE servers
+    # have no backing process to kill so shiftback(kill=True) is a no-op for them.
+    session["current_form_has_process"] = pool_key is not None
 
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
@@ -117,7 +120,8 @@ async def _commit_shapeshift(
     if required and required[0] in props:
         p = required[0]
         ptype = props[p].get("type", "string")
-        example_args = {p: _state._EXAMPLE_VALUES.get(ptype, "value")}
+        from kitsune_mcp.tools.onboarding import _PARAM_EXAMPLES
+        example_args = {p: _PARAM_EXAMPLES.get(p, _state._EXAMPLE_VALUES.get(ptype, "value"))}
     lines += ["", f"In this session: call({example_tool!r}, arguments={example_args!r})"]
     lines.append(trust_note)
     if missing_env:
@@ -393,10 +397,13 @@ async def shiftback(ctx: Context, kill: bool = False, uninstall: bool = False) -
     if (kill or uninstall) and form:
         # Use the exact pool key stored at shapeshift() time. If missing (stale session /
         # edge case), do NOT fall back to killing all pool entries — that would terminate
-        # unrelated connect() sessions. Surface a warning instead.
+        # unrelated connect() sessions. HTTP/SSE servers have no backing process and
+        # pool_key is None by design — silently skip rather than surfacing an alarming warning.
         exact_key = session.pop("current_form_pool_key", None)
+        has_process = session.pop("current_form_has_process", None)
         killed = []
-        if not exact_key:
+        if not exact_key and has_process is not False:
+            # Truly unexpected: was a stdio server but lost its pool key
             result_lines.append(
                 "⚠️  Could not identify the backing process (pool key missing) — "
                 "use release() to kill specific connections by name."

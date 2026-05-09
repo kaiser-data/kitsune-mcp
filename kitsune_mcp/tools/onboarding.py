@@ -292,6 +292,13 @@ async def auto(
     # field to fill.
     if not arguments and selected_tool_schema:
         arguments = _infer_args_from_task(selected_tool_schema, task)
+        # When inference correctly returns {} (structured/path param with NL task),
+        # surface a helpful retry message before the inner server emits an opaque
+        # "'timezone' is a required property" validation error.
+        if not arguments:
+            hint = _build_inference_hint(selected_tool_schema, task, server_id, tool_name)
+            if hint:
+                return hint
 
     # Execute with fallback: if the chosen server returns an auth-failure
     # response and the caller didn't pin via server_hint, try the next candidate.
@@ -472,6 +479,72 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
 
     # Rule 3 — single param, task looks like a direct value
     return {pname: task}
+
+
+# Canonical example values for structured param names — shown in retry hints
+# so the caller sees the expected format at a glance (not just a placeholder).
+_PARAM_EXAMPLES: dict[str, str] = {
+    "timezone": "America/New_York", "time_zone": "America/New_York",
+    "source_timezone": "UTC", "target_timezone": "America/New_York",
+    "from_timezone": "UTC", "to_timezone": "America/New_York",
+    "language": "en", "lang": "en", "locale": "en-US",
+    "source_language": "en", "target_language": "es",
+    "currency": "USD", "from_currency": "USD", "to_currency": "EUR",
+    "base_currency": "USD", "target_currency": "EUR",
+    "symbol": "AAPL", "ticker": "AAPL",
+    "city": "London", "country": "US", "region": "Europe",
+    "location": "London", "address": "123 Main St",
+    "format": "json", "mode": "text", "type": "file", "encoding": "utf-8",
+    "path": "/path/to/target", "file": "/path/to/file",
+    "directory": "/path/to/dir", "dir": "/path/to/dir",
+    "filename": "output.txt", "filepath": "/path/to/file",
+    "folder": "/path/to/folder", "url": "https://example.com",
+    "uri": "file:///path/to/resource",
+}
+
+
+def _build_inference_hint(
+    tool_schema: dict, task: str, server_id: str, tool_name: str
+) -> str | None:
+    """Return a helpful retry message when _infer_args_from_task returns {}.
+
+    Returns None when the tool has no required string params (empty args may be
+    valid, or the server will produce its own informative error). Returns a
+    formatted string when at least one required string param exists but couldn't
+    be safely inferred from the task.
+    """
+    schema = tool_schema.get("inputSchema") or {}
+    props = schema.get("properties") or {}
+    required = set(schema.get("required") or [])
+    string_required = [p for p in required if props.get(p, {}).get("type") == "string"]
+
+    if not string_required:
+        return None  # no required string params — tool may work without args
+
+    # Build example argument dict using known-good format placeholders
+    example_args: dict[str, str] = {}
+    param_notes: list[str] = []
+    for pname in string_required:
+        ex = _PARAM_EXAMPLES.get(pname, f"<{pname}>")
+        example_args[pname] = ex
+        if pname in _PATH_PARAM_NAMES:
+            param_notes.append(f"'{pname}' needs a filesystem path (e.g. \"{ex}\")")
+        elif pname in _STRUCTURED_PARAM_NAMES:
+            param_notes.append(f"'{pname}' needs a code/identifier (e.g. \"{ex}\")")
+        else:
+            param_notes.append(f"'{pname}'")
+
+    if len(string_required) > 1:
+        reason = f"tool has multiple required params: {', '.join(string_required)}"
+    else:
+        reason = param_notes[0]
+
+    args_repr = json.dumps(example_args)
+    return "\n".join([
+        f"auto() couldn't infer args from \"{task}\" — {reason}.",
+        "Retry with explicit args:",
+        f'  auto("{task}", server_hint="{server_id}", arguments={args_repr})',
+    ])
 
 
 @mcp.tool()

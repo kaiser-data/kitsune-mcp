@@ -218,3 +218,77 @@ class TestStatusSmitheryLiveness:
         from kitsune_mcp.tools.discovery import status
         result = await status()
         assert "no key" in result or "onboard" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Fix E: _build_inference_hint — Issue #3 UX improvement
+# Structured params that couldn't be inferred return a helpful retry message
+# instead of letting the inner server emit an opaque validation error.
+# ---------------------------------------------------------------------------
+
+class TestBuildInferenceHint:
+    def _make_schema(self, pname: str, ptype: str = "string", required: bool = True) -> dict:
+        schema: dict = {
+            "inputSchema": {
+                "type": "object",
+                "properties": {pname: {"type": ptype}},
+                "required": [pname] if required else [],
+            }
+        }
+        return schema
+
+    def test_timezone_nl_task_returns_hint(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = self._make_schema("timezone")
+        hint = _build_inference_hint(schema, "current time in Tokyo", "mcp-server-time", "get_current_time")
+        assert hint is not None
+        assert "timezone" in hint
+        assert "mcp-server-time" in hint
+        assert "arguments" in hint
+        assert "Retry" in hint
+
+    def test_hint_contains_example_value(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = self._make_schema("timezone")
+        hint = _build_inference_hint(schema, "current time in Tokyo", "mcp-server-time", "get_current_time")
+        assert "America/New_York" in hint  # canonical example from _PARAM_EXAMPLES
+
+    def test_path_param_returns_hint(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = self._make_schema("path")
+        hint = _build_inference_hint(schema, "web search for kitsune fox", "mcp-server-git", "search_files")
+        assert hint is not None
+        assert "path" in hint
+        assert "filesystem path" in hint
+
+    def test_no_required_params_returns_none(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = {"inputSchema": {"type": "object", "properties": {}, "required": []}}
+        assert _build_inference_hint(schema, "get current time", "mcp-server-time", "get_current_time") is None
+
+    def test_optional_only_params_returns_none(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = self._make_schema("timezone", required=False)
+        assert _build_inference_hint(schema, "current time in Tokyo", "mcp-server-time", "get_current_time") is None
+
+    def test_non_string_required_param_returns_none(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = self._make_schema("count", ptype="integer")
+        assert _build_inference_hint(schema, "get 5 results", "some-server", "list_items") is None
+
+    def test_multiple_required_strings_mentions_all(self):
+        from kitsune_mcp.tools.onboarding import _build_inference_hint
+        schema = {
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "target_language": {"type": "string"},
+                },
+                "required": ["text", "target_language"],
+            }
+        }
+        hint = _build_inference_hint(schema, "translate hello to Spanish", "mcp-translator", "translate")
+        assert hint is not None
+        assert "text" in hint
+        assert "target_language" in hint
