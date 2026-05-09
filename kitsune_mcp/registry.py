@@ -86,14 +86,26 @@ class TTLDict(Generic[_K, _T]):  # noqa: UP046
 
 
 def _simple_search(servers: list["ServerInfo"], query: str, limit: int) -> list["ServerInfo"]:
-    """Substring filter across name/description/id — used by registries that lack server-side search."""
+    """Word-based filter across name/description/id.
+
+    Previously used full-string substring matching, which returned zero results
+    for any NL query longer than a single word (e.g. "what time is it in Tokyo"
+    never appeared in any server name, so official/McpRegistry returned nothing
+    and auto() fell through to Smithery-only results). Word-by-word matching
+    means any query word appearing in name/id/description counts as a hit.
+    Words under 3 characters are skipped to avoid false positives from stop-words.
+    """
     if not query:
         return servers[:limit]
-    q = query.lower()
-    return [
-        s for s in servers
-        if q in s.name.lower() or q in s.description.lower() or q in s.id.lower()
-    ][:limit]
+    words = [w for w in re.split(r'\W+', query.lower()) if len(w) >= 3]
+    if not words:
+        return servers[:limit]
+
+    def _hits(s: "ServerInfo") -> bool:
+        text = f"{s.name} {s.id} {s.description}".lower()
+        return any(w in text for w in words)
+
+    return [s for s in servers if _hits(s)][:limit]
 
 
 @dataclass(frozen=True, slots=True)

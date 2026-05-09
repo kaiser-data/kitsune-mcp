@@ -397,15 +397,42 @@ async def status() -> str:
     shapeshifted = session["shapeshift_tools"]
 
     from kitsune_mcp import __version__
+    from kitsune_mcp.credentials import _registry_headers
+    from kitsune_mcp.registry import REGISTRY_BASE
+    from kitsune_mcp.utils import _get_http_client
     lines = [f"KITSUNE MCP  v{__version__}", ""]
 
-    # PROVIDERS section — front and center. Headlines auth state per registry.
+    # PROVIDERS — Smithery key is validated with a live ping so users see
+    # "verified" vs "set but INVALID" rather than just presence/absence.
     smithery_ok = _smithery_available()
+    if smithery_ok:
+        try:
+            _r = await asyncio.wait_for(
+                _get_http_client().get(
+                    f"{REGISTRY_BASE}/servers",
+                    params={"pageSize": 1},
+                    headers=_registry_headers(),
+                ),
+                timeout=3.0,
+            )
+            if _r.status_code == 200:
+                smithery_label = "(SMITHERY_API_KEY set — verified ✓)"
+                smithery_icon = "✓"
+            elif _r.status_code in (401, 403):
+                smithery_label = "(SMITHERY_API_KEY set but INVALID — get a new key at smithery.ai/account/api-keys)"
+                smithery_icon = "⚠️"
+            else:
+                smithery_label = f"(SMITHERY_API_KEY set — unverified, HTTP {_r.status_code})"
+                smithery_icon = "✓"
+        except Exception:
+            smithery_label = "(SMITHERY_API_KEY set — could not verify)"
+            smithery_icon = "✓"
+    else:
+        smithery_label = "(no key — run onboard() for setup)"
+        smithery_icon = "🔑"
+
     lines.append("PROVIDERS")
-    lines.append(
-        f"  {'✓' if smithery_ok else '🔑'}  Smithery"
-        f"  {'(SMITHERY_API_KEY set)' if smithery_ok else '(no key — run onboard() for setup)'}"
-    )
+    lines.append(f"  {smithery_icon}  Smithery  {smithery_label}")
     lines.append("  ✓  Official MCP Registry  (no key required)")
     lines.append("  ✓  npm + PyPI  (no key required)")
     lines.append("  ✓  Glama  (no key required)")

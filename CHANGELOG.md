@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.14.0] — 2026-05-09
+
+### Fixed — `auto()` routing
+
+- **`_simple_search` now does word-by-word matching** instead of full-string substring matching. `search("what time is it in Tokyo")` now returns `mcp-server-time` because "time" appears in its name. Previously only Smithery (server-side full-text) found anything for NL queries; official/McpRegistry/Glama/npm all returned zero results, so `auto()` routed to random Smithery HTTP servers. (Closes issues #2 and #1.)
+- **`auto()` extracts keywords before searching**. Raw NL task `"what time is it in Tokyo"` → search query `"time Tokyo"`. Official registry now surfaces `mcp-server-time` at rank #1. Fallback to raw task if keyword extraction strips everything.
+- **`_infer_args_from_task` refuses to forward NL sentences to structured params.** New rule: if the task starts with a question word (`what`, `how`, `where`, …) AND the required param is a structured identifier (`timezone`, `currency`, `language`, `city`, …), return `{}` instead of forwarding the full sentence verbatim. `get_current_time` no longer receives `timezone: "what time is it in Tokyo"`. (Closes issue #3.)
+- **`_infer_args_from_task` correctly fills search-like and QA params.** `query`, `q`, `text`, `prompt`, `user_question`, etc. are always filled unconditionally — these are payload params that expect free text. Multiple required string params → `{}` (ambiguous; let LLM supply explicit args).
+- **`auto()` guards against built-in Kitsune tool names.** `auto("onboard")` now returns a redirect message instead of searching the registry for an external server named "onboard". (Closes issue #4.)
+- **`status()` verifies Smithery API key liveness.** A 3-second ping to `registry.smithery.ai` distinguishes "key set — verified ✓", "key set but INVALID", and "could not verify". (Closes issue #5.)
+
+### Testing
+- 23 new tests in `tests/test_v014_fixes.py`.
+- Total: **480 tests** (was 457).
+
+---
+
 ## [0.13.0] — 2026-05-09
 
 ### Security

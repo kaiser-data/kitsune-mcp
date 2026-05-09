@@ -142,6 +142,22 @@ async def auto(
     for env_var, value in keys.items():
         _save_to_env(env_var.upper(), str(value))
 
+    # Guard: built-in Kitsune tool names must be called directly, not routed
+    # to an external MCP server. auto("onboard") would otherwise search the
+    # registry for a server named "onboard" and fail confusingly.
+    _KITSUNE_BUILTINS: frozenset[str] = frozenset({
+        "auto", "bench", "call", "compare", "connect", "craft",
+        "fetch", "inspect", "key", "onboard", "release", "run",
+        "search", "setup", "shapeshift", "shiftback", "skill",
+        "status", "test",
+    })
+    task_stripped = task.strip().lower()
+    if task_stripped in _KITSUNE_BUILTINS:
+        return (
+            f"'{task}' is a built-in Kitsune tool — call it directly.\n"
+            f"Example: {task_stripped}()"
+        )
+
     # When the caller pins a server, single-shot. Otherwise search and try
     # candidates in order, skipping ones that are unreachable due to missing
     # creds we can't fill. The user asked for "web search" — they don't care
@@ -154,7 +170,15 @@ async def auto(
         else:
             server_id, server_name, credentials = server_hint, server_hint, {}
     else:
-        candidates = list(await _state._registry.search(task, limit=5))
+        # Extract registry-friendly keywords from a NL task. Raw NL queries like
+        # "what time is it in Tokyo" only match Smithery (server-side full-text
+        # search), leaving official/McpRegistry servers out. Keyword extraction
+        # gives every registry the right signal to find free official servers first.
+        search_query = _search_query_for(task)
+        candidates = list(await _state._registry.search(search_query, limit=5))
+        if not candidates and search_query != task:
+            # Keyword extraction may have over-stripped — fall back to raw task
+            candidates = list(await _state._registry.search(task, limit=5))
         if not candidates:
             return f"No servers found for '{task}'. Use search() or provide server_hint."
         # Rank candidates: prefer local (stdio + no missing creds) over Smithery HTTP.
@@ -314,26 +338,105 @@ async def auto(
     return last_result
 
 
+# Param names that semantically take a free-text query — always safe to fill
+# from the raw task string regardless of how the task is phrased.
+_SEARCH_PARAM_NAMES: frozenset[str] = frozenset({
+    "query", "q", "text", "prompt", "input", "search", "term",
+    "message", "content", "question", "request", "task",
+    "description", "user_question", "user_input", "user_prompt",
+})
+
+# Structured params whose value is a code/identifier (timezone name, currency
+# code, language tag, etc.) — must NOT receive a full NL sentence verbatim.
+# Only used by Rule 2 in _infer_args_from_task when the task starts with a
+# NL question word.
+_STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset({
+    "timezone", "time_zone", "source_timezone", "target_timezone",
+    "from_timezone", "to_timezone",
+    "language", "lang", "locale", "source_language", "target_language",
+    "currency", "symbol", "ticker", "from_currency", "to_currency",
+    "base_currency", "target_currency",
+    "city", "country", "region", "location", "address",
+    "path", "file", "directory", "filename", "url", "uri",
+    "format", "mode", "type", "encoding",
+})
+
+# Words that signal the task is a natural-language question rather than a bare
+# value. Used only when the matched param is in _STRUCTURED_PARAM_NAMES.
+_NL_STARTERS: frozenset[str] = frozenset({
+    "what", "whats", "when", "where", "who", "how", "why",
+    "tell", "show", "find", "is", "are", "does", "can", "could",
+    "give", "get", "list", "fetch", "check",
+})
+
+# Stop-words stripped from NL tasks before they're passed to registry search.
+# Keeping content words (nouns, verbs, place names) while dropping filler gives
+# keyword-quality queries to registries that do substring matching.
+_SEARCH_STOP_WORDS: frozenset[str] = frozenset({
+    "what", "whats", "when", "where", "who", "how", "why",
+    "the", "a", "an", "and", "or", "for", "of", "to", "in",
+    "is", "it", "me", "my", "i", "do", "does", "did",
+    "can", "could", "please", "now", "current", "currently",
+    "latest", "today", "tell", "show", "give", "find", "get",
+    "make", "want", "need", "help", "some", "any",
+})
+
+
+def _search_query_for(task: str) -> str:
+    """Extract registry-friendly keywords from a natural-language task.
+
+    "what time is it in Tokyo" → "time Tokyo"
+    "search for latest AI news" → "news"
+    "get weather Berlin"        → "weather Berlin"
+
+    Words under 3 chars are always dropped (too generic). If no content words
+    remain, fall back to the raw task so search still has something to work with.
+    """
+    words = [
+        w for w in re.split(r'\W+', task)
+        if len(w) >= 3 and w.lower() not in _SEARCH_STOP_WORDS
+    ]
+    return " ".join(words) if words else task
+
+
 def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     """When auto() implicit-selects a tool but caller passed no arguments,
-    infer the primary string param from `task`. Returns {} if no clear winner.
+    infer the primary required string param from `task`. Returns {} when no
+    safe inference is possible — the LLM then retries with explicit args.
 
-    Picks the first required string-typed param whose name matches a search-like
-    convention (`query`, `q`, `text`, `prompt`, `input`). Strict on purpose —
-    we don't fill creative-named params silently; better to surface the
-    schema-validation error and let the agent retry with explicit args.
+    Rules (in order):
+    0. Multiple required string params → ambiguous, return {} (can't know
+       which ones to fill; e.g. translate(text, target_language)).
+    1. Single required param with search-like name (query, q, text, prompt,
+       user_question …) → always fill; this IS the payload the tool expects.
+    2. Single required param in _STRUCTURED_PARAM_NAMES (timezone, currency,
+       lang …) AND the task starts with a NL question word → return {};
+       forwarding "what time is it in Tokyo" as a timezone name always fails.
+    3. Single required param not covered above → fill it (e.g. bare values,
+       QA-style tools with unique param names).
     """
     schema = (tool_schema.get("inputSchema") or {})
     props = schema.get("properties") or {}
     required = set(schema.get("required") or [])
     string_required = [p for p in required if props.get(p, {}).get("type") == "string"]
+
+    # Rule 0 — ambiguous multi-string schema
     if len(string_required) != 1:
         return {}
-    common_query_names = ("query", "q", "text", "prompt", "input", "search", "term")
-    for pname in common_query_names:
-        if pname in required and props.get(pname, {}).get("type") == "string":
-            return {pname: task}
-    return {string_required[0]: task}
+
+    pname = string_required[0]
+
+    # Rule 1 — search-like param: always safe to fill
+    if pname in _SEARCH_PARAM_NAMES:
+        return {pname: task}
+
+    # Rule 2 — structured param + NL question: refuse to forward verbatim
+    first_word = task.split()[0].lower() if task.split() else ""
+    if pname in _STRUCTURED_PARAM_NAMES and first_word in _NL_STARTERS:
+        return {}
+
+    # Rule 3 — single param, task looks like a direct value
+    return {pname: task}
 
 
 @mcp.tool()
