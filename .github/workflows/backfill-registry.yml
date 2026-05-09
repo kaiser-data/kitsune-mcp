@@ -1,0 +1,35 @@
+name: Backfill MCP Registry
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to publish (e.g. v0.9.0)"
+        required: true
+
+jobs:
+  mcp-registry:
+    name: Publish ${{ github.event.inputs.tag }} to MCP Registry
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL -o mcp-publisher.tar.gz \
+            https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/mcp-publisher_linux_amd64.tar.gz
+          tar -xzf mcp-publisher.tar.gz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/mcp-publisher
+          mcp-publisher --version
+
+      - name: Login to MCP Registry (GitHub OIDC)
+        run: mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: mcp-publisher publish
