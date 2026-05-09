@@ -6,17 +6,22 @@ from dotenv import load_dotenv
 
 from kitsune_mcp.constants import CRED_SUFFIXES, TRUST_LOW, TRUST_MEDIUM
 
-# Read at import time (load_dotenv() must be called by entry point first)
-SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
-# Write .env to the user's working directory (same location load_dotenv() reads from).
-ENV_PATH = os.path.join(os.getcwd(), ".env")
+# Canonical persistent key store — used regardless of CWD. When the server is
+# launched as a system daemon (Claude Desktop, no cwd set), CWD can be ~ or /
+# and a project-local .env won't be found. Writing to ~/.kitsune/.env ensures
+# keys survive restarts no matter where the process starts.
+_KITSUNE_HOME = Path.home() / ".kitsune"
+ENV_PATH = str(_KITSUNE_HOME / ".env")
 
-# .env search order — CWD wins (loaded last with override=True)
+# .env search order — ~/.kitsune/.env wins (loaded last with override=True)
 _DOTENV_PATHS = [
-    Path.home() / ".kitsune" / ".env",
     Path.home() / ".env",
-    Path(ENV_PATH),
+    Path(os.path.join(os.getcwd(), ".env")),  # project-local, lower priority
+    _KITSUNE_HOME / ".env",                   # canonical store, always wins
 ]
+
+# Read at import time (server.py must call load_dotenv() before this import)
+SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
 
 # Revision counter — increments whenever any .env file changes on disk.
 # Pool entries store their revision at spawn time; stale entries are evicted
@@ -78,6 +83,7 @@ def _to_env_var(k: str) -> str:
 
 def _save_to_env(env_var: str, value: str) -> None:
     try:
+        _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
         try:
             with open(ENV_PATH) as f:
                 lines = f.readlines()
