@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.13.0] — 2026-05-09
+
+### Security
+- **SSRF via redirect blocked** — `_ssrf_safe_request()` validates each redirect hop against `_is_safe_url()`. `fetch()` and `craft()` endpoint proxies now use it, closing the open-redirect bypass (a public URL redirecting to `169.254.169.254` was previously followed without checks).
+- `_is_safe_url` moved from `onboarding.py` to `utils.py` — canonical, single definition, no circular-import risk.
+
+### Fixed
+- **Probe temp dirs now cleaned up** — `inspect()` wraps the probe subprocess in `try/finally` and calls `shutil.rmtree(tmpdir)` after the probe exits. Previously every `inspect()` call leaked a `kitsune-probe-*` temp dir.
+- **SSE multi-line events** — `_parse_sse()` now collects all `data:` lines per event (separated by blank lines) before parsing, matching RFC 6455. Servers that spread a large JSON response across multiple `data:` lines are now handled correctly.
+- **`datetime.utcnow()` removed** — replaced with `datetime.now(UTC)` in `onboarding.py` (Python 3.12+ deprecation).
+- **PyPI HTML search** — switched from CSS class-name regex (`package-snippet__name`) to stable `/project/<name>/` link extraction. Less fragile across PyPI redesigns.
+
+### Performance
+- **NpmRegistry + PyPIRegistry now cache responses** — 60 s TTL for search, 300 s for `get_server`. Cold `MultiRegistry` calls no longer re-fetch npm/PyPI on every search miss.
+- `MultiRegistry.bust_cache()` propagates the clear to individual registry caches.
+
+### UX
+- **`status()` shows crafted tools** — persistent `crafted_tools` are now listed in the CRAFTED TOOLS section with method + URL, so users know what survived restart.
+- **`MCP_CLIENT_INFO.version` reflects actual package version** — reads from `importlib.metadata` instead of being hardcoded to `"1.0.0"`.
+
+### Testing
+- 28 new tests in `tests/test_audit_fixes.py` covering: SSRF redirect guard, SSE multi-line parsing, probe tmpdir cleanup, `_restore_crafted_tools`, `bench()`, `test()` quality scorer, `run()`, crafted tools in `status()`, PyPI link-based search, NpmRegistry/PyPIRegistry caching.
+- Total: **457 tests** (was 429).
+
+---
+
 ## [0.12.0] — 2026-05-09
 
 ### Security

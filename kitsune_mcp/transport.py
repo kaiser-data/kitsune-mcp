@@ -359,13 +359,25 @@ async def _ensure_smithery_connection(
 
 
 def _parse_sse(text: str) -> dict | None:
-    """Extract the first JSON payload from an SSE response body."""
+    """Extract the JSON payload from an SSE response body.
+
+    SSE events may spread a single JSON value across multiple `data:` lines.
+    RFC 6455 says concatenate them with newlines before parsing. We collect
+    all data lines per event (blank line = event boundary) and try each.
+    """
+    events: list[list[str]] = [[]]
     for line in text.splitlines():
-        if line.startswith("data:"):
-            try:
-                return json.loads(line[5:].strip())
-            except json.JSONDecodeError:
-                pass
+        if line == "":
+            events.append([])
+        elif line.startswith("data:"):
+            events[-1].append(line[5:].strip())
+    for parts in events:
+        if not parts:
+            continue
+        try:
+            return json.loads("\n".join(parts))
+        except json.JSONDecodeError:
+            pass
     return None
 
 

@@ -21,6 +21,8 @@ from kitsune_mcp.transport import BaseTransport
 from kitsune_mcp.utils import (
     _estimate_tokens,
     _get_http_client,
+    _is_safe_url,
+    _ssrf_safe_request,
     _strip_html,
     _truncate,
     _try_axonmcp,
@@ -101,7 +103,6 @@ async def fetch(url: str, intent: str = "") -> str:
     """Fetch a URL and return compressed content (~500 tokens vs ~25K raw HTML)."""
     raw_estimate = 6000  # typical webpage token count before compression
 
-    from kitsune_mcp.tools.onboarding import _is_safe_url
     if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
         return (
             f"Blocked: '{url}' resolves to a private/loopback address. "
@@ -114,10 +115,11 @@ async def fetch(url: str, intent: str = "") -> str:
         session["stats"]["tokens_saved_browse"] += saved
         return axon_result
 
-    # Fallback: httpx + HTML stripping
+    # Fallback: httpx + HTML stripping. _ssrf_safe_request validates each
+    # redirect hop — blocks SSRF via open redirects on trusted public domains.
     try:
-        r = await _get_http_client().get(
-            url, timeout=TIMEOUT_FETCH_URL, headers={"User-Agent": "Mozilla/5.0"}
+        r = await _ssrf_safe_request(
+            "GET", url, headers={"User-Agent": "Mozilla/5.0"}, timeout=TIMEOUT_FETCH_URL
         )
         r.raise_for_status()
         text = r.text

@@ -2,11 +2,9 @@
 
 import asyncio
 import contextlib
-import ipaddress
 import json
 import re
-from datetime import datetime
-from urllib.parse import urlparse
+from datetime import datetime, UTC
 
 import httpx
 
@@ -26,26 +24,7 @@ from kitsune_mcp.registry import REGISTRY_BASE
 from kitsune_mcp.session import _save_skills, session
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport
-from kitsune_mcp.utils import _get_http_client
-
-
-def _is_safe_url(url: str) -> bool:
-    """Return True only for public HTTPS URLs — blocks SSRF to private/loopback addresses."""
-    try:
-        p = urlparse(url)
-        if p.scheme != "https":
-            return False
-        host = p.hostname or ""
-        if not host or host == "localhost":
-            return False
-        try:
-            addr = ipaddress.ip_address(host)
-            return addr.is_global
-        except ValueError:
-            pass  # hostname, not a bare IP — allow it
-        return True
-    except Exception:
-        return False
+from kitsune_mcp.utils import _get_http_client, _is_safe_url
 
 
 @mcp.tool()
@@ -123,7 +102,7 @@ async def skill(qualified_name: str, forget: bool = False) -> str:
         "name": skill_name,
         "content": content,
         "tokens": token_estimate,
-        "installed_at": datetime.utcnow().isoformat(),
+        "installed_at": datetime.now(UTC).isoformat(),
     }
     _save_skills()
 

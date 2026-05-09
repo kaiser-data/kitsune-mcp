@@ -26,7 +26,7 @@ from kitsune_mcp.session import session
 from kitsune_mcp.shapeshift import _json_type_to_py
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport, _process_pool
-from kitsune_mcp.utils import _estimate_tokens, _get_http_client
+from kitsune_mcp.utils import _estimate_tokens, _get_http_client, _is_safe_url, _ssrf_safe_request
 
 
 async def _commit_shapeshift(
@@ -457,7 +457,6 @@ async def craft(
         return "name must be alphanumeric (underscores allowed)."
     if not url.startswith(("http://", "https://")):
         return "url must start with http:// or https://"
-    from kitsune_mcp.tools.onboarding import _is_safe_url
     if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
         return (
             f"Blocked: '{url}' is a private/loopback address. "
@@ -480,11 +479,12 @@ async def craft(
 
     async def _endpoint_proxy(**kwargs) -> str:
         try:
-            client = _get_http_client()
+            # _ssrf_safe_request validates each redirect hop to block SSRF via
+            # open redirects on otherwise-trusted public hosts.
             if _method == "GET":
-                r = await client.get(_url, params=kwargs, headers=_headers, timeout=30.0)
+                r = await _ssrf_safe_request("GET", _url, params=kwargs, headers=_headers, timeout=30.0)
             else:
-                r = await client.request(_method, _url, json=kwargs, headers=_headers, timeout=30.0)
+                r = await _ssrf_safe_request(_method, _url, json_body=kwargs, headers=_headers, timeout=30.0)
             r.raise_for_status()
             return r.text
         except httpx.HTTPStatusError as e:

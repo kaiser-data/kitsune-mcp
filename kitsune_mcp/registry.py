@@ -204,7 +204,16 @@ class SmitheryRegistry(BaseRegistry):
 class NpmRegistry(BaseRegistry):
     """Search npm for MCP server packages — no auth required."""
 
+    def __init__(self):
+        self._search_cache: TTLDict = TTLDict(60.0)   # 1-min — search results shift quickly
+        self._server_cache: TTLDict = TTLDict(300.0)  # 5-min — package metadata is stable
+
     async def search(self, query: str, limit: int) -> list:
+        cache_key = (query, limit)
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             r = await _get_http_client().get(
                 "https://registry.npmjs.org/-/v1/search",
@@ -240,9 +249,14 @@ class NpmRegistry(BaseRegistry):
             ))
             if len(results) >= limit:
                 break
+        self._search_cache.set(cache_key, results)
         return results
 
     async def get_server(self, id: str):
+        cached = self._server_cache.get(id)
+        if cached is not None:
+            return cached
+
         try:
             r = await _get_http_client().get(
                 f"https://registry.npmjs.org/{id}",
@@ -256,7 +270,7 @@ class NpmRegistry(BaseRegistry):
         latest = pkg.get("dist-tags", {}).get("latest", "")
         version_data = pkg.get("versions", {}).get(latest, {})
         desc = (version_data.get("description") or pkg.get("description") or "").strip()
-        return ServerInfo(
+        result = ServerInfo(
             id=id,
             name=id,
             description=desc,
@@ -268,12 +282,23 @@ class NpmRegistry(BaseRegistry):
             tools=[],
             token_cost=0,
         )
+        self._server_cache.set(id, result)
+        return result
 
 
 class PyPIRegistry(BaseRegistry):
     """Search PyPI for MCP server packages (installed via uvx)."""
 
+    def __init__(self):
+        self._search_cache: TTLDict = TTLDict(60.0)
+        self._server_cache: TTLDict = TTLDict(300.0)
+
     async def search(self, query: str, limit: int) -> list:
+        cache_key = (query, limit)
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             r = await _get_http_client().get(
                 "https://pypi.org/search/",
@@ -282,21 +307,18 @@ class PyPIRegistry(BaseRegistry):
                 timeout=TIMEOUT_FETCH_URL,
             )
             r.raise_for_status()
-            names = re.findall(r'class="package-snippet__name"[^>]*>\s*([^<\s][^<]*?)\s*<', r.text)
-            descs = re.findall(r'class="package-snippet__description"[^>]*>\s*([^<]*?)\s*<', r.text)
+            # Extract package slugs from stable /project/<name>/ links rather
+            # than CSS class names (package-snippet__name) which change with
+            # PyPI redesigns.
+            names = list(dict.fromkeys(re.findall(r'href="/project/([^/"]+)/"', r.text)))
         except Exception:
             return []
 
-        results = []
-        for i, name in enumerate(names[:limit]):
-            name = name.strip()
-            if not name:
-                continue
-            desc = descs[i].strip() if i < len(descs) else ""
-            results.append(ServerInfo(
+        results = [
+            ServerInfo(
                 id=name,
                 name=name,
-                description=desc[:MAX_EXPLORE_DESC],
+                description="",
                 source="pypi",
                 transport="stdio",
                 url="",
@@ -304,10 +326,17 @@ class PyPIRegistry(BaseRegistry):
                 credentials={},
                 tools=[],
                 token_cost=0,
-            ))
+            )
+            for name in names[:limit]
+        ]
+        self._search_cache.set(cache_key, results)
         return results
 
     async def get_server(self, id: str):
+        cached = self._server_cache.get(id)
+        if cached is not None:
+            return cached
+
         try:
             r = await _get_http_client().get(
                 f"https://pypi.org/pypi/{id}/json",
@@ -320,7 +349,7 @@ class PyPIRegistry(BaseRegistry):
 
         info = data.get("info", {})
         desc = (info.get("summary") or "").strip()
-        return ServerInfo(
+        result = ServerInfo(
             id=id,
             name=id,
             description=desc,
@@ -332,6 +361,8 @@ class PyPIRegistry(BaseRegistry):
             tools=[],
             token_cost=0,
         )
+        self._server_cache.set(id, result)
+        return result
 
 
 async def _detect_github_install_cmd(owner: str, repo: str) -> list[str]:
@@ -445,8 +476,17 @@ class MultiRegistry(BaseRegistry):
         if server_id is None:
             self._server_cache.clear()
             self._search_cache.clear()
+            # Also clear individual registry caches so get_server() re-fetches
+            for reg in self._registries:
+                if hasattr(reg, "_server_cache"):
+                    reg._server_cache.clear()
+                if hasattr(reg, "_search_cache"):
+                    reg._search_cache.clear()
         else:
             self._server_cache.clear_where(lambda k: k[0] == server_id)
+            for reg in self._registries:
+                if hasattr(reg, "_server_cache"):
+                    reg._server_cache.clear(server_id)
 
     async def search(self, query: str, limit: int) -> list:
         cache_key = (query, limit)

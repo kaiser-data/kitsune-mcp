@@ -1,9 +1,12 @@
 import asyncio
+import ipaddress
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
+from urllib.parse import urlparse
 
 import httpx
 
@@ -29,6 +32,71 @@ def _get_http_client() -> httpx.AsyncClient:
     if _http_client is None or _http_client.is_closed:
         _http_client = httpx.AsyncClient(follow_redirects=True)
     return _http_client
+
+
+def _is_safe_url(url: str) -> bool:
+    """Return True only for public HTTPS URLs — blocks SSRF to private/loopback addresses."""
+    try:
+        p = urlparse(url)
+        if p.scheme != "https":
+            return False
+        host = p.hostname or ""
+        if not host or host == "localhost":
+            return False
+        try:
+            addr = ipaddress.ip_address(host)
+            return addr.is_global
+        except ValueError:
+            pass  # hostname, not a bare IP — allow it
+        return True
+    except Exception:
+        return False
+
+
+async def _ssrf_safe_request(
+    method: str,
+    url: str,
+    *,
+    params=None,
+    json_body=None,
+    headers: dict | None = None,
+    timeout: float = 30.0,
+) -> httpx.Response:
+    """HTTP request that validates every redirect hop against _is_safe_url.
+
+    Raises ValueError if any redirect target is a private/loopback address,
+    unless KITSUNE_ALLOW_LOCAL_FETCH=1 is set. Handles POST→GET method
+    downgrade on 301/302/303 per RFC 9110.
+    """
+    client = _get_http_client()
+    kw: dict = {"headers": headers or {}, "timeout": timeout}
+    if params is not None:
+        kw["params"] = params
+    if json_body is not None:
+        kw["content"] = json.dumps(json_body).encode()
+        kw["headers"] = {**kw["headers"], "Content-Type": "application/json"}
+
+    for _ in range(10):
+        r = await client.request(method, url, follow_redirects=False, **kw)
+        if not r.is_redirect:
+            return r
+        next_req = r.next_request
+        if next_req is None:
+            return r
+        next_url = str(next_req.url)
+        if not _is_safe_url(next_url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+            raise ValueError(
+                f"Blocked: redirect to '{next_url}' resolves to a private/loopback address. "
+                "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
+            )
+        url = next_url
+        # RFC 9110: 301/302/303 downgrades non-GET to GET
+        if r.status_code in (301, 302, 303) and method.upper() in ("POST", "PUT", "PATCH"):
+            method = "GET"
+            kw.pop("content", None)
+            kw["headers"] = {k: v for k, v in kw["headers"].items() if k != "Content-Type"}
+
+    raise ValueError("SSRF guard: exceeded 10 redirects")
 
 
 def _estimate_tokens(text) -> int:

@@ -98,7 +98,7 @@ def _restore_crafted_tools() -> None:
     import httpx as _httpx
     from kitsune_mcp.app import mcp as _mcp
     from kitsune_mcp.shapeshift import _json_type_to_py
-    from kitsune_mcp.utils import _get_http_client
+    from kitsune_mcp.utils import _ssrf_safe_request
 
     def _build_proxy(name: str, url: str, method: str, description: str, params: dict):
         py_params = []
@@ -113,11 +113,10 @@ def _restore_crafted_tools() -> None:
 
         async def _endpoint_proxy(**kwargs) -> str:
             try:
-                client = _get_http_client()
                 if _m == "GET":
-                    r = await client.get(_u, params=kwargs, timeout=30.0)
+                    r = await _ssrf_safe_request("GET", _u, params=kwargs, timeout=30.0)
                 else:
-                    r = await client.request(_m, _u, json=kwargs, timeout=30.0)
+                    r = await _ssrf_safe_request(_m, _u, json_body=kwargs, timeout=30.0)
                 r.raise_for_status()
                 return r.text
             except _httpx.HTTPStatusError as e:

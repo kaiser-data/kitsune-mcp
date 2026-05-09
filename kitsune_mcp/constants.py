@@ -1,5 +1,12 @@
 MCP_PROTOCOL_VERSION = "2024-11-05"
-MCP_CLIENT_INFO = {"name": "kitsune", "version": "1.0.0"}
+try:
+    import importlib.metadata as _meta
+    _pkg_version = _meta.version("kitsune-mcp")
+    del _meta
+except Exception:
+    _pkg_version = "0.0.0"
+MCP_CLIENT_INFO = {"name": "kitsune", "version": _pkg_version}
+del _pkg_version
 
 TIMEOUT_STDIO_INIT    = 60.0
 TIMEOUT_STDIO_TOOL    = 30.0

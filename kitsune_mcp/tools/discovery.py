@@ -1,6 +1,7 @@
 """Discovery tools: search, inspect, compare, status."""
 
 import asyncio
+import shutil
 
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
@@ -240,14 +241,20 @@ async def inspect(server_id: str, probe: bool = False) -> str:
                     transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
                 )
             else:
-                _probe_t = _state.PersistentStdioTransport(
-                    srv.install_cmd, probe_env=_state._probe_env(srv)
-                )
-                live_tools = await asyncio.wait_for(
-                    _probe_t.list_tools(),
-                    timeout=TIMEOUT_STDIO_INIT,
-                )
-                _kill_probe(_probe_t._pool_key)
+                probe_env = _state._probe_env(srv)
+                tmpdir = probe_env.get("TMPDIR", "")
+                try:
+                    _probe_t = _state.PersistentStdioTransport(
+                        srv.install_cmd, probe_env=probe_env
+                    )
+                    live_tools = await asyncio.wait_for(
+                        _probe_t.list_tools(),
+                        timeout=TIMEOUT_STDIO_INIT,
+                    )
+                    _kill_probe(_probe_t._pool_key)
+                finally:
+                    if tmpdir:
+                        shutil.rmtree(tmpdir, ignore_errors=True)
             if live_tools:
                 tools = live_tools
                 live_source = True
@@ -420,6 +427,13 @@ async def status() -> str:
         lines.append("")
     else:
         lines += ["CURRENT FORM: base (no shapeshift active)", ""]
+
+    crafted = session.get("crafted_tools", {})
+    if crafted:
+        lines.append(f"CRAFTED TOOLS ({len(crafted)})  [persisted — survive restarts]")
+        for cname, cinfo in crafted.items():
+            lines.append(f"  {cname} — {cinfo.get('method', 'POST')} {cinfo.get('url', '')}")
+        lines.append("")
 
     # Persistent connections — ping all in parallel
     from kitsune_mcp.transport import _process_pool
