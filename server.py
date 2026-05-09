@@ -67,7 +67,9 @@ from kitsune_mcp.registry import (  # noqa: E402, F401
 from kitsune_mcp.session import (  # noqa: E402, F401
     SKILLS_PATH,
     _load_skills,
+    _restore_crafted_tools,
     _save_skills,
+    _save_state,
     session,
 )
 from kitsune_mcp.shapeshift import (  # noqa: E402, F401
@@ -140,6 +142,8 @@ else:
 for _t in _BASE_TOOL_NAMES - _active_tools:
     with contextlib.suppress(Exception):
         mcp.remove_tool(_t)
+
+_restore_crafted_tools()
 
 if __name__ == "__main__":
     mcp.run()

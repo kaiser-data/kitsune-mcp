@@ -399,7 +399,7 @@ class TestShapeshiftCredBugFix:
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]) as mock_shed, \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
              patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["my_tool"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["my_tool"], [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
              patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
              patch("kitsune_mcp.tools._state._probe_requirements", return_value={}):
@@ -450,7 +450,7 @@ class TestShapeshiftLeanHint:
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]), \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
              patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=registered[:len(tools_filter)] if tools_filter else registered), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(registered[:len(tools_filter)] if tools_filter else registered, [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
              patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
              patch("kitsune_mcp.tools._state._probe_requirements", return_value={}):
@@ -514,7 +514,7 @@ class TestShapeshiftCallExample:
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]), \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
              patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=registered), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(registered, [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
              patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
              patch("kitsune_mcp.tools._state._probe_requirements", return_value={}):
@@ -592,7 +592,7 @@ class TestKitsuneTrustGate:
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]), \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
              patch("kitsune_mcp.tools._state.PersistentStdioTransport") as mock_cls, \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["t"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["t"], [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
              patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
              patch("kitsune_mcp.tools._state._probe_requirements", return_value={}), \

@@ -186,7 +186,7 @@ async def auto(
             is_smithery_http = s.source == "smithery" and s.transport == "http"
             is_official = s.source in ("official", "mcpregistry")
             # Lower tuple = higher priority
-            return (has_missing, is_smithery_http, not is_official)
+            return (has_missing, is_smithery_http, not is_official, not (s.transport == "stdio"))
         candidates.sort(key=_candidate_rank)
         chosen = candidates[0]
         server_id, server_name, credentials = chosen.id, chosen.name, chosen.credentials

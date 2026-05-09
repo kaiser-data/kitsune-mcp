@@ -11,6 +11,24 @@ from kitsune_mcp.app import mcp
 from kitsune_mcp.session import session
 from kitsune_mcp.transport import BaseTransport
 
+# Common param name synonyms. Applied only when the key is absent from the
+# tool schema — never overwrites a key the schema actually declares.
+_PARAM_ALIASES: dict[str, str] = {
+    "from": "source",
+    "to": "target",
+    "from_timezone": "source_timezone",
+    "to_timezone": "target_timezone",
+    "src": "source",
+    "dst": "target",
+    "dest": "target",
+    "origin": "source",
+    "destination": "target",
+    "from_lang": "source_language",
+    "to_lang": "target_language",
+    "input_lang": "source_language",
+    "output_lang": "target_language",
+}
+
 # Matches URI template parameters like {path} or {file_name}
 _URI_TEMPLATE_RE = re.compile(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}')
 
@@ -72,6 +90,22 @@ def _make_proxy(
                 resolved = os.path.realpath(v)
                 if resolved != v and os.path.exists(resolved):
                     cleaned[k] = resolved
+        # Alias normalization — remap common synonyms when the original key is not
+        # in the schema but its alias is. Helps servers with non-intuitive param names
+        # (e.g. source_timezone vs from_timezone in mcp-server-time).
+        _schema_props = set(props.keys())
+        if any(k in _PARAM_ALIASES and k not in _schema_props for k in cleaned):
+            remapped = {}
+            for k, v in cleaned.items():
+                if k not in _schema_props and k in _PARAM_ALIASES:
+                    canonical = _PARAM_ALIASES[k]
+                    # Only remap when canonical is in the schema AND not already
+                    # supplied by the caller (avoids clobbering an explicit value).
+                    if canonical in _schema_props and canonical not in cleaned:
+                        remapped[canonical] = v
+                        continue
+                remapped[k] = v
+            cleaned = remapped
         return await transport.execute(original_name, cleaned, config)
 
     proxy_fn.__name__ = fn_name
@@ -205,12 +239,14 @@ def _register_proxy_tools(
     server_id: str, tools: list, transport: "BaseTransport", config: dict,
     base_tool_names: set = None,
     only: set[str] | None = None,
-) -> list[str]:
+) -> tuple[list[str], list[tuple[str, str]]]:
     """Register proxy tools for a server, handling name collisions with base tools.
 
     only: if provided, only register tools whose names are in this set (lean shapeshift).
+    Returns (registered_names, failures) where failures is a list of (raw_name, error_str).
     """
     registered = []
+    failed = []
     for tool_schema in tools:
         raw_name = tool_schema.get("name", "")
         if not raw_name:
@@ -222,6 +258,6 @@ def _register_proxy_tools(
         try:
             mcp.add_tool(proxy)
             registered.append(proxy_name)
-        except Exception:
-            pass
-    return registered
+        except Exception as e:
+            failed.append((raw_name, str(e)[:120]))
+    return registered, failed

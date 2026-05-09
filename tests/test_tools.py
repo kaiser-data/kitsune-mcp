@@ -280,6 +280,8 @@ class TestCraftTool:
     """Tests for the craft() endpoint-backed custom tool."""
 
     def setup_method(self):
+        import os
+        os.environ["KITSUNE_ALLOW_LOCAL_FETCH"] = "1"
         from server import mcp, session
         # Clean up any crafted tools from previous tests
         for name in list(session.get("crafted_tools", {}).keys()):
@@ -288,6 +290,10 @@ class TestCraftTool:
         session["crafted_tools"] = {}
         session["shapeshift_tools"] = [t for t in session.get("morphed_tools", [])
                                      if t not in session.get("crafted_tools", {})]
+
+    def teardown_method(self):
+        import os
+        os.environ.pop("KITSUNE_ALLOW_LOCAL_FETCH", None)
 
     async def test_craft_registers_tool_post(self):
         """craft() with POST registers the tool and records it in session."""

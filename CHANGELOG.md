@@ -4,6 +4,55 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.12.0] — 2026-05-09
+
+### Security
+- **SSRF protection in `fetch()` and `craft()`** — both tools now block requests to private/loopback addresses (127.x, 10.x, 192.168.x, 169.254.x, localhost), consistent with the existing guard in `skill()`. Override with `KITSUNE_ALLOW_LOCAL_FETCH=1` for local development.
+
+### New Features
+- **Parameter aliasing in proxy tools** — `from_timezone` is silently remapped to `source_timezone`, `to_timezone` to `target_timezone`, `from`/`to` to `source`/`target`, `src`/`dst`/`dest` to `source`/`target`, and language variants (`from_lang`, `to_lang`, `input_lang`, `output_lang`). Applied only when the alias key is absent from the tool schema. Closes #9.
+- **Shapeshifted tool registration failures now surface** — failed `mcp.add_tool()` calls are no longer silently swallowed; they appear as `⚠️ N tool(s) failed to register: name: error` in the `shapeshift()` output.
+- **Session persistence** — `crafted_tools` and `connections` metadata (minus PIDs and `started_at`) now survive server restarts in `~/.kitsune/state.json`. Explored history is capped at 100 entries. Crafted tools are re-registered with FastMCP on startup.
+- **`auto()` prefers official stdio servers over Smithery HTTP** — `mcp-server-time` (official, stdio, free) now beats a Smithery HTTP equivalent when both are returned by search. Ties broken by `not (transport == "stdio")` as the 4th sort key.
+
+### CI / Infrastructure
+- **mcp-publisher bumped to v1.7.6** — fixes silent MCP Registry publish failures since v0.9.0 (OIDC audience binding changed in v1.7.6).
+- **`actions/checkout` → v6**, **`actions/setup-python` → v6** (Dependabot #1, #2).
+
+### Reliability
+- `_registry_lock` (`asyncio.Lock`) prevents concurrent shapeshifts from leaving orphaned tools. Without it, two concurrent shapeshifts could interleave shed + register, leaving both servers' tools mounted while session only tracked one.
+- `atexit` handler persists session state before killing pool processes on interpreter exit.
+- Probe processes from `inspect()`/`compare()` are killed immediately after `list_tools()` returns.
+- Registry paginated fetch no longer caches empty/partial results on transient failures.
+- `shiftback(kill=True)` no longer mass-kills unrelated `connect()` sessions when pool key is missing — warns instead.
+- `source='local'` on HTTP-only Smithery servers returns a clear error before shedding the current form.
+- `call()` uses the shapeshifted session's pooled transport instead of re-resolving from registry.
+
+### UX
+- `auto()` surfaces registry fetch failures instead of silently returning "no tools listed".
+- `compare()` shows `—` instead of `?` for unknown values; error labels are human-readable.
+- `search()` warning uses actual exception class per registry.
+- `shapeshift()` output includes wall-clock timing for cold npm installs.
+- Filesystem server shapeshift proactively hints about `server_args` when no allowed dirs are passed.
+- macOS `/tmp` → `/private/tmp` symlink resolved in proxy args.
+- httpx INFO logging suppressed by default (`KITSUNE_DEBUG_HTTP=1` to re-enable).
+
+### Correctness
+- `tokens_sent` tracked in `StdioTransport`, `PersistentStdioTransport`, `WebSocketTransport`.
+- `key()` masks secret value in response; `.env` written with `0o600` permissions.
+- `_infer_args_from_task` returns `{}` when tool has multiple required string params.
+- `__version__` exposed via `importlib.metadata`.
+
+### Testing
+- `tests/test_ssrf.py` — SSRF guard tests for `fetch()` and `craft()`.
+- `tests/test_param_aliases.py` — alias normalization logic tests.
+- `tests/test_session_persistence.py` — crafted_tools / connections / explored persistence tests.
+- 6 integration tests for lean vs forge tool surface.
+- `_registry_lock` concurrency tests.
+- `tokens_sent` tests for all three previously-broken transports.
+
+---
+
 ## [0.11.0] — 2026-05-04
 
 Provider-aware onboarding — closes the rest of issue #8. Configure providers once up front, explore freely. Hermes-style agents now reach a working tool call in ≤3 steps with zero API keys.

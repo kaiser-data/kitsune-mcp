@@ -26,7 +26,7 @@ from kitsune_mcp.constants import (
 )
 from kitsune_mcp.credentials import SMITHERY_API_KEY, _credentials_guide, _resolve_config
 from kitsune_mcp.registry import SmitheryRegistry
-from kitsune_mcp.session import session
+from kitsune_mcp.session import _save_state, session
 from kitsune_mcp.utils import (
     _clean_response,
     _estimate_tokens,
@@ -119,6 +119,7 @@ def _kill_all_pool_processes() -> None:
     - BaseSubprocessTransport.__del__ never fires after the event loop is gone,
       eliminating "RuntimeError: Event loop is closed" teardown noise (#23)
     """
+    _save_state()
     for entry in list(_process_pool.values()):
         try:
             entry.proc.kill()

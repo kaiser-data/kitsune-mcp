@@ -46,7 +46,7 @@ async def _commit_shapeshift(
     neither path has to duplicate the ~70-line registration + output block.
     """
     only = set(tools) if tools else None
-    registered = _state._register_proxy_tools(
+    registered, reg_failures = _state._register_proxy_tools(
         server_id, tool_schemas, transport, resolved_config, _state._BASE_TOOL_NAMES, only
     )
     if not registered:
@@ -125,6 +125,10 @@ async def _commit_shapeshift(
         for var in missing_env:
             lines.append(f"  {var}=your-value")
         lines.append(f'  Or: key("{missing_env[0]}", "your-value")')
+    if reg_failures:
+        lines.append(f"\n⚠️  {len(reg_failures)} tool(s) failed to register:")
+        for fname, ferr in reg_failures:
+            lines.append(f"  {fname}: {ferr}")
     if lean_eligible and not tools and len(registered) > 4:
         tool_cost = _estimate_tokens(tool_schemas)
         lines.append(
@@ -453,6 +457,12 @@ async def craft(
         return "name must be alphanumeric (underscores allowed)."
     if not url.startswith(("http://", "https://")):
         return "url must start with http:// or https://"
+    from kitsune_mcp.tools.onboarding import _is_safe_url
+    if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+        return (
+            f"Blocked: '{url}' is a private/loopback address. "
+            "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
+        )
 
     _url = url
     _method = method.upper()

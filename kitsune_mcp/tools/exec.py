@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import time
 
 from kitsune_mcp.app import mcp
@@ -99,6 +100,13 @@ async def run(
 async def fetch(url: str, intent: str = "") -> str:
     """Fetch a URL and return compressed content (~500 tokens vs ~25K raw HTML)."""
     raw_estimate = 6000  # typical webpage token count before compression
+
+    from kitsune_mcp.tools.onboarding import _is_safe_url
+    if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+        return (
+            f"Blocked: '{url}' resolves to a private/loopback address. "
+            "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
+        )
 
     axon_result = await _try_axonmcp(url, intent)
     if axon_result:

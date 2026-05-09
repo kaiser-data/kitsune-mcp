@@ -240,7 +240,7 @@ class TestMorphUsesPersistentTransport:
 
         def fake_register(server_id, tools, transport, config, base_names=None, only=None):
             captured["transport_type"] = type(transport).__name__
-            return ["pool_tool"]
+            return ["pool_tool"], []
 
         ctx = MagicMock()
         ctx.session = MagicMock()
@@ -523,7 +523,7 @@ class TestMorphRegistersAll:
             return []
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["a_tool"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["a_tool"], [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", side_effect=fake_reg_resources) as mock_rr, \
              patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
              patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST:
@@ -559,7 +559,7 @@ class TestMorphRegistersAll:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["http_tool"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["http_tool"], [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources") as mock_rr, \
              patch("kitsune_mcp.tools._state._register_proxy_prompts") as mock_rp, \
              patch("kitsune_mcp.tools._state.HTTPSSETransport"):
@@ -588,7 +588,7 @@ class TestMorphRegistersAll:
         ctx.session.send_prompt_list_changed = AsyncMock()
 
         with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=["exc_tool"]), \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["exc_tool"], [])), \
              patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST:
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=[{"name": "exc_tool", "description": "", "inputSchema": {}}])
