@@ -1,16 +1,14 @@
 """Discovery tools: search, inspect, compare, status."""
 
 import asyncio
+import contextlib
+import os
 import shutil
 
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
     MAX_INSPECT_DESC,
-    TIMEOUT_RESOURCE_LIST,
     TIMEOUT_STDIO_INIT,
-    TRUST_HIGH,
-    TRUST_LOW,
-    TRUST_MEDIUM,
 )
 from kitsune_mcp.credentials import (
     _credentials_inspect_block,
@@ -32,10 +30,8 @@ def _kill_probe(pool_key: str) -> None:
     """
     entry = _process_pool.pop(pool_key, None)
     if entry is not None:
-        try:
+        with contextlib.suppress(Exception):
             entry.proc.kill()
-        except Exception:
-            pass
 
 
 async def _compare_probe(srv, allow_low_trust: bool) -> dict:
@@ -397,7 +393,6 @@ async def status() -> str:
     is reaching for a server whose auth requirements are unmet — that's
     actionable info, performance stats are not.
     """
-    import os
     from kitsune_mcp.credentials import _smithery_available
 
     explored = session["explored"]

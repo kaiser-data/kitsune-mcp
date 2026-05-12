@@ -13,10 +13,6 @@ catches every call site uniformly.
 
 # Submodule imports trigger @mcp.tool() registration on the shared FastMCP instance.
 from kitsune_mcp.tools import _state  # noqa: F401  (re-exported)
-from kitsune_mcp.tools.discovery import compare, inspect, search, status  # noqa: F401
-from kitsune_mcp.tools.exec import bench, call, fetch, run, test  # noqa: F401
-from kitsune_mcp.tools.shapeshift import connect, craft, release, shapeshift, shiftback  # noqa: F401
-from kitsune_mcp.tools.onboarding import auth, auto, key, onboard, setup, skill  # noqa: F401
 
 # Backward-compat re-exports of names that tests / server.py imported from
 # the old monolithic kitsune_mcp/tools.py module.
@@ -59,4 +55,14 @@ from kitsune_mcp.tools._state import (  # noqa: F401
     _tool_count_hint,
     _track_call,
     session,
+)
+from kitsune_mcp.tools.discovery import compare, inspect, search, status  # noqa: F401
+from kitsune_mcp.tools.exec import bench, call, fetch, run, test  # noqa: F401
+from kitsune_mcp.tools.onboarding import auth, auto, key, onboard, setup, skill  # noqa: F401
+from kitsune_mcp.tools.shapeshift import (  # noqa: F401
+    connect,
+    craft,
+    release,
+    shapeshift,
+    shiftback,
 )

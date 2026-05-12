@@ -26,7 +26,7 @@ from kitsune_mcp.session import session
 from kitsune_mcp.shapeshift import _json_type_to_py
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport, _process_pool
-from kitsune_mcp.utils import _estimate_tokens, _get_http_client, _is_safe_url, _ssrf_safe_request
+from kitsune_mcp.utils import _estimate_tokens, _is_safe_url, _ssrf_safe_request
 
 
 async def _commit_shapeshift(
