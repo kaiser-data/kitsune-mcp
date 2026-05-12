@@ -14,6 +14,7 @@ Covers:
 - MultiRegistry last_registry_errors populated on failure
 - search() reports registry failures via ⚠️ Skipped:
 """
+import contextlib
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -44,6 +45,7 @@ class TestCredentialsReady:
         # SMITHERY_API_KEY regardless of whether per-server creds are declared.
         # Old "no creds declared (may use OAuth)" silently led users into walls.
         from unittest.mock import patch
+
         from kitsune_mcp.credentials import _credentials_ready
         # Patch _smithery_available so the test isn't affected by a real .env
         # file that may have a key set.
@@ -54,6 +56,7 @@ class TestCredentialsReady:
 
     def test_smithery_with_key_set_shows_env_set(self):
         from unittest.mock import patch
+
         from kitsune_mcp.credentials import _credentials_ready
         with patch("kitsune_mcp.credentials._smithery_available", return_value=True):
             result = _credentials_ready({}, "smithery")
@@ -1023,10 +1026,8 @@ class TestProbeEnvSanitization:
         ))
         with patch("asyncio.create_subprocess_exec", spy):
             transport = PersistentStdioTransport(["echo"], probe_env=env)
-            try:
+            with contextlib.suppress(RuntimeError):
                 await transport._start_process()
-            except RuntimeError:
-                pass
         assert spy.call_args.kwargs["env"] == env
         assert spy.call_args.kwargs["limit"] == STDIO_BUFFER_LIMIT
 
@@ -1039,10 +1040,8 @@ class TestProbeEnvSanitization:
         ))
         with patch("asyncio.create_subprocess_exec", spy):
             transport = PersistentStdioTransport(["echo"])  # no probe_env
-            try:
+            with contextlib.suppress(RuntimeError):
                 await transport._start_process()
-            except RuntimeError:
-                pass
         # env=None means inherit from parent.
         assert spy.call_args.kwargs["env"] is None
 
@@ -1182,8 +1181,8 @@ class TestCompareTool:
         assert "foo/a" in result.split("Cheapest ready")[1]
 
     async def test_smithery_without_key_shows_actionable_status(self):
-        from kitsune_mcp.tools import compare
         from kitsune_mcp.registry import ServerInfo
+        from kitsune_mcp.tools import compare
         srv = ServerInfo(id="notion", name="Notion", description="x",
                          source="smithery", transport="http", url="https://x.run.tools")
         with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
@@ -1193,8 +1192,8 @@ class TestCompareTool:
         assert "needs SMITHERY_API_KEY" in result
 
     async def test_description_tool_count_yields_estimate_when_probe_fails(self):
-        from kitsune_mcp.tools import compare
         from kitsune_mcp.registry import ServerInfo
+        from kitsune_mcp.tools import compare
         srv = ServerInfo(
             id="x/y", name="y",
             description="Markdown-first Notion MCP — 26 tools, low token cost",
@@ -1214,8 +1213,8 @@ class TestCompareTool:
         assert "est" in result
 
     async def test_exception_text_appears_in_status(self):
-        from kitsune_mcp.tools import compare
         from kitsune_mcp.registry import ServerInfo
+        from kitsune_mcp.tools import compare
         srv = ServerInfo(
             id="@x/y", name="y", description="", source="npm", transport="stdio",
             install_cmd=["npx", "-y", "@x/y"],

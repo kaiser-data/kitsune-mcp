@@ -1,6 +1,5 @@
 """Session persistence tests — crafted_tools and connections survive restart."""
 
-import json
 import pytest
 
 

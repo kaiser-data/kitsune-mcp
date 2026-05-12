@@ -18,24 +18,27 @@ from kitsune_mcp.constants import (
     TRUST_LOW,
 )
 from kitsune_mcp.credentials import (
-    _resolve_config,
-    _smithery_available,
+    _resolve_config,  # noqa: F401  (accessed as _state._resolve_config in shapeshift + tests)
+    _smithery_available,  # noqa: F401  (accessed as _state._smithery_available in shapeshift + tests)
     _to_env_var,
 )
-from kitsune_mcp.probe import _doc_uri_priority, _probe_requirements
+from kitsune_mcp.probe import (
+    _doc_uri_priority,
+    _probe_requirements,  # noqa: F401  (accessed as _state._probe_requirements in shapeshift + tests)
+)
 from kitsune_mcp.registry import (
-    NpmRegistry,
-    PyPIRegistry,
-    SmitheryRegistry,
+    NpmRegistry,  # noqa: F401  (accessed as _state.NpmRegistry in discovery.py)
+    PyPIRegistry,  # noqa: F401  (accessed as _state.PyPIRegistry in discovery.py)
+    SmitheryRegistry,  # noqa: F401  (accessed as _state.SmitheryRegistry in discovery.py)
     _registry,
 )
 from kitsune_mcp.session import session
 from kitsune_mcp.shapeshift import (
-    _do_shed,
-    _proxy_name_for,
-    _register_proxy_prompts,
-    _register_proxy_resources,
-    _register_proxy_tools,
+    _do_shed,  # noqa: F401  (accessed as _state._do_shed in shapeshift tools + tests)
+    _proxy_name_for,  # noqa: F401  (accessed as _state._proxy_name_for, backward compat)
+    _register_proxy_prompts,  # noqa: F401  (accessed as _state._register_proxy_prompts)
+    _register_proxy_resources,  # noqa: F401  (accessed as _state._register_proxy_resources)
+    _register_proxy_tools,  # noqa: F401  (accessed as _state._register_proxy_tools)
 )
 from kitsune_mcp.transport import (
     BaseTransport,

@@ -1,12 +1,10 @@
 """Tests for v0.13.0 audit findings."""
 
-import json
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-import respx
-
 
 # ---------------------------------------------------------------------------
 # SSRF via redirect
@@ -206,10 +204,8 @@ class TestRestoreCraftedTools:
             }
         }
         # Remove if already registered from a prior test
-        try:
+        with contextlib.suppress(Exception):
             mcp.remove_tool("my_api_tool")
-        except Exception:
-            pass
 
         from kitsune_mcp.session import _restore_crafted_tools
         _restore_crafted_tools()

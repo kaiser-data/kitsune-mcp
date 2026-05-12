@@ -1,8 +1,8 @@
 """Tests for v0.14.0 — auto() NL routing, arg inference, status liveness."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fix A: _simple_search word-based matching
@@ -187,6 +187,7 @@ class TestStatusSmitheryLiveness:
     @pytest.mark.asyncio
     async def test_valid_key_shows_verified(self, respx_mock, monkeypatch):
         import httpx
+
         import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", "valid-key")
         monkeypatch.setenv("SMITHERY_API_KEY", "valid-key")
@@ -200,6 +201,7 @@ class TestStatusSmitheryLiveness:
     @pytest.mark.asyncio
     async def test_invalid_key_shows_invalid(self, respx_mock, monkeypatch):
         import httpx
+
         import kitsune_mcp.credentials as creds
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", "bad-key")
         monkeypatch.setenv("SMITHERY_API_KEY", "bad-key")

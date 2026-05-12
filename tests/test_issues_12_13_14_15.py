@@ -1,11 +1,9 @@
 """Tests for issues #12, #13, #14, #15."""
 import os
 import stat
-import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # --- #12: __version__ ---
 

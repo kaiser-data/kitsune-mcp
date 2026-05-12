@@ -4,10 +4,6 @@ Guards against profile drift — tools silently added to or removed from the
 lean profile without updating docs/onboarding examples.
 """
 import os
-import contextlib
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers — import server with a clean tool registry each time
@@ -16,7 +12,6 @@ import pytest
 def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
     """Import server.py with KITSUNE_TOOLS set to the given value and return
     the set of tool names currently registered with the FastMCP app."""
-    import importlib
     import sys
 
     # Patch env before importing

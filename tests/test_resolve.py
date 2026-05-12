@@ -210,11 +210,10 @@ class TestShapeshiftAutoResolve:
         assert "not found" in result.lower()
 
     async def test_multiple_candidates_lists_suggestions(self):
-        from kitsune_mcp.tools import shapeshift
-        from kitsune_mcp.tools._state import _registry
-
         # Three substring matches, none exact-equal — caller gets a "did you mean" list
         from kitsune_mcp.registry import ServerInfo
+        from kitsune_mcp.tools import shapeshift
+        from kitsune_mcp.tools._state import _registry
         candidates = [
             ServerInfo(id="timely", name="timely", description="", source="npm", transport="stdio"),
             ServerInfo(id="wakatime", name="wakatime", description="", source="npm", transport="stdio"),

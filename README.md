@@ -243,6 +243,14 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.dev, Z
 | Cline / Continue.dev | VS Code settings / `~/.continue/config.json` |
 | OpenClaw | MCP config in OpenClaw settings |
 
+### Using Kitsune alongside existing servers
+
+You can add Kitsune to a config that already has other servers — it works without touching anything else. For the cleanest setup (Kitsune as your sole gateway), `setup()` can extract API keys from your existing server configs into `~/.kitsune/.env` and register those servers so `shapeshift()` can reach them on demand.
+
+**Kitsune never deletes or modifies your existing configs without explicit confirmation.** Config changes are always backed up and reversible with `setup(restore=True)`.
+
+For per-session isolation in Claude Code (run Kitsune-exclusive in one project, full config in another simultaneously), use `setup(project=True)` — it writes a project-level `.claude/mcp.json` with only Kitsune, leaving all other sessions untouched.
+
 ---
 
 ## Server Sources

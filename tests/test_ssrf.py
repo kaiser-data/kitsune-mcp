@@ -1,10 +1,8 @@
 """SSRF protection tests for fetch() and craft()."""
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # --- _is_safe_url unit tests ---
 
@@ -62,7 +60,6 @@ async def test_fetch_blocks_metadata_endpoint(monkeypatch):
 @pytest.mark.asyncio
 async def test_fetch_passes_public_url(monkeypatch, respx_mock):
     monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
-    import respx
     import httpx
     respx_mock.get("https://example.com").mock(return_value=httpx.Response(200, text="hello"))
 

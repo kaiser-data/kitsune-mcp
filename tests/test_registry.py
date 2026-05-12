@@ -891,6 +891,7 @@ class TestGlamaGetServerFallback:
 
     async def test_cache_hit_returns_without_calling_search(self):
         from unittest.mock import AsyncMock, patch
+
         from server import GlamaRegistry
         reg = GlamaRegistry()
         cached = [self._srv("author/slug-a"), self._srv("author/slug-b")]
@@ -902,6 +903,7 @@ class TestGlamaGetServerFallback:
 
     async def test_cache_miss_falls_back_to_server_side_query(self):
         from unittest.mock import AsyncMock, patch
+
         from server import GlamaRegistry
         reg = GlamaRegistry()
         target = self._srv("deep/catalog-entry")
@@ -915,6 +917,7 @@ class TestGlamaGetServerFallback:
 
     async def test_falls_back_to_slug_when_namespace_misses(self):
         from unittest.mock import AsyncMock, patch
+
         from server import GlamaRegistry
         reg = GlamaRegistry()
         target = self._srv("vague-org/uniquetool")
@@ -931,6 +934,7 @@ class TestGlamaGetServerFallback:
 
     async def test_query_fallback_with_no_match_returns_none(self):
         from unittest.mock import AsyncMock, patch
+
         from server import GlamaRegistry
         reg = GlamaRegistry()
         with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
@@ -940,6 +944,7 @@ class TestGlamaGetServerFallback:
 
     async def test_search_exception_returns_none(self):
         from unittest.mock import AsyncMock, patch
+
         from server import GlamaRegistry
         reg = GlamaRegistry()
         with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \

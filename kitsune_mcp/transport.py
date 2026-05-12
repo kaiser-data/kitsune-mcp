@@ -121,10 +121,8 @@ def _kill_all_pool_processes() -> None:
     """
     _save_state()
     for entry in list(_process_pool.values()):
-        try:
+        with contextlib.suppress(Exception):
             entry.proc.kill()
-        except Exception:
-            pass
     _process_pool.clear()
 
 

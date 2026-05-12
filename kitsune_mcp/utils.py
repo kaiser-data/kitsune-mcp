@@ -3,6 +3,10 @@ import ipaddress
 import json
 import logging
 import os
+
+# Suppress httpx/httpcore per-request INFO lines that flood the console during
+# registry work. Set KITSUNE_DEBUG_HTTP=1 to re-enable them for debugging.
+import os as _os
 import re
 import shutil
 import subprocess
@@ -12,9 +16,6 @@ import httpx
 
 from kitsune_mcp.constants import MAX_RESPONSE_TOKENS
 
-# Suppress httpx/httpcore per-request INFO lines that flood the console during
-# registry work. Set KITSUNE_DEBUG_HTTP=1 to re-enable them for debugging.
-import os as _os
 _http_log_level = logging.DEBUG if _os.getenv("KITSUNE_DEBUG_HTTP") else logging.WARNING
 logging.getLogger("httpx").setLevel(_http_log_level)
 logging.getLogger("httpcore").setLevel(_http_log_level)

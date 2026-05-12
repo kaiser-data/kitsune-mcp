@@ -14,11 +14,9 @@ Covers deterministic pieces (no live browser):
 import asyncio
 import base64
 import hashlib
-import json
 import os
 import stat
 import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,7 +24,6 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from kitsune_mcp import oauth
-
 
 # ---------------------------------------------------------------------------
 # PKCE + state

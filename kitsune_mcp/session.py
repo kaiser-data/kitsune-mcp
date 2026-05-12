@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -96,6 +97,7 @@ def _restore_crafted_tools() -> None:
     import inspect as _inspect
 
     import httpx as _httpx
+
     from kitsune_mcp.app import mcp as _mcp
     from kitsune_mcp.shapeshift import _json_type_to_py
     from kitsune_mcp.utils import _ssrf_safe_request
@@ -137,10 +139,8 @@ def _restore_crafted_tools() -> None:
             info.get("description", ""),
             info.get("params", {}),
         )
-        try:
+        with contextlib.suppress(Exception):
             _mcp.add_tool(proxy)
-        except Exception:
-            pass
 
 
 _load_skills()

@@ -1,5 +1,6 @@
 """Tests for StdioTransport and HTTPSSETransport."""
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -290,7 +291,7 @@ class TestHTTPSSETransportDirectOAuth:
     """HTTPSSETransport in direct=True mode uses oauth.ensure_token, bypassing Smithery."""
 
     async def test_connect_endpoint_returns_url_and_oauth_token(self):
-        from kitsune_mcp import oauth, transport as _t
+        from kitsune_mcp import oauth
         url = "https://mcp.notion.com/mcp"
         transport = HTTPSSETransport(url, direct=True)
         with patch.object(oauth, "ensure_token", AsyncMock(return_value="tok-oauth-1")):
@@ -304,9 +305,10 @@ class TestHTTPSSETransportDirectOAuth:
         assert ".well-known" in msg
 
     async def test_401_triggers_delete_retry_with_new_token(self):
-        from kitsune_mcp import oauth
         import httpx
         import respx
+
+        from kitsune_mcp import oauth
         url = "https://mcp.example/mcp"
         transport = HTTPSSETransport(url, direct=True)
         # First call returns token-1; after delete, second call returns token-2.
@@ -318,7 +320,7 @@ class TestHTTPSSETransportDirectOAuth:
              patch.object(oauth, "delete_tokens", delete_spy), \
              patch.object(oauth, "_origin", return_value="mcp.example"):
             with respx.mock:
-                route = respx.post(url).mock(
+                respx.post(url).mock(
                     side_effect=[
                         httpx.Response(401, text=""),                                    # initialize → 401
                         httpx.Response(200, text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
@@ -405,9 +407,6 @@ class TestStdioBufferLimit:
         spy = AsyncMock(return_value=self._mock_proc())
         with patch("asyncio.create_subprocess_exec", spy):
             transport = PersistentStdioTransport(["echo"])
-            try:
+            with contextlib.suppress(RuntimeError):
                 await transport._start_process()
-            except RuntimeError:
-                # Expected — the mock proc has no valid initialize response.
-                pass
         assert spy.call_args.kwargs["limit"] == STDIO_BUFFER_LIMIT

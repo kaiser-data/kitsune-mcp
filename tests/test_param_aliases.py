@@ -1,6 +1,5 @@
 """Parameter aliasing tests for proxy_fn in shapeshift.py."""
 
-import pytest
 
 from kitsune_mcp.shapeshift import _PARAM_ALIASES
 
