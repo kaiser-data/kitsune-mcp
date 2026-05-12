@@ -2,7 +2,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One MCP entry. 10,000+ servers on demand.<br/>Load only the tools you need. Switch instantly. No restarts.</strong></p>
+  <p><strong>One entry in your config. Any MCP server on demand.<br/>5 tools at rest. Thousands available on request. No restarts.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -17,18 +17,57 @@
 
 ---
 
-## What's new in v0.12.0
+## What's new in v0.18.1
 
-Security, reliability, and quality-of-life release.
+- **Lean profile tightened to 5 tools** — `status`, `search`, `auth`, `shapeshift`, `call`. Overhead drops from ~650 → ~400 tokens. `shapeshift()` with no args now unmounts (replaces separate `shiftback`).
+- **`auth` replaces `key`** — handles both API key storage and OAuth 2.1 flows in one command. `auth("BRAVE_API_KEY", "sk-...")` or `auth("https://mcp.notion.com/mcp")` to trigger OAuth.
+- **`~/.kitsune/.env` loaded at startup** — credentials survive process restarts without re-entering them.
+- **Retry hints** — failed calls now suggest the exact `auth()` command to fix missing credentials.
+- **HTTP shiftback fix** — releasing an HTTP-transport server no longer hangs.
 
-- **SSRF protection** — `fetch()` and `craft()` now block requests to private/loopback addresses (127.x, 10.x, 192.168.x, 169.254.x, localhost), consistent with `skill()`. Set `KITSUNE_ALLOW_LOCAL_FETCH=1` to allow local URLs in dev environments.
-- **Parameter aliasing** — `from_timezone` is automatically remapped to `source_timezone`, `to` to `target`, `src`/`dst`/`dest` to `source`/`target`, and language variants. Works transparently for any server with non-intuitive param names (e.g. `mcp-server-time`). Closes #9.
-- **Session persistence** — `crafted_tools` and named `connect()` sessions survive server restarts. State is written to `~/.kitsune/state.json` on exit and restored on startup. Crafted tools are re-registered automatically.
-- **Registration failures surface** — if `mcp.add_tool()` throws during `shapeshift()`, the error is now shown inline (`⚠️ N tool(s) failed to register`) instead of being silently swallowed.
-- **`auto()` prefers free stdio over Smithery HTTP** — `mcp-server-time` (official, local, free) beats a Smithery HTTP equivalent when both match a query.
-- **MCP Registry backfill** — all versions back to v0.9.0 are now listed in the MCP Registry (previously silently failing due to an OIDC change in the publisher tool).
+See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
-See [CHANGELOG.md](CHANGELOG.md) for the full list plus internal refactors and bug fixes.
+---
+
+## The problem: static tool loading
+
+Every MCP server you add to your config loads **all** its tools at startup and keeps them there, every turn, whether used or not.
+
+Five servers means 3,000–20,000+ tokens of overhead on every request. Research on LLM tool use consistently shows accuracy degrades as the number of visible tools increases — the model has to reason about dozens of options before it can act on any of them.
+
+```
+20 tools in context → baseline performance
+50 tools in context → measurable degradation in tool selection accuracy
+100+ tools in context → significant drop; wrong tools called, arguments hallucinated
+```
+
+**The fix isn't a better model — it's a smaller menu.**
+
+---
+
+## Kitsune: RAG for your MCP ecosystem
+
+Think of Kitsune the same way you think of RAG for documents: instead of loading all your knowledge into context upfront, you retrieve only what's relevant to the current query.
+
+Kitsune does the same thing for MCP servers:
+
+| RAG for documents | Kitsune for MCP |
+|---|---|
+| Index: all your docs | Registry: 10,000+ MCP servers across 7 sources |
+| Query → retrieve relevant chunks | `search("web scraping")` → find matching servers |
+| Inject only relevant content | `shapeshift("firecrawl", tools=["scrape"])` → mount only needed tools |
+| Clear context when done | `shapeshift()` → unmount, context returns to baseline |
+
+**5 tools at rest (~400 tokens). Any server on demand. Load exactly the tools the current task needs — 2 out of 20 if that's all you need.**
+
+```python
+shapeshift("brave-search", tools=["web_search"])  # retrieve: 1 tool, ~300 tokens
+# ... task done ...
+shapeshift()                                       # release: context back to ~400 tokens
+shapeshift("supabase")                             # next task: different server, no restart
+shapeshift()
+shapeshift("@modelcontextprotocol/server-github")  # and again
+```
 
 ---
 
@@ -39,34 +78,11 @@ In Japanese folklore, the Kitsune (狐) is a fox spirit of extraordinary intelli
 This tool works the same way.
 
 `shapeshift("brave-search")` — the fox takes on a new form, its tools appear natively.
-`shiftback()` — it returns to its true shape, ready to become something else.
+`shapeshift()` — it returns to its true shape, ready to become something else.
 
 Each server it shapeshifts into is a new tail. Each capability borrowed and released cleanly. One entry in your config. Every server in the MCP ecosystem, on demand.
 
 > *I am not Japanese, and I use this name with the highest respect for the mythology and culture it comes from. The parallel felt too precise to ignore — a spirit that shapeshifts between forms, gains new powers, and releases them at will. That is exactly what this tool does.*
-
----
-
-## The problem with static MCP setups
-
-Every server you add to your config loads all its tools at startup — and keeps them there, all session long. Whether your agent uses them or not.
-
-Five servers means 3,000–5,000 tokens of overhead on every request. Your agent sees 50+ tools and has to reason about all of them before it can act.
-
-**Kitsune MCP is one entry that replaces all of them.**
-
-```
-shapeshift("brave-search", tools=["web_search"])  # only the tool you need
-# task done — switch instantly:
-shiftback()
-shapeshift("supabase")                            # different server, no restart
-shiftback()
-shapeshift("@modelcontextprotocol/server-github") # and again
-```
-
-One config entry. Any server across 7 registries. Load only the tools the current task needs — 2 out of 20 if that's all you need. Your agent stays focused and your costs stay low.
-
-Base overhead: **7 tools, ~650 tokens** ([measured](examples/benchmark.py)). Each mounted server adds only what you actually load.
 
 ---
 
@@ -76,30 +92,30 @@ Most clients now offer a "connector marketplace" — Notion, Gmail, Drive, Slack
 
 Kitsune is lazy and parallel: one entry, every server reachable on demand, only the tools you actively call sit in context.
 
-### Notion, head to head (numbers measured live in this session)
+### Notion, head to head (numbers measured live)
 
 | Setup | Resting context (every turn) | One Notion search | After cleanup |
 |---|---:|---:|---:|
 | Always-on Notion connector | **13,733 tokens** | 13,733 + reply | 13,733 forever |
-| Kitsune — full Notion mounted | 3,000 tokens | 16,733 + reply | 3,000 |
-| Kitsune — `shapeshift("notion-hosted", tools=["notion-search"])` | 3,000 tokens | **4,540** + reply | 3,000 (after `shiftback`) |
+| Kitsune — full Notion mounted | 400 tokens | ~14,133 + reply | 400 |
+| Kitsune — `shapeshift("notion-hosted", tools=["notion-search"])` | 400 tokens | **~1,940** + reply | 400 (after `shapeshift()`) |
 
 Over a 50-turn conversation:
 
 - Always-on connector: 50 × 13,733 = **686,650 tokens** of repeated Notion overhead
-- Kitsune lean: 50 × 3,000 + 5 turns × 1,540 = **157,700 tokens**
+- Kitsune lean: 50 × 400 + 5 turns × 1,540 = **27,700 tokens**
 
-**77% reduction for the same workflow.** And Notion is just one connector.
+**97% reduction for the same workflow.** And Notion is just one connector.
 
 ### The "but it's just one" trap
 
-Real-world enabled-connector token costs (typical hosted MCPs):
+Real-world always-on token costs (typical hosted MCPs):
 
 - Notion ~13.7K · Gmail ~8K · Drive ~10K · Slack ~7K · Calendar ~5K
 
-**Five connectors enabled = ~43K tokens per turn**, every turn, whether you mention them or not. Same five via Kitsune lean: ~3K resting, with a brief spike only on the turn where you actually use one.
+**Five connectors enabled = ~43K tokens per turn**, every turn, whether you mention them or not. Same five via Kitsune lean: ~400 tokens resting, with a brief spike only on the turn where you actually use one.
 
-For a 100-turn dev session: 4.3M tokens of waste vs ~310K. **You can have a 14× longer conversation before hitting context limits.**
+For a 100-turn dev session: 4.3M tokens of waste vs ~40K. **You can have a 100× longer conversation before hitting context limits.**
 
 ### The killer demo
 
@@ -119,8 +135,8 @@ For a 100-turn dev session: 4.3M tokens of waste vs ~310K. **You can have a 14×
 > call("notion-search", {"query": "roadmap"})
    [results]
 
-> shiftback()
-   ✓ Released. Context returned to baseline.
+> shapeshift()
+   ✓ Released. Context returned to baseline (~400 tokens).
 ```
 
 One tool. On demand. Off again. Same OAuth, same Notion endpoint (`mcp.notion.com/mcp`) — but tokens stay in `~/.kitsune/oauth/`, not on a third-party's servers.
@@ -129,71 +145,55 @@ One tool. On demand. Off again. Same OAuth, same Notion endpoint (`mcp.notion.co
 
 ---
 
-## Built for two audiences
+## The 5-tool surface
 
-### Adaptive agents
+`kitsune-mcp` exposes exactly five tools at rest — enough to find, mount, authenticate, call, and monitor any server in the ecosystem:
 
-An agent that loads everything upfront burns tokens on tools it never calls — and makes worse decisions because it sees too many options at once. An agent that mounts on demand is leaner, faster, and more focused:
-
-- Shapeshift into only what the current task needs — shiftback when done
-- `shapeshift(server_id, tools=[...])` to cherry-pick — load 2 tools from a server that has 20
-- Chain across multiple servers in one session without touching config or restarting
-- Token overhead stays flat: ~650 base + only what you load
-
-Kitsune MCP is designed around the real economics of an agent loop.
-
-### MCP developers
-
-Beyond MCP Inspector's basic schema viewer, Kitsune MCP gives you a full development workflow inside your actual AI client:
-
-| Need | Tool |
+| Tool | What it does |
 |---|---|
-| Explore a server's tools and schemas | `inspect(server_id)` |
-| Quality-score your server end-to-end | `test(server_id)` → score 0–100 |
-| Benchmark tool latency | `bench(server_id, tool, args)` → p50, p95, min, max |
-| Prototype endpoint-backed tools live | `craft(name, description, params, url)` |
-| Test inside real Claude/Cursor workflows | `shapeshift()` → call tools natively → `shiftback()` |
-| Compare two servers side by side | shapeshift into one, test, shiftback, shapeshift into the other |
+| `search(query)` | Find servers across 7 registries. Returns ranked matches with token estimates. |
+| `auth(target, value)` | Store an API key (`auth("BRAVE_API_KEY", "sk-...")`) or trigger OAuth 2.1 (`auth("https://mcp.notion.com/mcp")`). Writes to `~/.kitsune/.env`, active immediately. |
+| `shapeshift(server_id, tools, source)` | **Mount**: server's tools become first-class native tools. **Unmount**: `shapeshift()` with no args releases current form. `tools=[...]` for lean load. |
+| `call(tool_name, arguments)` | Call any tool — mounted or not. When shapeshifted, `server_id` is inferred. |
+| `status()` | Current form, active connections (PID + RAM), token overhead, registry health. |
 
-No separate web UI. No isolated test environment. Test how your server actually behaves when an AI uses it.
+**Overhead at rest: ~400 tokens.** Each mount adds only what you load — `tools=["web_search"]` is ~300 tokens, not 1,500.
 
----
-
-## Why MCP — not a CLI skill
-
-A CLI-based agent skill gives every agent the same surface. An MCP lets you design a completely different surface for each agent — down to the individual tool.
-
-**1. Surgical token budgets.**
-`shapeshift("brave-search", tools=["web_search"])` loads exactly one tool — ~300 tokens — instead of the full server schema. A specialized research agent can be wired to see only the three tools it ever needs. A coding agent sees a different three. Same underlying servers; different, purpose-built surfaces. Token overhead stays flat because context is opt-in, not always-on.
-
-**2. On-the-fly server creation.**
-CLI skills require something to already exist on disk. An MCP can be generated mid-session. An agent can call `craft(name, description, params, url)` to define a new tool backed by any HTTP endpoint — no install, no config change, no restart. One conversation. Any problem. New capability spun up and available to the same agent immediately.
-
-**3. Fine-tune the surface via the Forge.**
-`kitsune-forge` exposes the full toolkit — inspect, benchmark, craft, and test. You can prototype a tool, measure its latency, compare two competing servers, and lock in exactly the shape you want before your production agent ever sees it. The Forge is the workbench; the lean `kitsune-mcp` entry is what the agent runs with after you've dialed it in.
-
-> The result: agents that carry only the tools they need for the current problem, can extend themselves on demand, and never waste tokens on capability they aren't using.
-
----
-
-## Two modes
-
-| | `kitsune-mcp` | `kitsune-forge` |
-|---|---|---|
-| **Purpose** | Adaptive agents, everyday mounting | MCP evaluation, benchmarking, crafting |
-| **Tools** | 7 (shapeshift, shiftback, search, inspect, call, key, status) | All 17 |
-| **Token overhead** | ~650 tokens | ~1,700 tokens |
-| **Use when** | Agents mounting per task, minimal token budget | Discovering, testing, benchmarking, prototyping |
-
-> Token numbers are measured from actual registered schemas — see [examples/benchmark.py](examples/benchmark.py).
-
-Both modes from the same package:
+Need evaluation tools (`inspect`, `test`, `bench`, `craft`, `compare`)? Use `kitsune-forge`:
 
 ```json
-{ "command": "kitsune-mcp" }                        ← lean (default)
-{ "command": "kitsune-forge" }                      ← full suite
-{ "command": "kitsune-mcp",
-  "env": { "KITSUNE_TOOLS": "shapeshift,shiftback,key" } }  ← custom
+{ "command": "kitsune-forge" }
+```
+
+---
+
+## Specialized agent profiles
+
+Because tool context is opt-in, you can wire agents to carry only the surface they ever need:
+
+### Research agent — `search + fetch, ~700 tokens`
+```json
+{ "command": "kitsune-mcp", "env": { "KITSUNE_TOOLS": "search,shapeshift,call,auth,status" } }
+```
+```python
+shapeshift("brave-search", tools=["web_search"])
+shapeshift("firecrawl-mcp", tools=["scrape"])
+# Total in-context: ~700 tokens at peak. A GPT-4o request at 700 tokens costs ~$0.0021.
+```
+
+### Code agent — `github + filesystem + git`
+```python
+shapeshift("@modelcontextprotocol/server-github", tools=["create_issue", "search_repositories"])
+shapeshift("@modelcontextprotocol/server-filesystem", tools=["read_file", "write_file"])
+shapeshift("@modelcontextprotocol/server-git", tools=["git_log", "git_diff"])
+# Each loaded separately when needed — never all 60+ tools at once
+```
+
+### Notes agent — `notion + memory, lean`
+```python
+shapeshift("notion-hosted", tools=["notion-search", "notion-append-block-children"])
+shapeshift("mem0", tools=["add_memory", "search_memory"])
+# ~3,000 tokens peak vs ~22,000 for both always-on
 ```
 
 ---
@@ -206,7 +206,7 @@ Both modes from the same package:
 
 `shapeshift()` injects tools directly at runtime via FastMCP's live API. Token overhead stays flat regardless of how many servers you explore.
 
-Need the full evaluation suite? `kitsune-forge` adds execution, connection management, benchmarking, and tool crafting:
+Need the full evaluation suite? `kitsune-forge` adds `inspect`, `test`, `bench`, `craft`, `compare`, and more:
 
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture-forge.svg" alt="Protean Forge — extended suite" width="700"/>
@@ -245,9 +245,9 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.dev, Z
 
 ### Using Kitsune alongside existing servers
 
-You can add Kitsune to a config that already has other servers — it works without touching anything else. For the cleanest setup (Kitsune as your sole gateway), `setup()` can extract API keys from your existing server configs into `~/.kitsune/.env` and register those servers so `shapeshift()` can reach them on demand.
+You can add Kitsune to a config that already has other servers — it works without touching anything else.
 
-**Kitsune never deletes or modifies your existing configs without explicit confirmation.** Config changes are always backed up and reversible with `setup(restore=True)`.
+**Kitsune never deletes or modifies your existing configs without explicit confirmation.** Config changes are always backed up and reversible.
 
 ### Run Kitsune and standard MCP side-by-side (Claude Code)
 
@@ -263,7 +263,7 @@ cd ~/projects/kitsune-session && claude
 cd ~/projects/any-other-project && claude  # uses global ~/.claude/mcp.json
 ```
 
-Both sessions run in parallel. The Kitsune terminal sees 5 tools; the standard terminal sees everything in your global config. No restarts, no toggling, no risk to either session. This makes it easy to compare workflows or run specialised agent tasks in one terminal while using familiar tools in another.
+Both sessions run in parallel. Terminal A sees 5 tools; Terminal B sees everything in your global config. No restarts, no toggling, no risk to either session. Easy to compare workflows or run specialised agent tasks in one terminal while using familiar tools in another.
 
 ---
 
@@ -314,7 +314,7 @@ Kitsune MCP          ← the one entry in your config
 
 The AI sees `read_file`, `write_file`, `list_directory` as if they were always there. There's no wrapper or `call_tool("filesystem", ...)` indirection — the tools are first-class.
 
-`shiftback()` reverses all of it: deregisters the proxy closures, clears resources and prompts, notifies the client.
+`shapeshift()` with no args reverses all of it: deregisters the proxy closures, clears resources and prompts, notifies the client.
 
 ### Resources and prompts
 
@@ -339,9 +339,21 @@ Template URIs (e.g. `file:///{path}`) are skipped — they require parameter bin
 | Smithery hosted | HTTP+SSE (requires `SMITHERY_API_KEY`) |
 | WebSocket server | `ws://` / `wss://` |
 
-### Why inspect() before shapeshift()
+### Cold start latency (typical ranges)
 
-`inspect()` connects to the server and fetches its schemas — but does **not** register anything. Zero tools added to context, zero tokens consumed by the AI.
+| Transport | First call | Subsequent calls |
+|---|---|---|
+| Smithery HTTP / WebSocket | ~100–300 ms | ~50–150 ms |
+| npm (`npx`) — cached | ~1–3 s | reused from pool |
+| npm (`npx`) — cold download | ~5–15 s | cached after first |
+| pip (`uvx`) — cached | ~1–2 s | reused from pool |
+| Docker | ~3–8 s | reused from pool |
+
+Kitsune keeps a **persistent process pool** — once a server is started, subsequent `shapeshift()` calls reattach in milliseconds. `shapeshift("brave-search")` the second time is fast.
+
+### Why use `inspect()` before shapeshift()
+
+`inspect()` (available in `kitsune-forge`) connects to the server and fetches its schemas — but does **not** register anything. Zero tools added to context, zero tokens consumed by the AI.
 
 Use it to:
 - See exact parameter names and types before committing
@@ -353,11 +365,11 @@ Use it to:
 inspect("mcp-server-brave-search")
 # → CREDENTIALS
 # →   ✗ missing  BRAVE_API_KEY — Brave Search API key
-# →   Add to .env:  BRAVE_API_KEY=your-value
+# →   Add: auth("BRAVE_API_KEY", "your-value")
 # → Token cost: ~99 tokens (measured)
 
-# Add the key to .env — picked up immediately, no restart needed
-# Then mount and use in the same session:
+# Add the key — picked up immediately, no restart needed
+auth("BRAVE_API_KEY", "your-value")
 shapeshift("mcp-server-brave-search")
 call("brave_web_search", arguments={"query": "MCP protocol 2025"})
 ```
@@ -366,11 +378,9 @@ call("brave_web_search", arguments={"query": "MCP protocol 2025"})
 
 ## Security
 
-Kitsune MCP introduces a trust model for servers you haven't personally audited.
-
 ### Trust tiers
 
-Every `shapeshift()`, `call()`, and `connect()` result shows where the server comes from:
+Every `shapeshift()` and `call()` result shows where the server comes from:
 
 | Tier | Sources | Indicator |
 |---|---|---|
@@ -378,7 +388,7 @@ Every `shapeshift()`, `call()`, and `connect()` result shows where the server co
 | Medium | `mcpregistry`, `glama`, `smithery` | `✓ Source: smithery` |
 | Community | `npm`, `pypi`, `github` | `⚠️ Source: npm (community — not verified)` |
 
-Community servers and `source="local"` installs require `confirm=True` — you're explicitly acknowledging you've reviewed the server before running arbitrary code. To bypass this for servers you already trust, set `KITSUNE_TRUST=community` (via `key("KITSUNE_TRUST", "community")` or your `.env`). This persists across sessions so power users and agents never see the gate again.
+Community servers and `source="local"` installs require `confirm=True` — you're explicitly acknowledging you've reviewed the server before running arbitrary code. To bypass this for servers you already trust, set `KITSUNE_TRUST=community` (via `auth("KITSUNE_TRUST", "community")` or your `.env`). This persists across sessions so power users and agents never see the gate again.
 
 ### Install command validation
 
@@ -390,10 +400,10 @@ Arguments are passed directly to `asyncio.create_subprocess_exec` (never a shell
 
 ### OAuth 2.1 for hosted MCP servers
 
-Many hosted MCP servers (Notion, Linear, Cloudflare) authenticate via OAuth 2.1 with Dynamic Client Registration rather than a static API key. Kitsune supports this automatically — pass the server URL directly:
+Many hosted MCP servers (Notion, Linear, Cloudflare) authenticate via OAuth 2.1 with Dynamic Client Registration rather than a static API key. Kitsune supports this automatically:
 
 ```python
-inspect("https://mcp.notion.com/mcp")
+auth("https://mcp.notion.com/mcp")
 # First use: browser opens, you approve, tokens are cached.
 # Subsequent runs: cached token loaded silently, refreshed when expired.
 
@@ -412,7 +422,7 @@ Headless or no-browser environments: set `KITSUNE_NO_BROWSER=1` to have Kitsune 
 ```
 ⚠️  Credentials may be required — add to .env:
   BRAVE_API_KEY=your-value
-  Or: key("BRAVE_API_KEY", "your-value")
+  Or: auth("BRAVE_API_KEY", "your-value")
 ```
 
 ### Process isolation and sandboxing
@@ -442,30 +452,24 @@ The same pattern works for all of them:
 ```
 shapeshift("brave")                                    # web search in 2 tools
 call("brave_web_search", arguments={"query": "…"})
+shapeshift()
 
 shapeshift("firecrawl-mcp", tools=["scrape","search"]) # scraping, lean (2 of 9 tools)
 call("scrape", arguments={"url": "https://…"})
+shapeshift()
 
 shapeshift("@modelcontextprotocol/server-github", tools=["create_issue","search_repositories"])
 call("create_issue", arguments={"owner": "…", "repo": "…", "title": "…"})
+shapeshift()
 ```
 
 **Token cost scales with what you load**, not what exists. A 26-tool GitHub server costs ~500 tokens if you only mount 3 tools. See [.env.example](.env.example) for the full key catalog with lean mount hints.
-
-### Security note on `.env`
-
-Kitsune MCP re-reads `.env` on every call — which means adding a key instantly activates it. That convenience comes with a responsibility: **`.env` is the single place all your API keys live**. A few practices worth following:
-
-- Add `.env` to `.gitignore` — never commit real keys
-- Use project-level `.env` for project-specific keys; `~/.kitsune/.env` for personal global keys
-- Prefer minimal OAuth scopes and fine-grained tokens (e.g. GitHub fine-grained tokens with per-repo permissions)
-- Rotate keys that get exposed; Kitsune MCP picks up the new value immediately without restart
 
 ---
 
 ## Why Not Just X?
 
-**"Can't I just add more servers to `mcp.json`?"** — Every configured server starts at launch and exposes all tools constantly. You can't add or remove mid-session without a restart. With 5+ servers you're burning thousands of tokens on every request for tools rarely needed. Kitsune MCP keeps the tool list minimal — shapeshift into what you need, shiftback when done.
+**"Can't I just add more servers to `mcp.json`?"** — Every configured server starts at launch and exposes all tools constantly. You can't add or remove mid-session without a restart. With 5+ servers you're burning thousands of tokens on every request for tools rarely needed. Kitsune MCP keeps the tool list minimal — shapeshift into what you need, release when done.
 
 **"What about MCP Inspector?"** — MCP Inspector is a standalone web UI that connects to one server and lets you inspect schemas and call tools manually. It's useful for basic debugging but isolated from real AI workflows. Kitsune MCP tests servers inside actual Claude or Cursor sessions — how an AI really uses them. It adds `test()` scoring, `bench()` latency numbers, side-by-side server comparison, and `craft()` for live endpoint prototyping. It also discovers and installs servers on demand; Inspector requires you to already have one running.
 
@@ -479,7 +483,7 @@ Kitsune MCP re-reads `.env` on every call — which means adding a key instantly
 | Load tools at runtime | ✅ (write code) | ✅ `shapeshift()` |
 | Search registries to discover servers | ❌ | ✅ npm · official · Glama · Smithery |
 | Install npm / PyPI / GitHub packages on demand | ❌ | ✅ |
-| Atomic shift back — retract all shapeshifted tools at once | ❌ | ✅ `shiftback()` |
+| Atomic release — retract all shapeshifted tools at once | ❌ | ✅ `shapeshift()` |
 | Persistent stdio process pool | ❌ | ✅ |
 | Zero boilerplate — works after `pip install` | ❌ | ✅ |
 
@@ -492,7 +496,7 @@ Kitsune MCP re-reads `.env` on every call — which means adding a key instantly
 ```json
 {
   "mcpServers": {
-    "protean": { "command": "kitsune-mcp" }
+    "kitsune": { "command": "kitsune-mcp" }
   }
 }
 ```
@@ -512,50 +516,57 @@ Kitsune MCP re-reads `.env` on every call — which means adding a key instantly
 
 Get a free key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, Kitsune MCP is fully functional via npm, PyPI, official registries, and GitHub.
 
-**Frictionless credentials** — Kitsune MCP re-reads `.env` on every `inspect()`, `shapeshift()`, and `call()`. Add a key mid-session and it takes effect immediately — no restart:
+**Frictionless credentials** — Kitsune MCP re-reads `.env` on every `shapeshift()` and `call()`. Add a key mid-session and it takes effect immediately — no restart:
 
 ```
-# .env (CWD, ~/.env, or ~/.kitsune/.env — all checked, CWD wins)
+# .env (CWD, ~/.env, or ~/.kitsune/.env — all checked, ~/.kitsune/.env wins)
 BRAVE_API_KEY=your-key
 GITHUB_TOKEN=ghp_...
 ```
 
-Or use `key()` to write to `.env` and activate in one step:
+Or use `auth()` to write to `.env` and activate in one step:
 
 ```
-key("BRAVE_API_KEY", "your-key")   # writes to .env, active immediately
+auth("BRAVE_API_KEY", "your-key")   # writes to ~/.kitsune/.env, active immediately
+```
+
+### Custom tool surface
+
+```json
+{ "command": "kitsune-mcp",
+  "env": { "KITSUNE_TOOLS": "shapeshift,call,auth" } }   ← three tools only
 ```
 
 ---
 
 ## All Tools
 
-### `kitsune-mcp` — lean profile (7 tools, ~650 token overhead)
+### `kitsune-mcp` — lean profile (5 tools, ~400 token overhead)
 
 | Tool | Description |
 |---|---|
-| `shapeshift(server_id, tools, source, confirm)` | Load a server's tools live. `tools=[...]` for lean load. `source="local"` forces npx/uvx install; `source="smithery"` forces HTTP. |
-| `shiftback(kill, uninstall)` | Remove shapeshifted tools. `kill=True` terminates the process. `uninstall=True` also removes a locally installed package. |
+| `shapeshift(server_id, tools, source, confirm)` | Load a server's tools live. `shapeshift()` with no args unmounts. `tools=[...]` for lean load. `source="local"` forces npx/uvx install; `source="smithery"` forces HTTP. |
 | `search(query, registry)` | Search MCP servers across registries. |
-| `inspect(server_id)` | Show tools, schemas, and live credential status (✓/✗ per key). |
+| `auth(target, value)` | Store an API key (`auth("VAR", "val")`) or trigger OAuth 2.1 (`auth("https://...")`). Writes to `~/.kitsune/.env`, active immediately. |
 | `call(tool_name, server_id, args)` | Call a tool. `server_id` optional when shapeshifted — current form used. |
-| `key(env_var, value)` | Save an API key to `.env` and load it immediately. |
 | `status()` | Show current form, active connections (PID + RAM), token stats. |
 
-### `kitsune-forge` — full suite (all 17 tools, ~1,700 token overhead)
+### `kitsune-forge` — full suite (~1,700 token overhead)
 
 Everything above, plus:
 
 | Tool | Description |
 |---|---|
-| `call(tool_name, server_id, args)` | Already in lean profile — listed here for completeness. |
+| `shiftback(kill, uninstall)` | Explicit unmount. `kill=True` terminates the process. `uninstall=True` also removes a locally installed package. |
+| `inspect(server_id)` | Show tools, schemas, and live credential status (✓/✗ per key). Measures token cost. |
 | `run(package, tool, args)` | Run from npm/pip directly. `uvx:pkg-name` for Python. |
 | `auto(task, tool, args)` | Search → pick best server → call in one step. |
 | `fetch(url, intent)` | Fetch a URL, return compressed text (~17x smaller than raw HTML). |
-| `craft(name, description, params, url)` | Register a custom tool backed by your HTTP endpoint. `shiftback()` removes it. |
+| `craft(name, description, params, url)` | Register a custom tool backed by your HTTP endpoint. `shapeshift()` removes it. |
 | `connect(command, name)` | Start a persistent server. Accepts server_id or shell command. |
 | `release(name)` | Kill a persistent connection by name. |
 | `setup(name)` | Step-by-step setup wizard for a connected server. |
+| `compare(query)` | Compare servers matching a query — token cost, tool count, trust tier, credential status. |
 | `test(server_id, level)` | Quality-score a server 0–100. |
 | `bench(server_id, tool, args)` | Benchmark tool latency — p50, p95, min, max. |
 | `skill(qualified_name)` | Load a skill into context. Persisted across sessions. |
@@ -570,24 +581,24 @@ Everything above, plus:
 # Task 1: read some files
 shapeshift("@modelcontextprotocol/server-filesystem", tools=["read_file"])
 read_file(path="/tmp/data.csv")
-shiftback()
+shapeshift()   # unmount
 
 # Task 2: search the web
 shapeshift("mcp-server-brave-search")
 brave_web_search(query="latest MCP servers 2025")
-shiftback()
+shapeshift()
 
 # Task 3: run a git query
 shapeshift("@modelcontextprotocol/server-git", tools=["git_log"])
 git_log(repo_path=".", max_count=5)
-shiftback()
+shapeshift()
 # Three different servers. One session. Zero config edits.
 ```
 
 ### MCP developer workflow — test your server
 
 ```
-# Evaluate your server before publishing
+# Evaluate your server before publishing (kitsune-forge)
 inspect("my-server")               # review schemas and credentials
 test("my-server")                  # quality score 0–100
 bench("my-server", "my_tool", {})  # p50, p95 latency
@@ -600,40 +611,25 @@ craft(
     url="http://localhost:8080/rank"
 )
 my_tool(query="test")   # call it natively inside Claude
-shiftback()
+shapeshift()
 ```
 
-### Same-session usage with call()
-
-After `shapeshift()`, use `call()` immediately — no restart, no server_id needed:
+### Auth then mount in the same session
 
 ```
-shapeshift("@modelcontextprotocol/server-filesystem")
-# → "In this session: call('tool_name', arguments={...})"
-
-call("list_directory", arguments={"path": "/Users/me/project"})
-call("read_file", arguments={"path": "/Users/me/project/README.md"})
-shiftback()
-```
-
-### Search, shapeshift, use, shiftback
-
-```
-search("web search")
+auth("BRAVE_API_KEY", "your-key")   # written to ~/.kitsune/.env immediately
 shapeshift("mcp-server-brave-search")
-key("BRAVE_API_KEY", "your-key")   # picked up immediately
 call("brave_web_search", arguments={"query": "MCP protocol 2025"})
-shiftback()
+shapeshift()
 ```
 
-### Local install — no API key needed
+### OAuth-authenticated hosted server
 
 ```
-# Force local install via npx/uvx — no Smithery key required
-shapeshift("brave", source="local", confirm=True)
-# → spawns npx locally, tools appear natively
-call("brave_web_search", arguments={"query": "MCP 2026"})
-shiftback(uninstall=True)   # remove tools AND uninstall the package
+auth("https://mcp.notion.com/mcp")   # browser opens, you approve
+shapeshift("https://mcp.notion.com/mcp", tools=["notion-search"])
+call("notion-search", arguments={"query": "roadmap"})
+shapeshift()
 ```
 
 ### Persistent server with setup guidance
@@ -641,11 +637,11 @@ shiftback(uninstall=True)   # remove tools AND uninstall the package
 ```
 connect("uvx voice-mode", name="voice")
 setup("voice")                      # shows missing env vars
-key("DEEPGRAM_API_KEY", "your-key")
+auth("DEEPGRAM_API_KEY", "your-key")
 setup("voice")                      # confirms ready
 shapeshift("voice-mode")
 speak(text="Hello from Kitsune MCP!")
-shiftback(kill=True)                    # terminates process, frees RAM
+shapeshift()
 ```
 
 ---
@@ -663,6 +659,36 @@ npx kitsune-mcp                # if you prefer npm (delegates to uvx internally)
 **Requirements:** Python 3.12+ · `node`/`npx` (for npm servers) · `uvx` from [uv](https://github.com/astral-sh/uv) (for pip servers)
 
 > **Tip:** `uvx kitsune-mcp` is the easiest way — uv installs into an isolated env automatically. No venv setup needed.
+
+---
+
+## Built for two audiences
+
+### Adaptive agents
+
+An agent that loads everything upfront burns tokens on tools it never calls — and makes worse decisions because it sees too many options at once. An agent that mounts on demand is leaner, faster, and more focused:
+
+- Shapeshift into only what the current task needs — release when done
+- `shapeshift(server_id, tools=[...])` to cherry-pick — load 2 tools from a server that has 20
+- Chain across multiple servers in one session without touching config or restarting
+- Token overhead stays flat: ~400 base + only what you load
+
+Kitsune MCP is designed around the real economics of an agent loop.
+
+### MCP developers
+
+Beyond MCP Inspector's basic schema viewer, Kitsune MCP gives you a full development workflow inside your actual AI client:
+
+| Need | Tool |
+|---|---|
+| Explore a server's tools and schemas | `inspect(server_id)` |
+| Quality-score your server end-to-end | `test(server_id)` → score 0–100 |
+| Benchmark tool latency | `bench(server_id, tool, args)` → p50, p95, min, max |
+| Prototype endpoint-backed tools live | `craft(name, description, params, url)` |
+| Test inside real Claude/Cursor workflows | `shapeshift()` → call tools natively → `shapeshift()` |
+| Compare two servers side by side | `compare("notion")` — token cost, tool count, trust, cred status |
+
+No separate web UI. No isolated test environment. Test how your server actually behaves when an AI uses it.
 
 ---
 
