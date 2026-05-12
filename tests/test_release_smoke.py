@@ -41,7 +41,7 @@ def test_all_kitsune_modules_import():
         "kitsune_mcp.tools._state",
         "kitsune_mcp.tools.discovery",
         "kitsune_mcp.tools.exec",
-        "kitsune_mcp.tools.morph",
+        "kitsune_mcp.tools.shapeshift",
         "kitsune_mcp.tools.onboarding",
     ]
     for name in modules:

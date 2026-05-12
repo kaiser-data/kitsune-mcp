@@ -183,9 +183,8 @@ class TestStatusOnboarding:
         session["shapeshift_tools"] = []
         try:
             result = await status()
-            # v0.11.0: clean-session preamble points users to the onboard() tool
-            # rather than embedding tutorial text directly.
-            assert "onboard()" in result
+            # v0.18.0: clean-session shows inline quickstart with shapeshift()
+            assert "shapeshift(" in result
             # PROVIDERS section is now headlined regardless of session state
             assert "PROVIDERS" in result
         finally:
@@ -652,7 +651,7 @@ class TestShiftbackUninstall:
             with patch("kitsune_mcp.tools._state._do_shed", return_value=["test_tool"]):
                 result = await shiftback(ctx, kill=False, uninstall=False)
             assert "still cached" in result or "cached" in result
-            assert "shiftback(uninstall=True)" in result
+            assert "shapeshift()" in result
         finally:
             self._reset_session()
 
@@ -871,7 +870,7 @@ class TestInspectProbeFailure:
             result = await inspect("needs-init", probe=True)
 
         assert "Probe may have failed due to missing creds" in result
-        assert 'key("API_KEY"' in result
+        assert 'auth("API_KEY"' in result
         assert 'inspect("needs-init")' in result
 
     async def test_probe_failure_no_declared_creds_shows_generic_hint(self):
@@ -1290,7 +1289,7 @@ class TestComparePolish:
         # The status column truncates at 24 chars but the action line carries
         # the full cred name.
         assert "needs NOTION_LOCAL_OPS" in result  # truncated form in table
-        assert 'key("NOTION_LOCAL_OPS_WORKSPACE_ROOT"' in result  # full in action
+        assert 'auth("NOTION_LOCAL_OPS_WORKSPACE_ROOT"' in result  # full in action
 
     async def test_compare_action_for_failed_row_is_inspect_not_shapeshift(self):
         from kitsune_mcp.tools import compare

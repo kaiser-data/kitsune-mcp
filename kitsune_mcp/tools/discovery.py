@@ -64,7 +64,7 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
     # 1. Smithery short-circuit — no key, no probe possible.
     if srv.source == "smithery" and not _state._smithery_available():
         row["status"] = "needs SMITHERY_API_KEY"
-        row["action"] = 'key("SMITHERY_API_KEY", "...") then compare(...)'
+        row["action"] = 'auth("SMITHERY_API_KEY", "...") then compare(...)'
     # 2. Any other HTTP transport — let _get_transport pick direct-OAuth vs Smithery.
     elif srv.transport == "http":
         try:
@@ -119,7 +119,7 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
             if missing:
                 first = missing[0]
                 row["status"] = f"needs {first}"
-                row["action"] = f'key("{first}", "...") then compare(...)'
+                row["action"] = f'auth("{first}", "...") then compare(...)'
             elif last_err:
                 row["status"] = f"failed: {last_err}"
                 row["action"] = f'inspect("{srv.id}", probe=True)  # see full error'
@@ -141,8 +141,14 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
 
 
 @mcp.tool()
-async def search(query: str, registry: str = "all", limit: int = 5) -> str:
-    """Search MCP servers. registry: all|official|mcpregistry|glama|npm|smithery|pypi"""
+async def search(query: str, compare: bool = False, registry: str = "all", limit: int = 5) -> str:
+    """Search MCP servers. compare=True shows side-by-side token cost table.
+
+    registry: all|official|mcpregistry|glama|npm|smithery|pypi
+    """
+    if compare:
+        return await _run_compare(query, limit)
+
     if registry == "smithery":
         reg = _state.SmitheryRegistry()
     elif registry == "npm":
@@ -187,7 +193,7 @@ async def search(query: str, registry: str = "all", limit: int = 5) -> str:
             "\n💡 New here? Try: shapeshift('duckduckgo-websearch', confirm=True)  — free, no key needed"
         )
     else:
-        lines.append("\ninspect('<id>') for details | shapeshift('<id>') to load")
+        lines.append("\nauth('<id>') to check credentials | shapeshift('<id>') to mount")
     return "\n".join(lines)
 
 
@@ -282,7 +288,7 @@ async def inspect(server_id: str, probe: bool = False) -> str:
                 f"TOOLS: not probed ({gate_reason} — would run code from {srv.source})"
             )
             lines.append(f"To probe live: inspect(\"{srv.id}\", probe=True)")
-            lines.append("To always trust community: key(\"KITSUNE_TRUST\", \"community\")")
+            lines.append("To always trust community: auth(\"KITSUNE_TRUST\", \"community\")")
         elif probe_error:
             lines.append(f"TOOLS: live probe failed — {probe_error}")
         elif srv.transport == "stdio":
@@ -302,16 +308,16 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         first_var = _to_env_var(next(iter(missing_creds)))
         lines.append(
             f"\nProbe may have failed due to missing creds. "
-            f"Try: key(\"{first_var}\", \"...\") then inspect(\"{srv.id}\")"
+            f"Try: auth(\"{first_var}\", \"...\") then inspect(\"{srv.id}\")"
         )
     elif probe_error:
         lines.append(
             "\nIf the server needs credentials not declared in registry, "
-            "set them with key() and retry inspect."
+            "set them with auth() and retry inspect."
         )
     elif missing_creds:
         first_var = _to_env_var(next(iter(missing_creds)))
-        lines.append(f"\nNext: key(\"{first_var}\", \"...\") then shapeshift(\"{srv.id}\")")
+        lines.append(f"\nNext: auth(\"{first_var}\", \"...\") then shapeshift(\"{srv.id}\")")
     else:
         lean_hint = f", tools=[\"{tools[0].get('name', '')}\"]" if tools and len(tools) > 4 else ""
         lines.append(f"\nNext: shapeshift(\"{srv.id}\"{lean_hint})")
@@ -319,13 +325,8 @@ async def inspect(server_id: str, probe: bool = False) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
-async def compare(query: str, limit: int = 6, probe: bool = False) -> str:
-    """Side-by-side token cost & creds for the top N candidates of a search.
-
-    Probes ALL candidates in parallel. Use to pick a server before shapeshift().
-    probe=True overrides the community-trust gate for community sources.
-    """
+async def _run_compare(query: str, limit: int = 6, probe: bool = False) -> str:
+    """Core compare logic, shared by compare() and search(..., compare=True)."""
     servers = await _state._registry.search(query, limit)
     if not servers:
         return f"No servers found for '{query}'. Try a different query."
@@ -379,6 +380,16 @@ async def compare(query: str, limit: int = 6, probe: bool = False) -> str:
 
 
 @mcp.tool()
+async def compare(query: str, limit: int = 6, probe: bool = False) -> str:
+    """Side-by-side token cost & creds for the top N candidates of a search.
+
+    Probes ALL candidates in parallel. Use to pick a server before shapeshift().
+    probe=True overrides the community-trust gate for community sources.
+    """
+    return await _run_compare(query, limit, probe)
+
+
+@mcp.tool()
 async def status() -> str:
     """Show provider auth state, current form, active connections, token stats.
 
@@ -428,7 +439,7 @@ async def status() -> str:
             smithery_label = "(SMITHERY_API_KEY set — could not verify)"
             smithery_icon = "✓"
     else:
-        smithery_label = "(no key — run onboard() for setup)"
+        smithery_label = "(no key — auth('SMITHERY_API_KEY', 'sm-...') to unlock 3000+ servers)"
         smithery_icon = "🔑"
 
     lines.append("PROVIDERS")
@@ -444,7 +455,11 @@ async def status() -> str:
     is_first_run = not explored and not grown and stats["total_calls"] == 0
     if is_first_run:
         lines += [
-            "✨ New here? Run onboard() for the 3-step quickstart.",
+            "✨ Quick start:",
+            "  1. shapeshift(\"mcp-server-time\")",
+            "  2. call(\"get_current_time\", {\"timezone\": \"UTC\"})",
+            "  3. shapeshift()",
+            "  More: search(\"what you need\") | auth(\"SMITHERY_API_KEY\", \"sm-...\") for 3000+ servers",
             "",
         ]
 

@@ -179,7 +179,7 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
                     label = _letters[idx] if idx < len(_letters) else str(idx + 1)
                     lines.append(f"  [{label}] {opt}  (cloud — {status})")
                     for v in creds:
-                        lines.append(f"      key(\"{v}\", \"<your-value>\")")
+                        lines.append(f"      auth(\"{v}\", \"<your-value>\")")
                     idx += 1
                 for opt, urls, _creds in local_opts:
                     label = _letters[idx] if idx < len(_letters) else str(idx + 1)
@@ -205,7 +205,7 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
     if ungrouped_vars:
         lines.append("\nMissing env vars:")
         for v in sorted(ungrouped_vars):
-            lines.append(f"  key(\"{v}\", \"<your-value>\")")
+            lines.append(f"  auth(\"{v}\", \"<your-value>\")")
 
     # Local URLs not already shown inside a provider option
     urls_shown = {u for opt_list in providers.values() for u in unreachable if any(o in u.lower() for o in opt_list)}

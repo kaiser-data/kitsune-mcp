@@ -217,7 +217,7 @@ class TestStatusSmitheryLiveness:
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         from kitsune_mcp.tools.discovery import status
         result = await status()
-        assert "no key" in result or "onboard" in result.lower()
+        assert "search(" in result or "auth(" in result or "no key" in result
 
 
 # ---------------------------------------------------------------------------

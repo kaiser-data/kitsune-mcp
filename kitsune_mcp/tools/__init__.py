@@ -3,8 +3,8 @@
 Implementation is split into themed submodules:
     discovery   — search, inspect, compare, status
     exec        — call, run, fetch, test, bench
-    morph       — shapeshift, shiftback, craft, connect, release
-    onboarding  — skill, key, auto, setup
+    shapeshift  — shapeshift, shiftback, craft, connect, release
+    onboarding  — skill, key, auth, auto, setup
     _state      — shared helpers and mock-patchable cross-cutting state
 
 For mock.patch in tests, prefer `kitsune_mcp.tools._state.X` so the patch
@@ -15,8 +15,8 @@ catches every call site uniformly.
 from kitsune_mcp.tools import _state  # noqa: F401  (re-exported)
 from kitsune_mcp.tools.discovery import compare, inspect, search, status  # noqa: F401
 from kitsune_mcp.tools.exec import bench, call, fetch, run, test  # noqa: F401
-from kitsune_mcp.tools.morph import connect, craft, release, shapeshift, shiftback  # noqa: F401
-from kitsune_mcp.tools.onboarding import auto, key, onboard, setup, skill  # noqa: F401
+from kitsune_mcp.tools.shapeshift import connect, craft, release, shapeshift, shiftback  # noqa: F401
+from kitsune_mcp.tools.onboarding import auth, auto, key, onboard, setup, skill  # noqa: F401
 
 # Backward-compat re-exports of names that tests / server.py imported from
 # the old monolithic kitsune_mcp/tools.py module.

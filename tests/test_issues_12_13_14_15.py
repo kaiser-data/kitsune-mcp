@@ -153,4 +153,4 @@ async def test_auto_surfaces_registry_errors_on_no_tools():
     assert "could not fetch tool schema" in result
     assert "glama" in result or "mcpregistry" in result
     assert "SMITHERY_API_KEY" in result
-    assert "key(" in result
+    assert "auth(" in result

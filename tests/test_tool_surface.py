@@ -63,15 +63,14 @@ def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
 # ---------------------------------------------------------------------------
 
 LEAN_REQUIRED = {
-    "shapeshift", "shiftback", "search", "inspect",
-    "compare", "call", "auto", "key", "status",
+    "shapeshift", "search", "auth", "call", "status",
 }
 
 # Tools that must NOT appear in lean (forge-only)
 FORGE_ONLY = {
+    "shiftback", "auto", "inspect", "compare", "key", "onboard",
     "run", "fetch", "craft", "connect", "release",
     "test", "bench", "setup",
-    # onboard moved to lean (v0.14.0) — users need first-run wizard without KITSUNE_TOOLS=all
 }
 
 ALL_TOOLS = LEAN_REQUIRED | FORGE_ONLY
@@ -95,16 +94,16 @@ def test_lean_profile_excludes_forge_only_tools():
     assert not leaked, f"Forge-only tools leaked into lean profile: {leaked}"
 
 
-def test_compare_is_in_lean():
-    """compare is a discovery tool and must be in the lean profile (#24)."""
+def test_auth_is_in_lean():
+    """auth replaces key+login in the lean profile."""
     from server import _LEAN_TOOLS
-    assert "compare" in _LEAN_TOOLS, "compare must be in lean profile"
+    assert "auth" in _LEAN_TOOLS, "auth must be in lean profile"
 
 
 def test_auto_is_in_lean():
-    """auto is a core UX tool and must be in the lean profile."""
+    """auto is available in forge profile."""
     from server import _LEAN_TOOLS
-    assert "auto" in _LEAN_TOOLS, "auto must be in lean profile"
+    assert "auto" not in _LEAN_TOOLS, "auto is forge-only in v0.18+"
 
 
 def test_base_tool_names_covers_lean_and_forge():
@@ -116,10 +115,9 @@ def test_base_tool_names_covers_lean_and_forge():
 
 
 def test_lean_tools_documented_count():
-    """Lean profile size is documented in server.py header — catch silent drift."""
+    """Lean profile is exactly 5 tools — catch silent drift."""
     from server import _LEAN_TOOLS
-    # If this changes, update the server.py docstring and this assertion together.
-    assert len(_LEAN_TOOLS) == 10, (
+    assert len(_LEAN_TOOLS) == 5, (
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
     )

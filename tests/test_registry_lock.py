@@ -105,7 +105,7 @@ async def test_shiftback_sees_post_shapeshift_tools():
 @pytest.mark.asyncio
 async def test_local_http_only_error_does_not_shed_current_form():
     """source='local' on HTTP-only server must return error before touching the registry."""
-    from kitsune_mcp.tools.morph import shapeshift
+    from kitsune_mcp.tools.shapeshift import shapeshift
 
     _reset_session()
     session["shapeshift_tools"] = ["existing_tool"]
@@ -122,8 +122,8 @@ async def test_local_http_only_error_does_not_shed_current_form():
     mock_ctx.session = AsyncMock()
 
     with (
-        patch("kitsune_mcp.tools.morph._state") as mock_state,
-        patch("kitsune_mcp.tools.morph.session", session),
+        patch("kitsune_mcp.tools.shapeshift._state") as mock_state,
+        patch("kitsune_mcp.tools.shapeshift.session", session),
     ):
         mock_state._registry = AsyncMock()
         mock_state._registry.get_server = AsyncMock(return_value=mock_srv)

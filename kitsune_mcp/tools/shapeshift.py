@@ -1,4 +1,4 @@
-"""Morph tools: shapeshift, shiftback, craft, connect, release."""
+"""Shapeshift tools: shapeshift, shiftback, craft, connect, release."""
 
 import asyncio
 import contextlib
@@ -128,7 +128,7 @@ async def _commit_shapeshift(
         lines.append("\n⚠️  Credentials may be required — add to .env:")
         for var in missing_env:
             lines.append(f"  {var}=your-value")
-        lines.append(f'  Or: key("{missing_env[0]}", "your-value")')
+        lines.append(f'  Or: auth("{missing_env[0]}", "your-value")')
     if reg_failures:
         lines.append(f"\n⚠️  {len(reg_failures)} tool(s) failed to register:")
         for fname, ferr in reg_failures:
@@ -153,23 +153,36 @@ async def _commit_shapeshift(
     return "\n".join(lines)
 
 
+async def _do_unmount(ctx, keep: bool) -> str:
+    """Unmount current form. keep=True keeps process warm; keep=False kills and uninstalls."""
+    return await shiftback(ctx, kill=not keep, uninstall=not keep)
+
+
 @mcp.tool()
 async def shapeshift(
-    server_id: str,
-    ctx: Context,
+    server_id: str = "",
+    ctx: Context | None = None,
     tools: list[str] | None = None,
+    keep: bool = False,
     confirm: bool = False,
     source: str = "auto",
     server_args: list[str] | None = None,
 ) -> str:
-    """Shapeshift into a server's form. The fox takes on the server's shape — its tools become available natively in the session.
+    """Mount a server (server_id provided) or unmount current form (no server_id).
 
-    source: "auto" (default) | "local" (force npx/uvx install) | "smithery" (force HTTP via Smithery) | "official" (official/mcpregistry only)
+    shapeshift("mcp-server-time")    — mount: server's tools become available
+    shapeshift()                     — unmount: kill process + uninstall (clean slate)
+    shapeshift(keep=True)            — unmount: keep pool warm for quick re-attach
+
+    source: "auto" (default) | "local" (force npx/uvx install) | "smithery" | "official"
     tools: load only specific tools instead of everything
-    server_args: extra CLI arguments appended to the install command (e.g. ["/private/tmp"] for server-filesystem)
-    confirm: proceed with community (npm/pypi/github) sources after reviewing
+    server_args: extra CLI arguments for the install command (e.g. ["/private/tmp"])
+    confirm: proceed with community sources after reviewing
     KITSUNE_TRUST=community env var skips the community trust gate globally
     """
+    if not server_id:
+        return await _do_unmount(ctx, keep=keep)
+
     # Pool connections (from connect()) take priority — user already vetted these, bypass trust gates
     for _pk, conn in session["connections"].items():
         if conn.get("name") == server_id or conn.get("command") == server_id:
@@ -195,7 +208,7 @@ async def shapeshift(
     if source == "smithery" and not _state._smithery_available():
         return (
             f"❌ shapeshift failed: source='smithery' requires SMITHERY_API_KEY (not set).\n\n"
-            f"Set it: key(\"SMITHERY_API_KEY\", \"your-key\")\n"
+            f"Set it: auth(\"SMITHERY_API_KEY\", \"your-key\")\n"
             f"Or use: shapeshift(\"{server_id}\", source=\"local\") to install locally."
         )
 
@@ -254,7 +267,7 @@ async def shapeshift(
             f"⚠️  '{server_id}' is from {srv_source} (community — not verified by the official MCP registry)."
             f"{preview}"
             f"To proceed: shapeshift('{server_id}', confirm=True)\n"
-            f"To always trust community: key(\"KITSUNE_TRUST\", \"community\")"
+            f"To always trust community: auth(\"KITSUNE_TRUST\", \"community\")"
         )
 
     if source == "local" and not confirm and not _trust_override:
@@ -276,7 +289,7 @@ async def shapeshift(
             f"❌ shapeshift failed: '{server_id}' is hosted on Smithery and needs SMITHERY_API_KEY.\n"
             f"\n"
             f"  → Get a key: https://smithery.ai/account/api-keys\n"
-            f'  → Then: key("SMITHERY_API_KEY", "sm-...") and retry shapeshift("{server_id}")\n'
+            f'  → Then: auth("SMITHERY_API_KEY", "sm-...") and retry shapeshift("{server_id}")\n'
             f"\n"
             f'  Or use: shapeshift("{server_id}", source="local", confirm=True)\n'
             f"        to install locally without a Smithery key (community trust gate applies)."
@@ -444,7 +457,7 @@ async def shiftback(ctx: Context, kill: bool = False, uninstall: bool = False) -
             result_lines.append(f"Note: '{pkg}' was run via npx (cached, not permanently installed — cache expires automatically)")
     elif local_install and not uninstall:
         pkg = local_install["package"]
-        result_lines.append(f"Local package '{pkg}' is still cached. To remove: shiftback(uninstall=True)")
+        result_lines.append(f"Local package '{pkg}' is still cached. To clean up: shapeshift()")
 
     return "\n".join(result_lines)
 

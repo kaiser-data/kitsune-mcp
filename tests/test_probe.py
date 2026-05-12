@@ -190,7 +190,7 @@ class TestFormatSetupGuide:
     def test_missing_uses_key_command(self):
         reqs = self._reqs(missing_env=["EXA_API_KEY"])
         result = _format_setup_guide(reqs, "myserver")
-        assert 'key("EXA_API_KEY"' in result
+        assert 'auth("EXA_API_KEY"' in result
 
     def test_no_service_hint_without_service_tool(self):
         reqs = self._reqs(

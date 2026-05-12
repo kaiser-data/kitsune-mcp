@@ -7,10 +7,9 @@ All logic lives in the kitsune_mcp package. This file:
   4. Re-exports public names so existing tests (from server import ...) continue to work.
 
 KITSUNE_TOOLS env var controls which tools are registered:
-  (not set)  — lean profile: shapeshift, shiftback, search, inspect, compare,
-                              call, auto, key, status, onboard  (~650 tokens overhead)
+  (not set)  — lean profile: status, search, auth, shapeshift, call  (~400 tokens overhead)
   KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~1700 tokens)
-  KITSUNE_TOOLS=shapeshift,shiftback — exactly those tools
+  KITSUNE_TOOLS=shapeshift,call — exactly those tools
 """
 
 import contextlib
@@ -86,6 +85,7 @@ from kitsune_mcp.shapeshift import (  # noqa: E402, F401
 )
 from kitsune_mcp.tools import (  # noqa: E402, F401
     _BASE_TOOL_NAMES,
+    auth,
     auto,
     bench,
     call,
@@ -133,7 +133,7 @@ from kitsune_mcp.utils import (  # noqa: E402, F401
 # ── Tool profile selection ────────────────────────────────────────────────────
 # All tools registered above via @mcp.tool(). Prune to the requested profile.
 
-_LEAN_TOOLS = {"shapeshift", "shiftback", "search", "inspect", "compare", "key", "status", "call", "auto", "onboard"}
+_LEAN_TOOLS = {"status", "search", "auth", "shapeshift", "call"}
 _KITSUNE_TOOLS_ENV = os.getenv("KITSUNE_TOOLS", "")
 
 if _KITSUNE_TOOLS_ENV.lower() == "all":

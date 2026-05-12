@@ -52,8 +52,8 @@ _DUMMY_VALUES = {"string": "test", "integer": 0, "boolean": False, "number": 0.0
 
 # Base tool names — used for collision detection in shapeshift()
 _BASE_TOOL_NAMES = {
-    "search", "inspect", "call", "run", "fetch",
-    "skill", "key", "auto", "status", "shapeshift", "shiftback", "craft",
+    "auth", "search", "inspect", "call", "run", "fetch",
+    "skill", "key", "login", "auto", "status", "shapeshift", "shiftback", "craft",
     "connect", "release", "test", "bench", "setup", "compare", "onboard",
 }
 

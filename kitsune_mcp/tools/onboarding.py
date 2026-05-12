@@ -1,8 +1,9 @@
-"""Onboarding tools: skill, key, auto, setup."""
+"""Onboarding tools: skill, key, auth, auto, setup."""
 
 import asyncio
 import contextlib
 import json
+import os
 import re
 from datetime import datetime, UTC
 
@@ -54,7 +55,7 @@ async def skill(qualified_name: str, forget: bool = False) -> str:
 
     # --- fetch from Smithery API ---
     if not _state._smithery_available():
-        return "No SMITHERY_API_KEY set. Run: key('SMITHERY_API_KEY', 'your-key')"
+        return "No SMITHERY_API_KEY set. Run: auth('SMITHERY_API_KEY', 'your-key')"
 
     try:
         r = await _get_http_client().get(
@@ -147,12 +148,12 @@ async def auto(
     # registry for a server named "onboard" and fail confusingly.
     # Core lean-profile tools always available; forge extras only with KITSUNE_TOOLS=all
     _KITSUNE_LEAN: frozenset[str] = frozenset({
-        "auto", "call", "compare", "inspect", "key", "onboard",
-        "search", "shapeshift", "shiftback", "status",
+        "auth", "call", "search", "shapeshift", "status",
     })
     _KITSUNE_FORGE: frozenset[str] = frozenset({
-        "bench", "connect", "craft", "fetch", "release", "run",
-        "setup", "skill", "test",
+        "auto", "bench", "compare", "connect", "craft", "fetch",
+        "inspect", "key", "login", "onboard", "release", "run",
+        "setup", "shiftback", "skill", "test",
     })
     _KITSUNE_BUILTINS = _KITSUNE_LEAN | _KITSUNE_FORGE
     task_stripped = task.strip().lower()
@@ -243,7 +244,7 @@ async def auto(
             if srv and getattr(srv, "source", None) == "smithery" and not _smithery_available():
                 lines += [
                     "This server is Smithery-hosted and requires SMITHERY_API_KEY.",
-                    "→ key('SMITHERY_API_KEY', 'sm-...') then retry,"
+                    "→ auth('SMITHERY_API_KEY', 'sm-...') then retry,"
                     " or search() for a free alternative.",
                 ]
             else:
@@ -587,6 +588,72 @@ async def setup(name: str) -> str:
         lines.append("\n(No resource docs found — probe based on tool schemas only.)")
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+async def auth(server_id_or_var: str, value: str = "") -> str:
+    """Check or set credentials for a server or environment variable.
+
+    auth("EXA_API_KEY", "sk-...")  → save env var (persists to .env)
+    auth("EXA_API_KEY")            → check if set; show how to set if not
+    auth("mcp-server-time")        → check server's auth requirements
+    auth("my-oauth-server")        → run OAuth browser flow (http transport)
+    """
+    name = server_id_or_var
+
+    # Value provided → always store as env var regardless of name format
+    if value:
+        var = name.upper().replace(" ", "_").replace("-", "_")
+        _save_to_env(var, value)
+        _state._registry.bust_cache()
+        preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
+        return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
+
+    # ALL_CAPS pattern → env var status check
+    if re.match(r'^[A-Z][A-Z0-9_]*$', name):
+        val = os.getenv(name)
+        if val:
+            preview = val[:4] + "***" + val[-2:] if len(val) > 6 else "***"
+            return f"✓ {name} = {preview} (set)\nTo update: auth(\"{name}\", \"new-value\")"
+        return f"✗ {name} not set.\nTo set: auth(\"{name}\", \"your-value\")"
+
+    # Server ID → look up in registry
+    srv = await _state._registry.get_server(name)
+    if srv is None:
+        return f"Server '{name}' not found. Try: search(\"{name}\")"
+
+    if srv.transport == "http":
+        from kitsune_mcp import oauth
+        base_url = srv.url or f"https://{name}.run.tools"
+        try:
+            token = await oauth.ensure_token(base_url)
+        except Exception as e:
+            return "\n".join([
+                f"OAuth failed for '{name}': {e}",
+                f'Retry: auth("{name}")',
+            ])
+        preview = token[:8] + "..." if len(token) > 8 else token
+        return "\n".join([
+            f"Authenticated '{name}'.",
+            f"Token: {preview}",
+            f'Next: shapeshift("{name}")',
+        ])
+
+    # stdio transport
+    resolved, missing = _state._resolve_config(srv.credentials, {})
+    if not srv.credentials:
+        return f"✓ '{name}' — no auth needed.\nNext: shapeshift(\"{name}\")"
+    if missing:
+        missing_vars = {_to_env_var(k): v for k, v in missing.items()}
+        lines = [f"'{name}' needs credentials:"]
+        for ev, desc in missing_vars.items():
+            lines.append(f"  ✗ {ev}" + (f" — {desc[:60]}" if desc else ""))
+        lines.append("")
+        lines.append("Set them:")
+        for ev in missing_vars:
+            lines.append(f'  auth("{ev}", "your-value")')
+        return "\n".join(lines)
+    return f"✓ '{name}' — credentials set.\nNext: shapeshift(\"{name}\")"
 
 
 # Free-tier servers verified to work without any API key. Curated list — these

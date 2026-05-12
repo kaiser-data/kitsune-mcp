@@ -139,7 +139,7 @@ def _credentials_guide(server_id: str, credentials: dict, resolved: dict) -> str
         "",
         "Add to .env:",
         *[f"  {e}=your-value" for e in missing_envs],
-        f"Or: key('{missing_envs[0]}', 'your-value')",
+        f"Or: auth('{missing_envs[0]}', 'your-value')",
     ]
     return "\n".join(lines)
 

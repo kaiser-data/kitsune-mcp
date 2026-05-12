@@ -108,11 +108,11 @@ class TestCredentialsGuide:
         assert "API_KEY" in result  # env var form shown
         assert "✗" in result        # shown as missing
 
-    def test_shows_key_command(self):
+    def test_shows_auth_command(self):
         credentials = {"apiKey": "API key description"}
         resolved = {}
         result = _credentials_guide("my-server", credentials, resolved)
-        assert "key(" in result
+        assert "auth(" in result
 
     def test_shows_dotenv_instructions(self):
         credentials = {"token": "Auth token", "secret": "Secret value"}
@@ -611,7 +611,7 @@ class TestMorphCredentialWarning:
             result = await shapeshift("org/cred-server", ctx)
 
         assert env_var in result
-        assert 'key("' in result
+        assert 'auth("' in result
 
     async def test_no_warning_when_credentials_set(self):
         """No credential warning when the referenced env var is already set."""

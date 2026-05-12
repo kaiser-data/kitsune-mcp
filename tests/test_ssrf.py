@@ -92,7 +92,7 @@ async def test_craft_blocks_private_url(monkeypatch):
     monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
     ctx = MagicMock()
     ctx.session = AsyncMock()
-    from kitsune_mcp.tools.morph import craft
+    from kitsune_mcp.tools.shapeshift import craft
     result = await craft(ctx=ctx, name="my_tool", description="test", params={}, url="https://192.168.1.1/api")
     assert "Blocked" in result
 
@@ -102,6 +102,6 @@ async def test_craft_blocks_loopback_url(monkeypatch):
     monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
     ctx = MagicMock()
     ctx.session = AsyncMock()
-    from kitsune_mcp.tools.morph import craft
+    from kitsune_mcp.tools.shapeshift import craft
     result = await craft(ctx=ctx, name="my_tool", description="test", params={}, url="http://127.0.0.1/api")
     assert "Blocked" in result
