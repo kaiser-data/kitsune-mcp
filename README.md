@@ -249,7 +249,21 @@ You can add Kitsune to a config that already has other servers — it works with
 
 **Kitsune never deletes or modifies your existing configs without explicit confirmation.** Config changes are always backed up and reversible with `setup(restore=True)`.
 
-For per-session isolation in Claude Code (run Kitsune-exclusive in one project, full config in another simultaneously), use `setup(project=True)` — it writes a project-level `.claude/mcp.json` with only Kitsune, leaving all other sessions untouched.
+### Run Kitsune and standard MCP side-by-side (Claude Code)
+
+Claude Code supports per-project MCP configs that override the global one. This means you can run a Kitsune session and a standard multi-server session **simultaneously, with no config changes**:
+
+```bash
+# Terminal A — Kitsune-only project (5 tools, clean context)
+mkdir ~/projects/kitsune-session
+echo '{"mcpServers":{"kitsune":{"command":"kitsune-mcp"}}}' > ~/projects/kitsune-session/.claude/mcp.json
+cd ~/projects/kitsune-session && claude
+
+# Terminal B — standard workflow (all your configured servers)
+cd ~/projects/any-other-project && claude  # uses global ~/.claude/mcp.json
+```
+
+Both sessions run in parallel. The Kitsune terminal sees 5 tools; the standard terminal sees everything in your global config. No restarts, no toggling, no risk to either session. This makes it easy to compare workflows or run specialised agent tasks in one terminal while using familiar tools in another.
 
 ---
 
