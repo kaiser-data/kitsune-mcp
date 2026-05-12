@@ -400,6 +400,7 @@ class TestShapeshiftCredBugFix:
         with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]) as mock_shed, \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
+             patch("kitsune_mcp.tools._state._smithery_available", return_value=True), \
              patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
              patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["my_tool"], [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
@@ -451,6 +452,7 @@ class TestShapeshiftLeanHint:
         with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]), \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
+             patch("kitsune_mcp.tools._state._smithery_available", return_value=True), \
              patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
              patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(registered[:len(tools_filter)] if tools_filter else registered, [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
@@ -515,6 +517,7 @@ class TestShapeshiftCallExample:
         with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
              patch("kitsune_mcp.tools._state._do_shed", return_value=[]), \
              patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
+             patch("kitsune_mcp.tools._state._smithery_available", return_value=True), \
              patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
              patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(registered, [])), \
              patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
