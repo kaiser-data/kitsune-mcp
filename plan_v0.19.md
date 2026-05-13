@@ -494,3 +494,271 @@ npm publish
 - `importlib.metadata.version("kitsune-mcp")` reads the *installed* package version,
   not `pyproject.toml`. Version shown in `status()` = installed version. After bumping
   pyproject.toml, run `pip install -e .` or reinstall to pick it up.
+
+---
+
+---
+
+# Kitsune v0.20 — Gateway Mode Plan
+
+## Context
+
+Kitsune exists to be the single MCP gateway: one context slot, all servers on demand.
+But today, users who add Kitsune to their config still have all their other MCP servers
+loading simultaneously. The LLM sees Kitsune's lean tools *plus* 50–200 tools from
+competing servers — exactly the context bloat Kitsune was built to eliminate.
+
+The naive fix (rewrite the config file to remove other servers) is wrong: config files
+are shared across all Claude sessions/windows. If Session A runs Kitsune-exclusive and
+Session B runs a normal workflow, rewriting the config breaks Session B.
+
+**Three-layer design — each layer independently useful, non-destructive, reversible:**
+
+1. **Credential Harvest** — read other configs, extract API keys → `~/.kitsune/.env`
+   (zero risk, zero config changes)
+2. **Server Absorption** — register extracted server definitions in Kitsune's registry
+   so `shapeshift("my-postgres")` works even for local/private servers not on any
+   public registry
+3. **Per-session Isolation** — per-project MCP configs for clients that support them
+   (Claude Code); backup/restore toggle for global clients (Claude Desktop) with
+   explicit multi-session warning
+
+---
+
+## User Journeys
+
+**Beginner** (just installed Kitsune alongside 8 other servers):
+```
+status()  →  ⚠ 8 other MCP servers active (~180 extra tools in context)
+             Run setup() to let Kitsune manage their credentials.
+setup()   →  Interactive wizard: "Found brave-search, notion, exa-search...
+             Extracting 6 API keys → ~/.kitsune/.env  ✓
+             Registering 8 servers for shapeshift()   ✓
+             Your other servers still run normally.
+             Tip: for a clean session, see setup(guide=True)"
+```
+
+**Intermediate** (wants clean Kitsune-only sessions in Claude Code):
+```
+setup(project=True)  →  Writes ./.claude/mcp.json with only Kitsune
+                         Other sessions (global config) unaffected
+                         This project opens clean: lean tools only
+```
+
+**Power user** (wants global Claude Desktop toggle):
+```
+setup(exclusive=True)  →  ⚠ WARNING: affects ALL Claude windows on this machine.
+                            Backup saved: ~/.kitsune/backup/claude-desktop.json
+                            Confirm? (y/n)
+setup(restore=True)    →  Restores original config from backup instantly
+```
+
+---
+
+## What Gets Built
+
+### 1. New module: `kitsune_mcp/gateway.py`
+
+Pure utility — no MCP tools registered here. Reusable by `setup()` and `status()`.
+
+```python
+# Client config discovery
+_CLIENT_CONFIGS: dict[str, Path]   # platform-aware paths per MCP client
+_find_mcp_configs() -> list[ClientConfig]
+
+# Server extraction
+_parse_mcp_servers(config: dict) -> list[AbsorbedServer]
+_harvest_credentials(servers: list[AbsorbedServer]) -> dict[str, str]
+
+# Absorbed registry persistence
+_load_absorbed_servers() -> list[AbsorbedServer]
+_save_absorbed_servers(servers: list[AbsorbedServer])  # atomic write
+_to_server_info(a: AbsorbedServer) -> ServerInfo
+
+# Config management (optional layer)
+_write_exclusive_config(client: str, keep: list[str]) -> Path  # backup + rewrite
+_restore_config(client: str) -> bool
+```
+
+`AbsorbedServer` dataclass:
+```python
+@dataclass
+class AbsorbedServer:
+    id: str          # name from mcpServers key, e.g. "brave-search"
+    command: str     # e.g. "npx"
+    args: list[str]  # e.g. ["-y", "@modelcontextprotocol/server-brave-search"]
+    env: dict        # original env vars from config block
+    client: str      # "claude-desktop" | "claude-code" | "cursor"
+    absorbed_at: str # ISO timestamp
+```
+
+### 2. New `AbsorbedRegistry` class in `kitsune_mcp/registry.py`
+
+Extends `BaseRegistry`. Reads `~/.kitsune/absorbed_servers.json`.
+- `source = "absorbed"`
+- Trust tier: same as `TRUST_MEDIUM` (user explicitly absorbed it)
+- `install_cmd` reconstructed from `[command] + args`
+- `credentials` dict built from env keys using existing `CRED_SUFFIXES` pattern
+
+Plugged into `MultiRegistry.__init__()` as last-priority source (after official,
+smithery, etc.). Adds zero latency when file absent.
+
+### 3. Enhanced `setup()` in `kitsune_mcp/tools/onboarding.py`
+
+Current `setup(name)` is a connection wizard. Extend with new signature:
+
+```python
+async def setup(
+    name: str = "",        # existing: connection setup wizard
+    action: str = "",      # new: "harvest" | "absorb" | "exclusive" | "restore" | "status"
+    keep: list[str] = [],  # servers to keep active in exclusive mode
+    project: bool = False, # write project-level .claude/mcp.json instead of global
+    confirm: bool = False, # skip interactive confirmation
+) -> str:
+```
+
+- `name` non-empty → existing behavior (unchanged)
+- `name` empty, `action` empty → detection + interactive wizard (beginner path)
+- `action="harvest"` → extract credentials only, no registry or config changes
+- `action="absorb"` → harvest + register servers in absorbed registry
+- `action="exclusive"` → absorb + rewrite config (with backup + multi-session warning)
+- `action="restore"` → restore config from backup
+- `project=True` → write `.claude/mcp.json` in cwd (Claude Code per-project isolation)
+
+Reuses `_save_to_env()` (`credentials.py:84`) for each extracted key.
+Reuses `CRED_SUFFIXES` (`constants.py:28`) to identify credential env vars.
+
+### 4. Enhanced `status()` in `kitsune_mcp/tools/discovery.py`
+
+Add a new section after Smithery key check (around line 413):
+
+```python
+configs = _find_mcp_configs()
+for cfg in configs:
+    competing = [s for s in cfg.servers if s.id != "kitsune"]
+    if competing:
+        tool_count_est = sum(s.estimated_tools for s in competing)
+        lines.append(f"⚠ {len(competing)} other servers active in {cfg.client} "
+                     f"(~{tool_count_est} extra tools in context)")
+        lines.append(f"  Run setup() to harvest their credentials and reduce bloat")
+
+absorbed = _load_absorbed_servers()
+if absorbed:
+    lines.append(f"✓ Absorbed: {', '.join(s.id for s in absorbed)} "
+                 f"(available via shapeshift)")
+```
+
+Keep this fast: read only the config JSON, don't probe any servers.
+
+### 5. `~/.kitsune/` storage additions
+
+```
+~/.kitsune/
+├── .env                          (existing)
+├── state.json                    (existing)
+├── skills.json                   (existing)
+├── oauth/                        (existing)
+├── absorbed_servers.json         (NEW — absorbed server definitions)
+└── backup/                       (NEW — config backups)
+    ├── claude-desktop.json
+    └── claude-code-global.json
+```
+
+---
+
+## Session Safety Matrix
+
+| Action | Session A (Kitsune) | Session B (Normal) | Safe? |
+|--------|--------------------|--------------------|-------|
+| Credential harvest | ✓ keys now available | ✓ unaffected | ✓ Always |
+| Absorb servers | ✓ shapeshift works | ✓ unaffected | ✓ Always |
+| `project=True` (Claude Code) | ✓ this project only | ✓ own config | ✓ Always |
+| `exclusive=True` global | ✓ clean next restart | ✗ loses tools on restart | ⚠ Warned |
+| `restore=True` | returns to normal | ✓ restored on restart | ✓ After warning |
+
+---
+
+## Client Config Paths
+
+```python
+_CLIENT_CONFIGS = {
+    "claude-desktop": {
+        "darwin":  Path.home() / "Library/Application Support/Claude/claude_desktop_config.json",
+        "win32":   Path(os.environ.get("APPDATA", "")) / "Claude/claude_desktop_config.json",
+        "linux":   Path.home() / ".config/Claude/claude_desktop_config.json",
+    },
+    "claude-code": {
+        "all": Path.home() / ".claude/mcp.json",
+    },
+    "cursor": {
+        "all": Path.home() / ".cursor/mcp.json",
+    },
+    "windsurf": {
+        "all": Path.home() / ".codeium/windsurf/mcp_config.json",
+    },
+}
+```
+
+---
+
+## Implementation Order
+
+### Phase 1 — Detection only (zero risk)
+Files: `kitsune_mcp/gateway.py` (new, read-only ops only), `kitsune_mcp/tools/discovery.py`
+- Implement `_find_mcp_configs()` and `_parse_mcp_servers()`
+- Add gateway warning block to `status()`
+- No config writes, no registry changes
+
+### Phase 2 — Credential harvest (non-destructive)
+Files: `kitsune_mcp/gateway.py`, `kitsune_mcp/tools/onboarding.py`
+- Implement `_harvest_credentials()` using `_save_to_env()` + `CRED_SUFFIXES`
+- Add `setup(action="harvest")` path
+- Beginner wizard (empty `setup()`) shows what would be extracted, asks confirm
+
+### Phase 3 — Server absorption (non-destructive, extends capability)
+Files: `kitsune_mcp/gateway.py`, `kitsune_mcp/registry.py`, `kitsune_mcp/tools/onboarding.py`
+- `AbsorbedRegistry` class (extends `BaseRegistry`, reads `absorbed_servers.json`)
+- Plug into `MultiRegistry.__init__()`
+- `setup(action="absorb")` path
+- `status()` shows absorbed servers as available
+
+### Phase 4 — Config toggle (optional, explicit, warned)
+Files: `kitsune_mcp/gateway.py`, `kitsune_mcp/tools/onboarding.py`
+- `setup(project=True)` — per-project Claude Code isolation (safest)
+- `setup(exclusive=True/restore=True)` — global toggle with backup
+- Multi-session warning surfaced prominently
+
+---
+
+## Critical Files for v0.20
+
+| File | Change |
+|------|--------|
+| `kitsune_mcp/gateway.py` | New module — all config I/O logic |
+| `kitsune_mcp/registry.py` | Add `AbsorbedRegistry`; plug into `MultiRegistry` |
+| `kitsune_mcp/tools/onboarding.py` | Extend `setup()` signature + wizard logic |
+| `kitsune_mcp/tools/discovery.py` | Add gateway section to `status()` |
+| `tests/test_gateway.py` | New test file |
+| `pyproject.toml` + `package.json` | Bump to v0.20.0 |
+
+## Reused Patterns for v0.20
+
+- `_save_to_env()` (`credentials.py:84`) — write harvested keys to `~/.kitsune/.env`
+- `CRED_SUFFIXES` (`constants.py:28`) — identify credential env vars vs. config
+- `ServerInfo` dataclass (`registry.py:112`) — canonical format for absorbed servers
+- `BaseRegistry` (`registry.py:125`) — base class for `AbsorbedRegistry`
+- `MultiRegistry.__init__()` (`registry.py:466`) — insertion point for absorbed source
+- Atomic write pattern from `_save_state()` → reuse for `absorbed_servers.json`
+
+## v0.20 Verification Checklist
+
+1. `status()` shows gateway warning when other servers present in config
+2. `setup()` (no args) runs interactive wizard, detects clients, shows preview
+3. `setup(action="harvest")` writes extracted keys to `~/.kitsune/.env`, no config changes
+4. `setup(action="absorb")` + `shapeshift("absorbed-server-id")` mounts locally-defined server
+5. `setup(project=True)` writes `.claude/mcp.json` with only Kitsune, other sessions unaffected
+6. `setup(exclusive=True)` creates backup at `~/.kitsune/backup/`, rewrites config
+7. `setup(restore=True)` swaps backup back
+8. Two parallel Claude Code sessions: Kitsune-only project (lean tools) + global (all servers) — both work
+9. `pytest tests/test_gateway.py` all pass
+10. `ruff check` clean
