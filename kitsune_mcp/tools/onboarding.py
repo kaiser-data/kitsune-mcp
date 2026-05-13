@@ -392,6 +392,86 @@ _NL_STARTERS: frozenset[str] = frozenset({
     "current", "latest", "today", "now", "todays",
 })
 
+# Timezone abbreviations → IANA identifiers, for auto() NL extraction.
+_TZ_ABBREVS: dict[str, str] = {
+    "UTC": "UTC", "GMT": "GMT",
+    "EST": "America/New_York", "EDT": "America/New_York",
+    "CST": "America/Chicago", "CDT": "America/Chicago",
+    "MST": "America/Denver", "MDT": "America/Denver",
+    "PST": "America/Los_Angeles", "PDT": "America/Los_Angeles",
+    "CET": "Europe/Berlin", "CEST": "Europe/Berlin",
+    "BST": "Europe/London", "WET": "Europe/Lisbon",
+    "IST": "Asia/Kolkata", "JST": "Asia/Tokyo",
+    "CST_CN": "Asia/Shanghai", "KST": "Asia/Seoul",
+    "AEST": "Australia/Sydney", "AEDT": "Australia/Sydney",
+    "NZST": "Pacific/Auckland",
+}
+
+# Common city/location names → IANA timezone identifiers.
+_CITY_TO_TZ: dict[str, str] = {
+    "new york": "America/New_York", "new york city": "America/New_York", "nyc": "America/New_York",
+    "los angeles": "America/Los_Angeles", "san francisco": "America/Los_Angeles", "seattle": "America/Los_Angeles",
+    "chicago": "America/Chicago", "houston": "America/Chicago", "dallas": "America/Chicago",
+    "denver": "America/Denver", "phoenix": "America/Phoenix",
+    "toronto": "America/Toronto", "montreal": "America/Toronto",
+    "vancouver": "America/Vancouver",
+    "mexico city": "America/Mexico_City",
+    "sao paulo": "America/Sao_Paulo", "brazil": "America/Sao_Paulo",
+    "london": "Europe/London", "uk": "Europe/London",
+    "paris": "Europe/Paris", "france": "Europe/Paris",
+    "berlin": "Europe/Berlin", "germany": "Europe/Berlin",
+    "madrid": "Europe/Madrid", "spain": "Europe/Madrid",
+    "rome": "Europe/Rome", "italy": "Europe/Rome",
+    "amsterdam": "Europe/Amsterdam",
+    "zurich": "Europe/Zurich", "switzerland": "Europe/Zurich",
+    "stockholm": "Europe/Stockholm", "oslo": "Europe/Oslo", "helsinki": "Europe/Helsinki",
+    "moscow": "Europe/Moscow", "russia": "Europe/Moscow",
+    "istanbul": "Europe/Istanbul", "turkey": "Europe/Istanbul",
+    "dubai": "Asia/Dubai", "uae": "Asia/Dubai",
+    "mumbai": "Asia/Kolkata", "delhi": "Asia/Kolkata", "india": "Asia/Kolkata",
+    "singapore": "Asia/Singapore",
+    "tokyo": "Asia/Tokyo", "japan": "Asia/Tokyo",
+    "beijing": "Asia/Shanghai", "shanghai": "Asia/Shanghai", "china": "Asia/Shanghai",
+    "hong kong": "Asia/Hong_Kong",
+    "seoul": "Asia/Seoul", "korea": "Asia/Seoul",
+    "bangkok": "Asia/Bangkok", "thailand": "Asia/Bangkok",
+    "jakarta": "Asia/Jakarta", "indonesia": "Asia/Jakarta",
+    "sydney": "Australia/Sydney", "melbourne": "Australia/Melbourne", "australia": "Australia/Sydney",
+    "auckland": "Pacific/Auckland", "new zealand": "Pacific/Auckland",
+    "cairo": "Africa/Cairo", "egypt": "Africa/Cairo",
+    "johannesburg": "Africa/Johannesburg", "south africa": "Africa/Johannesburg",
+    "nairobi": "Africa/Nairobi", "kenya": "Africa/Nairobi",
+    "lagos": "Africa/Lagos", "nigeria": "Africa/Lagos",
+}
+
+
+def _extract_timezone_from_nl(task: str) -> str | None:
+    """Try to pull a timezone identifier from a natural-language task string.
+
+    "what time is it in UTC"      → "UTC"
+    "current time in New York"    → "America/New_York"
+    "what time is it in Berlin"   → "Europe/Berlin"
+    Returns None when no recognizable timezone is found.
+    """
+    # Check for uppercase abbreviations (UTC, GMT, PST, …)
+    for word in re.findall(r'\b[A-Z]{2,5}\b', task):
+        if word in _TZ_ABBREVS:
+            return _TZ_ABBREVS[word]
+
+    # Check for an IANA-style literal already in the task (e.g. "America/New_York")
+    m = re.search(r'\b[A-Z][a-z]+/[A-Z][a-zA-Z_]+\b', task)
+    if m:
+        return m.group(0)
+
+    # City/country map — longest match first to prefer "New York City" over "New York"
+    task_lc = task.lower()
+    for city, tz in sorted(_CITY_TO_TZ.items(), key=lambda x: -len(x[0])):
+        if re.search(r'\b' + re.escape(city) + r'\b', task_lc):
+            return tz
+
+    return None
+
+
 # Stop-words stripped from NL tasks before they're passed to registry search.
 # Keeping content words (nouns, verbs, place names) while dropping filler gives
 # keyword-quality queries to registries that do substring matching.
@@ -473,9 +553,15 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
             return {pname: stripped}
         return {}
 
-    # Rule 2b — structured param + NL context phrase: refuse to forward verbatim
+    # Rule 2b — structured param + NL context phrase: refuse to forward verbatim,
+    # but first try to extract the value from the text (timezone, city, etc.)
     first_word = task.split()[0].lower() if task.split() else ""
     if pname in _STRUCTURED_PARAM_NAMES and first_word in _NL_STARTERS:
+        if pname in {"timezone", "time_zone", "source_timezone", "target_timezone",
+                     "from_timezone", "to_timezone"}:
+            tz = _extract_timezone_from_nl(task)
+            if tz:
+                return {pname: tz}
         return {}
 
     # Rule 3 — single param, task looks like a direct value
@@ -623,8 +709,14 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
         return f"Server '{name}' not found. Try: search(\"{name}\")"
 
     if srv.transport == "http":
+        if not srv.url:
+            return "\n".join([
+                f"Server '{name}' has no OAuth URL configured.",
+                f'Try: search("{name}") to find the right server ID, then:',
+                '  auth("<full-server-id>")',
+            ])
         from kitsune_mcp import oauth
-        base_url = srv.url or f"https://{name}.run.tools"
+        base_url = srv.url
         try:
             token = await oauth.ensure_token(base_url)
         except Exception as e:

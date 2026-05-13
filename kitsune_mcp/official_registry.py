@@ -73,6 +73,41 @@ _SEED_SERVERS: list[dict] = [
         "install_cmd": [],
         "url": "https://mcp.notion.com/mcp",
     },
+    {
+        "id": "@modelcontextprotocol/server-github",
+        "name": "GitHub",
+        "description": "Interact with GitHub repositories, issues, pull requests, and code search. Requires a GitHub personal access token.",
+        "transport": "stdio",
+        "install_cmd": ["npx", "-y", "@modelcontextprotocol/server-github"],
+    },
+    {
+        "id": "@modelcontextprotocol/server-slack",
+        "name": "Slack",
+        "description": "Send messages, read channels, manage workspaces, and search Slack. Requires a Slack bot token.",
+        "transport": "stdio",
+        "install_cmd": ["npx", "-y", "@modelcontextprotocol/server-slack"],
+    },
+    {
+        "id": "@modelcontextprotocol/server-postgres",
+        "name": "Postgres",
+        "description": "Run SQL queries, inspect schemas, and manage PostgreSQL databases.",
+        "transport": "stdio",
+        "install_cmd": ["npx", "-y", "@modelcontextprotocol/server-postgres"],
+    },
+    {
+        "id": "@modelcontextprotocol/server-google-maps",
+        "name": "Google Maps",
+        "description": "Geocoding, directions, places search, and distance matrix via Google Maps APIs.",
+        "transport": "stdio",
+        "install_cmd": ["npx", "-y", "@modelcontextprotocol/server-google-maps"],
+    },
+    {
+        "id": "@modelcontextprotocol/server-brave-search",
+        "name": "Brave Search",
+        "description": "Web and local search using Brave Search API. Requires a Brave API key.",
+        "transport": "stdio",
+        "install_cmd": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+    },
 ]
 
 _SEED_BY_ID: dict[str, dict] = {s["id"]: s for s in _SEED_SERVERS}

@@ -92,12 +92,23 @@ class TestInferArgsNLAware:
         from kitsune_mcp.tools.onboarding import _infer_args_from_task
         return _infer_args_from_task
 
-    def test_timezone_not_filled_with_nl_question(self):
+    def test_timezone_extracted_from_nl_question(self):
+        # NL queries with a recognizable location should extract the timezone,
+        # not forward the raw sentence verbatim.
         schema = {"inputSchema": {"type": "object",
                                   "properties": {"timezone": {"type": "string"}},
                                   "required": ["timezone"]}}
         result = self._fn()(schema, "what time is it in Tokyo")
-        assert result == {}, f"timezone must not get NL sentence, got {result}"
+        assert result == {"timezone": "Asia/Tokyo"}, f"expected Asia/Tokyo, got {result}"
+
+    def test_timezone_not_filled_when_location_unknown(self):
+        # NL query with no extractable timezone should still return {} to avoid
+        # forwarding a sentence as a timezone identifier.
+        schema = {"inputSchema": {"type": "object",
+                                  "properties": {"timezone": {"type": "string"}},
+                                  "required": ["timezone"]}}
+        result = self._fn()(schema, "what time is it right now")
+        assert result == {}, f"unknown location must return {{}}, got {result}"
 
     def test_query_always_filled(self):
         schema = {"inputSchema": {"type": "object",
