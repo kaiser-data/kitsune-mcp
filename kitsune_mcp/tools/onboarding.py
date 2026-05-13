@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 import httpx
 
+from kitsune_mcp.adapters import get_adapter, get_adapter_for_category
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
     TIMEOUT_FETCH_URL,
@@ -21,7 +22,7 @@ from kitsune_mcp.credentials import (
     _to_env_var,
 )
 from kitsune_mcp.probe import _format_setup_guide
-from kitsune_mcp.registry import REGISTRY_BASE
+from kitsune_mcp.registry import REGISTRY_BASE, _works_now_score
 from kitsune_mcp.session import _save_skills, session
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport
@@ -127,6 +128,14 @@ async def key(env_var: str, value: str) -> str:
     return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
 
 
+def _blocked(what: str, why: str, fix: str, fallback: str = "") -> str:
+    """Standardized blocked-state message used by auto(), auth(), and shapeshift()."""
+    lines = [f"✗ Blocked: {what}", f"  Why: {why}", f"  Fix: {fix}"]
+    if fallback:
+        lines.append(f"  Alt:  {fallback}")
+    return "\n".join(lines)
+
+
 @mcp.tool()
 async def auto(
     task: str,
@@ -148,10 +157,10 @@ async def auto(
     # registry for a server named "onboard" and fail confusingly.
     # Core lean-profile tools always available; forge extras only with KITSUNE_TOOLS=all
     _KITSUNE_LEAN: frozenset[str] = frozenset({
-        "auth", "call", "search", "shapeshift", "status",
+        "auth", "auto", "call", "search", "shapeshift", "status",
     })
     _KITSUNE_FORGE: frozenset[str] = frozenset({
-        "auto", "bench", "compare", "connect", "craft", "fetch",
+        "bench", "compare", "connect", "craft", "fetch",
         "inspect", "key", "login", "onboard", "release", "run",
         "setup", "shiftback", "skill", "test",
     })
@@ -187,16 +196,8 @@ async def auto(
             candidates = list(await _state._registry.search(task, limit=5))
         if not candidates:
             return f"No servers found for '{task}'. Use search() or provide server_hint."
-        # Rank candidates: prefer local (stdio + no missing creds) over Smithery HTTP.
-        # This avoids routing to a Smithery server when a free local alternative exists.
-        def _candidate_rank(s) -> tuple:
-            _, missing = _state._resolve_config(s.credentials, {})
-            has_missing = bool(missing)
-            is_smithery_http = s.source == "smithery" and s.transport == "http"
-            is_official = s.source in ("official", "mcpregistry")
-            # Lower tuple = higher priority
-            return (has_missing, is_smithery_http, not is_official, s.transport != "stdio")
-        candidates.sort(key=_candidate_rank)
+        # Rank by works-now score: credentials set + trusted source + stdio > HTTP.
+        candidates.sort(key=_works_now_score, reverse=True)
         chosen = candidates[0]
         server_id, server_name, credentials = chosen.id, chosen.name, chosen.credentials
         # Remove the chosen one from the fallback queue
@@ -208,18 +209,20 @@ async def auto(
     resolved_config, missing = _state._resolve_config(credentials, {})
     if missing:
         missing_vars = {_to_env_var(k): v for k, v in missing.items()}
-        lines = [f"Server '{server_id}' needs keys:", ""]
-        for ev, desc in missing_vars.items():
-            lines.append(f"  {ev}" + (f": {desc[:60]}" if desc else ""))
+        why_parts = [ev + (f" ({v[:50]})" if v else "") for ev, v in missing_vars.items()]
         args_repr = json.dumps(arguments) if arguments else "{}"
-        lines += [
-            "",
-            "Retry:",
-            f'  auto("{task}", "{tool_name}", {args_repr},',
-            f'    server_hint="{server_id}",',
-            '    keys={' + ", ".join(f'"{k}": "val"' for k in missing_vars) + '})',
-        ]
-        return "\n".join(lines)
+        keys_repr = "{" + ", ".join(f'"{k}": "val"' for k in missing_vars) + "}"
+        _adpt = get_adapter(server_id) or get_adapter_for_category(_classify_task(task))
+        _hint = _adpt.setup_hint(server_id, list(missing_vars.keys())) if _adpt else ""
+        return _blocked(
+            what=f"'{server_id}' needs credentials",
+            why=", ".join(why_parts),
+            fix=(
+                f'auto("{task}", "{tool_name}", {args_repr},\n'
+                f'     server_hint="{server_id}", keys={keys_repr})'
+            ),
+            fallback=_hint,
+        )
 
     selected_tool_schema: dict | None = None
     if not tool_name:
@@ -236,20 +239,23 @@ async def auto(
 
         if not tools:
             reg_errors = getattr(_state._registry, "last_registry_errors", {})
-            lines = [f"{server_id} — could not fetch tool schema."]
-            if reg_errors:
-                err_summary = ", ".join(f"{n} {e}" for n, e in reg_errors.items())
-                lines.append(f"Registry fetch failures: {err_summary}.")
+            err_detail = (
+                "; ".join(f"{n}: {e}" for n, e in reg_errors.items()) if reg_errors else ""
+            )
             from kitsune_mcp.credentials import _smithery_available
             if srv and getattr(srv, "source", None) == "smithery" and not _smithery_available():
-                lines += [
-                    "This server is Smithery-hosted and requires SMITHERY_API_KEY.",
-                    "→ auth('SMITHERY_API_KEY', 'sm-...') then retry,"
-                    " or search() for a free alternative.",
-                ]
-            else:
-                lines.append("Use call() to invoke tools directly if the server is running.")
-            return "\n".join(lines)
+                return _blocked(
+                    what=f"could not fetch tool schema for '{server_id}'",
+                    why="Smithery-hosted server requires SMITHERY_API_KEY"
+                        + (f"; {err_detail}" if err_detail else ""),
+                    fix="auth('SMITHERY_API_KEY', 'sm-...') then retry",
+                    fallback="search() for a free alternative",
+                )
+            return _blocked(
+                what=f"could not fetch tool schema for '{server_id}'",
+                why="registry returned no tools" + (f"; {err_detail}" if err_detail else ""),
+                fix="call() to invoke tools directly if the server is running",
+            )
 
         # Auto-select: only one tool → use it; multiple → pick best match for task
         if len(tools) == 1:
@@ -285,17 +291,17 @@ async def auto(
                     f'Call: auto("{task}", "<tool>", args, server_hint="{server_id}")',
                 ])
 
-    # If caller picked a tool implicitly and supplied no arguments, fill the
-    # primary required string param from `task`. Common case: auto("web search")
-    # with auto-selected `search(query: string)` — without this, every search
-    # tool fails with "query: undefined". Only triggers when arguments is empty
-    # AND we have a schema to inspect AND there's exactly one obvious string
-    # field to fill.
+    # If caller picked a tool implicitly and supplied no arguments, fill args from task.
+    # Try category adapter first (handles multi-param tools like owner+repo),
+    # then fall back to generic schema-driven inference.
     if not arguments and selected_tool_schema:
-        arguments = _infer_args_from_task(selected_tool_schema, task)
-        # When inference correctly returns {} (structured/path param with NL task),
-        # surface a helpful retry message before the inner server emits an opaque
-        # "'timezone' is a required property" validation error.
+        _adpt = get_adapter(server_id) or get_adapter_for_category(_classify_task(task))
+        if _adpt:
+            _adpt_result = _adpt.infer_args(task, selected_tool_schema)
+            if _adpt_result is not None:
+                arguments = _adpt_result
+        if not arguments:
+            arguments = _infer_args_from_task(selected_tool_schema, task)
         if not arguments:
             hint = _build_inference_hint(selected_tool_schema, task, server_id, tool_name)
             if hint:
@@ -472,6 +478,88 @@ def _extract_timezone_from_nl(task: str) -> str | None:
     return None
 
 
+# ── Phase 2: Category-based intent routing ───────────────────────────────────
+
+_CATEGORY_KEYWORDS: dict[str, frozenset[str]] = {
+    "web_search": frozenset({
+        "search", "find", "look up", "google", "web", "internet", "news",
+        "results", "query", "browse",
+    }),
+    "file_ops": frozenset({
+        "file", "files", "directory", "folder", "path", "read", "write",
+        "list", "filesystem", "disk", "local",
+    }),
+    "code_ops": frozenset({
+        "github", "gitlab", "repo", "repository", "commit", "pull request",
+        "pr", "issue", "branch", "code", "git", "diff", "merge",
+    }),
+    "shell": frozenset({
+        "run", "execute", "shell", "bash", "command", "terminal", "script",
+        "process", "install", "build", "compile", "deploy",
+    }),
+    "database": frozenset({
+        "sql", "query", "database", "db", "postgres", "mysql", "sqlite",
+        "table", "select", "insert", "update", "schema",
+    }),
+    "productivity": frozenset({
+        "notion", "linear", "jira", "asana", "task", "project", "ticket",
+        "document", "page", "workspace", "note",
+    }),
+    "communication": frozenset({
+        "slack", "email", "gmail", "message", "send", "notify", "channel",
+        "team", "chat", "discord",
+    }),
+    "memory": frozenset({
+        "remember", "recall", "memory", "store", "retrieve",
+        "knowledge", "context", "history",
+    }),
+    "time_util": frozenset({
+        "time", "timezone", "clock", "date", "weather", "currency",
+        "convert", "calculate",
+    }),
+}
+
+
+def _classify_task(task: str) -> str | None:
+    """Return the most likely category for a task string, or None if ambiguous.
+
+    "search the web for MCP 2025"  → "web_search"
+    "what time is it in Tokyo"     → "time_util"
+    "list files in /tmp"           → "file_ops"
+    "run git log in /my/repo"      → "code_ops"  (git keyword beats shell)
+    """
+    task_lc = task.lower()
+    scores: dict[str, int] = {}
+    for category, keywords in _CATEGORY_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in task_lc)
+        if score > 0:
+            scores[category] = score
+    if not scores:
+        return None
+    return max(scores, key=scores.__getitem__)
+
+
+def _classify_param(name: str, desc: str, tool_desc: str) -> str:
+    """Return the semantic type of a parameter from its name, description, and tool description.
+
+    Used by _infer_args_from_task() for params not caught by name-based rules.
+    Returns one of: "sql_query" | "shell_command" | "repo_identifier" | "file_path" | "free_text"
+    """
+    combined = f"{name} {desc} {tool_desc}".lower()
+    if any(w in combined for w in ("sql query", "sql to", "execute query", "database query", " sql ")):
+        return "sql_query"
+    if any(w in combined for w in ("shell command", "bash command", "command to run", "execute command",
+                                    "terminal command", "shell script")):
+        return "shell_command"
+    if any(w in combined for w in ("repository", "owner/repo", "github.com", "github repository",
+                                    "repo name", "owner and repo")):
+        return "repo_identifier"
+    if any(w in combined for w in ("file path", "path to file", "filepath", "directory path",
+                                    "file to read", "file to write")):
+        return "file_path"
+    return "free_text"
+
+
 # Stop-words stripped from NL tasks before they're passed to registry search.
 # Keeping content words (nouns, verbs, place names) while dropping filler gives
 # keyword-quality queries to registries that do substring matching.
@@ -564,6 +652,35 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
                 return {pname: tz}
         return {}
 
+    # Rule 2.5 — schema-driven semantic classification for params not caught above
+    param_type = _classify_param(
+        pname,
+        props.get(pname, {}).get("description", ""),
+        tool_schema.get("description", ""),
+    )
+    if param_type == "sql_query":
+        task_upper = task.strip().upper()
+        if any(task_upper.startswith(kw) for kw in (
+            "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "WITH",
+        )):
+            return {pname: task}
+        return {}
+    if param_type == "shell_command":
+        first_word = task.strip().split()[0].lower() if task.strip() else ""
+        if first_word and first_word not in _NL_STARTERS:
+            return {pname: task}
+        return {}
+    if param_type == "repo_identifier":
+        m = re.search(r'\b([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)\b', task)
+        if m:
+            return {pname: m.group(1)}
+        return {}
+    if param_type == "file_path":
+        stripped = task.strip()
+        if stripped.startswith(("/", "~", "./", "../")) or (len(stripped) > 1 and stripped[1] == ":"):
+            return {pname: stripped}
+        return {}
+
     # Rule 3 — single param, task looks like a direct value
     return {pname: task}
 
@@ -635,45 +752,222 @@ def _build_inference_hint(
 
 
 @mcp.tool()
-async def setup(name: str) -> str:
-    """Setup wizard for a connected server. Call repeatedly until all requirements are met."""
-    conn = next((c for c in session["connections"].values() if c.get("name") == name), None)
-    if conn is None:
-        connected = [c.get("name", "?") for c in session["connections"].values()]
-        if connected:
-            return f"No connection named '{name}'. Connected: {', '.join(connected)}"
-        return f"No connection named '{name}'. Use connect() first."
+async def setup(
+    name: str = "",
+    action: str = "",
+    keep: list[str] | None = None,
+    project: bool = False,
+    confirm: bool = False,
+) -> str:
+    """Gateway wizard and connection setup.
 
-    install_cmd = conn["command"].split()
-    transport = _state.PersistentStdioTransport(install_cmd)
-    tools = await transport.list_tools()
+    setup()                        → detect competing servers, preview harvest
+    setup(action="harvest")        → extract API keys from other configs → ~/.kitsune/.env
+    setup(action="absorb")         → harvest + register servers for shapeshift()
+    setup(action="exclusive")      → absorb + rewrite config (backup saved first)
+    setup(action="restore")        → restore config from backup
+    setup(project=True)            → write .claude/mcp.json with only Kitsune (this project)
+    setup(name="my-server")        → connection wizard for a connected server (existing)
+    """
+    # ── Existing behavior: connection wizard when name given ──────────────────
+    if name:
+        conn = next((c for c in session["connections"].values() if c.get("name") == name), None)
+        if conn is None:
+            connected = [c.get("name", "?") for c in session["connections"].values()]
+            if connected:
+                return f"No connection named '{name}'. Connected: {', '.join(connected)}"
+            return f"No connection named '{name}'. Use connect() first."
 
-    resource_text = await _state._fetch_resource_docs(transport)
-    reqs = _state._probe_requirements(tools, resource_text)
-    guide = _format_setup_guide(reqs, name, tools=tools)
+        install_cmd = conn["command"].split()
+        transport = _state.PersistentStdioTransport(install_cmd)
+        tools = await transport.list_tools()
 
-    lines = [f"Setup: {name}"]
+        resource_text = await _state._fetch_resource_docs(transport)
+        reqs = _state._probe_requirements(tools, resource_text)
+        guide = _format_setup_guide(reqs, name, tools=tools)
 
-    if reqs["needs_oauth"]:
-        lines.append("⚠️  OAuth flow detected — browser authentication may be required.")
+        lines = [f"Setup: {name}"]
 
-    if reqs["schema_creds"]:
-        schema_missing = [c for c in reqs["schema_creds"] if c not in reqs["set_env"]]
-        if schema_missing:
-            lines.append(f"Required credentials (from schema): {', '.join(schema_missing)}")
+        if reqs["needs_oauth"]:
+            lines.append("⚠️  OAuth flow detected — browser authentication may be required.")
 
-    if not guide:
-        lines.append("✅ All requirements satisfied — ready to call tools.")
-        if tools:
-            lines.append(f"\nAvailable tools ({len(tools)}): {', '.join(t.get('name', '?') for t in tools)}")
+        if reqs["schema_creds"]:
+            schema_missing = [c for c in reqs["schema_creds"] if c not in reqs["set_env"]]
+            if schema_missing:
+                lines.append(f"Required credentials (from schema): {', '.join(schema_missing)}")
+
+        if not guide:
+            lines.append("✅ All requirements satisfied — ready to call tools.")
+            if tools:
+                lines.append(f"\nAvailable tools ({len(tools)}): {', '.join(t.get('name', '?') for t in tools)}")
+            return "\n".join(lines)
+
+        lines.append(guide)
+
+        if not reqs["resource_scan"]:
+            lines.append("\n(No resource docs found — probe based on tool schemas only.)")
+
         return "\n".join(lines)
 
-    lines.append(guide)
+    # ── Gateway actions ───────────────────────────────────────────────────────
+    from datetime import UTC, datetime
 
-    if not reqs["resource_scan"]:
-        lines.append("\n(No resource docs found — probe based on tool schemas only.)")
+    from kitsune_mcp.gateway import (
+        _find_mcp_configs,
+        _harvest_credentials,
+        _load_absorbed_servers,
+        _save_absorbed_servers,
+        _write_exclusive_config,
+        _write_project_config,
+    )
 
-    return "\n".join(lines)
+    # ── project=True: write .claude/mcp.json for this project ────────────────
+    if project:
+        mcp_path = _write_project_config()
+        return "\n".join([
+            f"✓ Wrote {mcp_path}",
+            "  This project will load only Kitsune on next Claude Code start.",
+            "  Other sessions (global config) are unaffected.",
+        ])
+
+    # ── action="restore" ─────────────────────────────────────────────────────
+    if action == "restore":
+        from kitsune_mcp.gateway import _restore_config
+        configs = _find_mcp_configs()
+        if not configs:
+            return "✗ No client configs found."
+        restored = []
+        for cfg in configs:
+            if _restore_config(cfg.client):
+                restored.append(cfg.client)
+        if restored:
+            return f"✓ Restored: {', '.join(restored)}\n  Restart the affected client to pick up changes."
+        return "✗ No backups found. Nothing to restore."
+
+    # ── Collect all servers from all configs ─────────────────────────────────
+    configs = _find_mcp_configs()
+    if not configs:
+        lines = [
+            "No other MCP client configs found.",
+            "Nothing to harvest — you're already running lean.",
+        ]
+        return "\n".join(lines)
+
+    all_servers = [s for cfg in configs for s in cfg.servers]
+    competing = [s for s in all_servers if "kitsune" not in s.id.lower()]
+
+    # ── action="" (wizard): preview and ask for confirm ───────────────────────
+    if not action:
+        harvestable = _harvest_credentials(competing)
+        lines = ["GATEWAY WIZARD", ""]
+        for cfg in configs:
+            non_kit = [s for s in cfg.servers if "kitsune" not in s.id.lower()]
+            if non_kit:
+                lines.append(f"  {cfg.client} ({len(non_kit)} servers):")
+                for s in non_kit:
+                    cred_keys = [k for k in (s.env or {}) if _is_credential_key(k)]
+                    cred_str = f"  [{', '.join(cred_keys)}]" if cred_keys else ""
+                    lines.append(f"    • {s.id}{cred_str}")
+        lines.append("")
+        if harvestable:
+            lines.append(f"  {len(harvestable)} credential(s) found to harvest:")
+            for k in harvestable:
+                lines.append(f"    {k}=***")
+        else:
+            lines.append("  No credentials found in env blocks.")
+        lines += [
+            "",
+            "Next steps:",
+            '  setup(action="harvest")  — extract credentials → ~/.kitsune/.env',
+            '  setup(action="absorb")   — harvest + register servers for shapeshift()',
+            '  setup(project=True)      — lean project config (Claude Code only)',
+        ]
+        return "\n".join(lines)
+
+    # ── action="harvest" ─────────────────────────────────────────────────────
+    if action in ("harvest", "absorb", "exclusive"):
+        harvested = _harvest_credentials(competing)
+        saved: list[str] = []
+        for env_var, value in harvested.items():
+            if not os.getenv(env_var):  # don't overwrite existing values
+                _save_to_env(env_var, value)
+                saved.append(env_var)
+        harvest_summary = (
+            f"  Harvested {len(saved)} new credential(s): {', '.join(saved)}"
+            if saved else "  No new credentials (all already set or none found)."
+        )
+
+        if action == "harvest":
+            return "\n".join([
+                "✓ Credential harvest complete.",
+                harvest_summary,
+                "  Keys written to ~/.kitsune/.env — active immediately.",
+            ])
+
+    # ── action="absorb" ──────────────────────────────────────────────────────
+    if action in ("absorb", "exclusive"):
+        now = datetime.now(UTC).isoformat()
+        existing = {a.id for a in _load_absorbed_servers()}
+        new_servers = [s for s in competing if s.id not in existing]
+        for s in new_servers:
+            s.absorbed_at = now
+        if new_servers:
+            _save_absorbed_servers(_load_absorbed_servers() + new_servers)
+        _state._registry.bust_cache()
+
+        absorb_summary = (
+            f"  Absorbed {len(new_servers)} new server(s): {', '.join(s.id for s in new_servers)}"
+            if new_servers else "  No new servers (all already absorbed)."
+        )
+
+        if action == "absorb":
+            return "\n".join([
+                "✓ Server absorption complete.",
+                harvest_summary,
+                absorb_summary,
+                '  Try: shapeshift("<server-id>") with any absorbed server.',
+            ])
+
+    # ── action="exclusive" ───────────────────────────────────────────────────
+    if action == "exclusive":
+        if not confirm:
+            client_names = [cfg.client for cfg in configs]
+            return "\n".join([
+                "⚠  EXCLUSIVE MODE affects ALL Claude windows on this machine.",
+                f"   Clients to rewrite: {', '.join(client_names)}",
+                "   Backup will be saved to ~/.kitsune/backup/",
+                "",
+                harvest_summary,
+                absorb_summary,
+                "",
+                '   To confirm: setup(action="exclusive", confirm=True)',
+                '   To undo later: setup(action="restore")',
+            ])
+        backed_up: list[str] = []
+        keep_ids = list(keep or [])
+        for cfg in configs:
+            try:
+                bp = _write_exclusive_config(cfg.client, keep_ids)
+                backed_up.append(f"{cfg.client} → {bp}")
+            except Exception as e:
+                backed_up.append(f"{cfg.client}: failed ({e})")
+        return "\n".join([
+            "✓ Exclusive mode applied.",
+            harvest_summary,
+            absorb_summary,
+            "  Backups:",
+            *[f"    {b}" for b in backed_up],
+            "  Restart affected clients to pick up changes.",
+            '  To undo: setup(action="restore")',
+        ])
+
+    return f"Unknown action '{action}'. Use: harvest | absorb | exclusive | restore"
+
+
+def _is_credential_key(key: str) -> bool:
+    from kitsune_mcp.constants import CRED_SUFFIXES
+    env_name = key.upper().replace("-", "_")
+    return any(env_name.endswith(sfx) for sfx in CRED_SUFFIXES)
 
 
 @mcp.tool()
@@ -710,11 +1004,11 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
 
     if srv.transport == "http":
         if not srv.url:
-            return "\n".join([
-                f"Server '{name}' has no OAuth URL configured.",
-                f'Try: search("{name}") to find the right server ID, then:',
-                '  auth("<full-server-id>")',
-            ])
+            return _blocked(
+                what=f"OAuth for '{name}' — no URL configured",
+                why="server entry has no OAuth URL",
+                fix=f'search("{name}") to find the correct server ID, then auth("<id>")',
+            )
         from kitsune_mcp import oauth
         base_url = srv.url
         try:

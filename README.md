@@ -113,7 +113,7 @@ Real-world always-on token costs (typical hosted MCPs):
 
 - Notion ~13.7K · Gmail ~8K · Drive ~10K · Slack ~7K · Calendar ~5K
 
-**Five connectors enabled = ~43K tokens per turn**, every turn, whether you mention them or not. Same five via Kitsune lean: ~400 tokens resting, with a brief spike only on the turn where you actually use one.
+**Five connectors enabled = ~43K tokens per turn**, every turn, whether you mention them or not. Same five via Kitsune lean: ~420 tokens resting, with a brief spike only on the turn where you actually use one.
 
 For a 100-turn dev session: 4.3M tokens of waste vs ~40K. **You can have a 100× longer conversation before hitting context limits.**
 
@@ -145,19 +145,20 @@ One tool. On demand. Off again. Same OAuth, same Notion endpoint (`mcp.notion.co
 
 ---
 
-## The 5-tool surface
+## The 6-tool surface
 
-`kitsune-mcp` exposes exactly five tools at rest — enough to find, mount, authenticate, call, and monitor any server in the ecosystem:
+`kitsune-mcp` exposes exactly six tools at rest — enough to handle any task autonomously, find, mount, authenticate, call, and monitor any server in the ecosystem:
 
 | Tool | What it does |
 |---|---|
+| `auto(task)` | **Intent router**: describe any task → Kitsune finds the right server, mounts it, and calls the right tool in one step. The front door for new users. |
 | `search(query)` | Find servers across 7 registries. Returns ranked matches with token estimates. |
 | `auth(target, value)` | Store an API key (`auth("BRAVE_API_KEY", "sk-...")`) or trigger OAuth 2.1 (`auth("https://mcp.notion.com/mcp")`). Writes to `~/.kitsune/.env`, active immediately. |
 | `shapeshift(server_id, tools, source)` | **Mount**: server's tools become first-class native tools. **Unmount**: `shapeshift()` with no args releases current form. `tools=[...]` for lean load. |
 | `call(tool_name, arguments)` | Call any tool — mounted or not. When shapeshifted, `server_id` is inferred. |
 | `status()` | Current form, active connections (PID + RAM), token overhead, registry health. |
 
-**Overhead at rest: ~400 tokens.** Each mount adds only what you load — `tools=["web_search"]` is ~300 tokens, not 1,500.
+**Overhead at rest: ~420 tokens.** Each mount adds only what you load — `tools=["web_search"]` is ~300 tokens, not 1,500.
 
 Need evaluation tools (`inspect`, `test`, `bench`, `craft`, `compare`)? Use `kitsune-forge`:
 
@@ -254,7 +255,7 @@ You can add Kitsune to a config that already has other servers — it works with
 Claude Code supports per-project MCP configs that override the global one. This means you can run a Kitsune session and a standard multi-server session **simultaneously, with no config changes**:
 
 ```bash
-# Terminal A — Kitsune-only project (5 tools, clean context)
+# Terminal A — Kitsune-only project (6 tools, clean context)
 mkdir ~/projects/kitsune-session
 echo '{"mcpServers":{"kitsune":{"command":"kitsune-mcp"}}}' > ~/projects/kitsune-session/.claude/mcp.json
 cd ~/projects/kitsune-session && claude
@@ -541,10 +542,11 @@ auth("BRAVE_API_KEY", "your-key")   # writes to ~/.kitsune/.env, active immediat
 
 ## All Tools
 
-### `kitsune-mcp` — lean profile (5 tools, ~400 token overhead)
+### `kitsune-mcp` — lean profile (6 tools, ~420 token overhead)
 
 | Tool | Description |
 |---|---|
+| `auto(task, tool, args)` | Intent router: describe any task → finds server → calls tool in one step. Category-aware routing. |
 | `shapeshift(server_id, tools, source, confirm)` | Load a server's tools live. `shapeshift()` with no args unmounts. `tools=[...]` for lean load. `source="local"` forces npx/uvx install; `source="smithery"` forces HTTP. |
 | `search(query, registry)` | Search MCP servers across registries. |
 | `auth(target, value)` | Store an API key (`auth("VAR", "val")`) or trigger OAuth 2.1 (`auth("https://...")`). Writes to `~/.kitsune/.env`, active immediately. |
@@ -560,7 +562,6 @@ Everything above, plus:
 | `shiftback(kill, uninstall)` | Explicit unmount. `kill=True` terminates the process. `uninstall=True` also removes a locally installed package. |
 | `inspect(server_id)` | Show tools, schemas, and live credential status (✓/✗ per key). Measures token cost. |
 | `run(package, tool, args)` | Run from npm/pip directly. `uvx:pkg-name` for Python. |
-| `auto(task, tool, args)` | Search → pick best server → call in one step. |
 | `fetch(url, intent)` | Fetch a URL, return compressed text (~17x smaller than raw HTML). |
 | `craft(name, description, params, url)` | Register a custom tool backed by your HTTP endpoint. `shapeshift()` removes it. |
 | `connect(command, name)` | Start a persistent server. Accepts server_id or shell command. |

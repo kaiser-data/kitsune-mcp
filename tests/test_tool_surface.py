@@ -58,12 +58,12 @@ def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
 # ---------------------------------------------------------------------------
 
 LEAN_REQUIRED = {
-    "shapeshift", "search", "auth", "call", "status",
+    "shapeshift", "search", "auth", "call", "status", "auto",
 }
 
 # Tools that must NOT appear in lean (forge-only)
 FORGE_ONLY = {
-    "shiftback", "auto", "inspect", "compare", "key", "onboard",
+    "shiftback", "inspect", "compare", "key", "onboard",
     "run", "fetch", "craft", "connect", "release",
     "test", "bench", "setup",
 }
@@ -96,9 +96,9 @@ def test_auth_is_in_lean():
 
 
 def test_auto_is_in_lean():
-    """auto is available in forge profile."""
+    """auto moved to lean profile in v0.19."""
     from server import _LEAN_TOOLS
-    assert "auto" not in _LEAN_TOOLS, "auto is forge-only in v0.18+"
+    assert "auto" in _LEAN_TOOLS, "auto must be in lean profile (v0.19+)"
 
 
 def test_base_tool_names_covers_lean_and_forge():
@@ -110,9 +110,9 @@ def test_base_tool_names_covers_lean_and_forge():
 
 
 def test_lean_tools_documented_count():
-    """Lean profile is exactly 5 tools — catch silent drift."""
+    """Lean profile is exactly 6 tools — catch silent drift."""
     from server import _LEAN_TOOLS
-    assert len(_LEAN_TOOLS) == 5, (
+    assert len(_LEAN_TOOLS) == 6, (
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
     )

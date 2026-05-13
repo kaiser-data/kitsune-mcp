@@ -146,10 +146,12 @@ async def _commit_shapeshift(
         cmd = _json.loads(pool_key)
         # Only show hint if no directories were passed (cmd ends at the package name)
         if not any(arg.startswith("/") or arg.startswith("~") for arg in cmd[2:]):
-            lines.append(
-                "\n💡 Filesystem server: no allowed directories set — all paths will be denied.\n"
-                f'   Fix: shapeshift("{server_id}", server_args=["/your/path"])'
-            )
+            from kitsune_mcp.tools.onboarding import _blocked
+            lines.append("\n" + _blocked(
+                what="filesystem server has no allowed directories — all paths denied",
+                why="no directories were passed as server_args",
+                fix=f'shapeshift("{server_id}", server_args=["/your/path"])',
+            ))
     return "\n".join(lines)
 
 

@@ -14,7 +14,7 @@ from kitsune_mcp.constants import (
     TIMEOUT_FETCH_URL,
     TIMEOUT_REGISTRY_TASK,
 )
-from kitsune_mcp.credentials import _registry_headers, _smithery_available
+from kitsune_mcp.credentials import _registry_headers, _resolve_config, _smithery_available
 from kitsune_mcp.utils import _estimate_tokens, _get_http_client
 
 _T = TypeVar("_T")
@@ -475,6 +475,7 @@ class MultiRegistry(BaseRegistry):
             SmitheryRegistry(),
             GlamaRegistry(),
             NpmRegistry(),
+            AbsorbedRegistry(),
         ]
         # Server cache stores `_NOT_FOUND` sentinel for negative results so
         # repeated misses don't re-fan-out across all registries.
@@ -627,6 +628,54 @@ def _relevance_score(srv: ServerInfo, query: str) -> float:
     score -= _SOURCE_TIER.get(srv.source, 7) * 0.1
 
     return score
+
+
+_WORKS_NOW_TIER: dict[str, float] = {
+    "official": 0.3,
+    "mcpregistry": 0.2,
+    "glama": 0.2,
+    "smithery": 0.1,
+    "npm": 0.05,
+    "pypi": 0.05,
+}
+
+
+def _works_now_score(srv: ServerInfo) -> float:
+    """Score 0.0–1.0 estimating how likely a server is to work without any setup.
+
+    Higher means: credentials already set, trusted source, local transport, low token cost.
+    Used by auto() to rank candidates by practical usability rather than textual relevance.
+    """
+    score = 0.0
+    # All required credentials set → biggest signal that the server can run immediately
+    _, missing = _resolve_config(srv.credentials or {}, {})
+    if not missing:
+        score += 0.4
+    # Source tier: official/curated registries ship better default configs
+    score += _WORKS_NOW_TIER.get(srv.source, 0.0)
+    # Local stdio preferred over HTTP (no API key, no rate limits, no network dependency)
+    if srv.transport == "stdio":
+        score += 0.1
+    # Penalise very high token-cost servers — they bloat context even on a single mount
+    if srv.token_cost and srv.token_cost > 5000:
+        score -= 0.05
+    return min(score, 1.0)
+
+
+class AbsorbedRegistry(BaseRegistry):
+    """Registry backed by ~/.kitsune/absorbed_servers.json (user-absorbed servers)."""
+
+    async def search(self, query: str, limit: int) -> list:
+        from kitsune_mcp.gateway import _load_absorbed_servers, _to_server_info
+        servers = [_to_server_info(a) for a in _load_absorbed_servers()]
+        return _simple_search(servers, query, limit)
+
+    async def get_server(self, id: str):
+        from kitsune_mcp.gateway import _load_absorbed_servers, _to_server_info
+        for a in _load_absorbed_servers():
+            if a.id == id:
+                return _to_server_info(a)
+        return None
 
 
 class _PaginatedListRegistry(BaseRegistry):

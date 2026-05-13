@@ -446,6 +446,31 @@ async def status() -> str:
         lines.append("  ⚠️  KITSUNE_TRUST=community  (community-source confirmation gate is OFF)")
     lines.append("")
 
+    # Gateway section — competing servers + absorbed servers
+    try:
+        from kitsune_mcp.gateway import _find_mcp_configs, _load_absorbed_servers
+        gw_lines: list[str] = []
+        for cfg in _find_mcp_configs():
+            competing = [s for s in cfg.servers if "kitsune" not in s.id.lower()]
+            if competing:
+                tool_est = sum(s.estimated_tools for s in competing)
+                gw_lines.append(
+                    f"  ⚠  {len(competing)} other server(s) active in {cfg.client} "
+                    f"(~{tool_est} extra tools in context)"
+                )
+                gw_lines.append("     Run setup() to harvest their credentials and reduce bloat")
+        absorbed = _load_absorbed_servers()
+        if absorbed:
+            gw_lines.append(
+                f"  ✓  Absorbed: {', '.join(a.id for a in absorbed)} (available via shapeshift)"
+            )
+        if gw_lines:
+            lines.append("GATEWAY")
+            lines.extend(gw_lines)
+            lines.append("")
+    except Exception:
+        pass
+
     # First-run onboarding — show once when session is completely clean
     is_first_run = not explored and not grown and stats["total_calls"] == 0
     if is_first_run:

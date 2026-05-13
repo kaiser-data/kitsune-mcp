@@ -7,7 +7,7 @@ All logic lives in the kitsune_mcp package. This file:
   4. Re-exports public names so existing tests (from server import ...) continue to work.
 
 KITSUNE_TOOLS env var controls which tools are registered:
-  (not set)  — lean profile: status, search, auth, shapeshift, call  (~400 tokens overhead)
+  (not set)  — lean profile: status, search, auth, shapeshift, call, auto  (~420 tokens overhead)
   KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~1700 tokens)
   KITSUNE_TOOLS=shapeshift,call — exactly those tools
 """
@@ -39,6 +39,19 @@ from kitsune_mcp.credentials import (  # noqa: E402, F401
     _smithery_available,
     _to_env_var,
 )
+from kitsune_mcp.gateway import (  # noqa: E402, F401
+    AbsorbedServer,
+    ClientConfig,
+    _find_mcp_configs,
+    _harvest_credentials,
+    _load_absorbed_servers,
+    _parse_mcp_servers,
+    _restore_config,
+    _save_absorbed_servers,
+    _to_server_info,
+    _write_exclusive_config,
+    _write_project_config,
+)
 from kitsune_mcp.official_registry import OfficialMCPRegistry  # noqa: E402, F401
 from kitsune_mcp.probe import (  # noqa: E402, F401
     _ENV_VAR_RE,
@@ -52,6 +65,7 @@ from kitsune_mcp.registry import (  # noqa: E402, F401
     _CACHE_TTL_SEARCH,
     _CACHE_TTL_SERVER,
     REGISTRY_BASE,
+    AbsorbedRegistry,
     BaseRegistry,
     GitHubRegistry,
     GlamaRegistry,
@@ -66,6 +80,7 @@ from kitsune_mcp.registry import (  # noqa: E402, F401
     _extract_credentials,
     _registry,
     _relevance_score,
+    _works_now_score,
 )
 from kitsune_mcp.session import (  # noqa: E402, F401
     SKILLS_PATH,
@@ -133,7 +148,7 @@ from kitsune_mcp.utils import (  # noqa: E402, F401
 # ── Tool profile selection ────────────────────────────────────────────────────
 # All tools registered above via @mcp.tool(). Prune to the requested profile.
 
-_LEAN_TOOLS = {"status", "search", "auth", "shapeshift", "call"}
+_LEAN_TOOLS = {"status", "search", "auth", "shapeshift", "call", "auto"}
 _KITSUNE_TOOLS_ENV = os.getenv("KITSUNE_TOOLS", "")
 
 if _KITSUNE_TOOLS_ENV.lower() == "all":
