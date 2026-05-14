@@ -17,13 +17,12 @@
 
 ---
 
-## What's new in v0.18.1
+## What's new in v0.20
 
-- **Lean profile tightened to 5 tools** — `status`, `search`, `auth`, `shapeshift`, `call`. Overhead drops from ~650 → ~400 tokens. `shapeshift()` with no args now unmounts (replaces separate `shiftback`).
-- **`auth` replaces `key`** — handles both API key storage and OAuth 2.1 flows in one command. `auth("BRAVE_API_KEY", "sk-...")` or `auth("https://mcp.notion.com/mcp")` to trigger OAuth.
-- **`~/.kitsune/.env` loaded at startup** — credentials survive process restarts without re-entering them.
-- **Retry hints** — failed calls now suggest the exact `auth()` command to fix missing credentials.
-- **HTTP shiftback fix** — releasing an HTTP-transport server no longer hangs.
+- **GATEWAY** — `status()` detects other MCP servers active in your client configs and shows their context cost. `setup()` harvests their API keys and absorbs the servers for `shapeshift()`.
+- **6-tool lean profile** — `status`, `search`, `auth`, `shapeshift`, `call`, `auto`. `auto()` is now first-class in the lean surface, not forge-only.
+- **`auto()` with `server_hint`** — one-shot task execution: `auto("current time in Tokyo", server_hint="mcp-server-time")` infers args and returns the result directly. Arg extraction infers "Tokyo" → "Asia/Tokyo" automatically.
+- **`setup()` wizard** — `setup(action="harvest")` extracts API keys from other servers' configs into `~/.kitsune/.env`. `setup(action="absorb")` registers those servers for `shapeshift()`. `setup(project=True)` writes a lean `.claude/mcp.json` for this project only.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
@@ -42,6 +41,28 @@ Five servers means 3,000–20,000+ tokens of overhead on every request. Research
 ```
 
 **The fix isn't a better model — it's a smaller menu.**
+
+---
+
+## GATEWAY — see what you're paying for
+
+Once Kitsune is running, call `status()` to see what other MCP servers your clients are loading:
+
+```
+GATEWAY
+  ⚠  2 other server(s) active in claude-desktop (~16 extra tools in context)
+     Run setup() to harvest their credentials and reduce bloat
+  ⚠  1 other server(s) active in claude-code (~8 extra tools in context)
+```
+
+Kitsune can absorb those servers so you get a single lean config with everything still accessible on demand:
+
+```
+setup()                    # preview what can be harvested
+setup(action="harvest")    # extract API keys → ~/.kitsune/.env  (non-destructive)
+setup(action="absorb")     # register servers for shapeshift()   (non-destructive)
+setup(project=True)        # write .claude/mcp.json with only Kitsune (this project only)
+```
 
 ---
 
@@ -243,6 +264,19 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.dev, Z
 | Cursor / Windsurf | `~/.cursor/mcp.json` |
 | Cline / Continue.dev | VS Code settings / `~/.continue/config.json` |
 | OpenClaw | MCP config in OpenClaw settings |
+
+```
+# One-shot: describe task + pin the server
+auto("current time in Tokyo", server_hint="mcp-server-time")
+auto("search: anthropic news May 2026", server_hint="exa")
+
+# Multi-step: inspect / lean-mount / hold mount for several calls
+shapeshift("mcp-server-time")
+call("get_current_time", {"timezone": "Asia/Tokyo"})
+shapeshift()
+```
+
+Use `auto()` with `server_hint` for single-call flows. Use `shapeshift + call` when you want to inspect first, mount specific tools, or run multiple calls on the same server.
 
 ### Using Kitsune alongside existing servers
 

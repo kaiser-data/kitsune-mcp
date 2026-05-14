@@ -22,7 +22,7 @@ from kitsune_mcp.credentials import (
     _to_env_var,
 )
 from kitsune_mcp.probe import _format_setup_guide
-from kitsune_mcp.registry import REGISTRY_BASE, _works_now_score
+from kitsune_mcp.registry import REGISTRY_BASE, _relevance_score, _works_now_score
 from kitsune_mcp.session import _save_skills, session
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport
@@ -197,7 +197,10 @@ async def auto(
         if not candidates:
             return f"No servers found for '{task}'. Use search() or provide server_hint."
         # Rank by works-now score: credentials set + trusted source + stdio > HTTP.
-        candidates.sort(key=_works_now_score, reverse=True)
+        candidates.sort(
+            key=lambda s: _relevance_score(s, search_query) * 10.0 + _works_now_score(s),
+            reverse=True,
+        )
         chosen = candidates[0]
         server_id, server_name, credentials = chosen.id, chosen.name, chosen.credentials
         # Remove the chosen one from the fallback queue
@@ -981,8 +984,27 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
     """
     name = server_id_or_var
 
-    # Value provided → always store as env var regardless of name format
+    # Value provided — guard: names with - / @ are server IDs, not env var names
     if value:
+        if re.search(r'[-/@]', name):
+            # Looks like a server ID — route to logout or reject
+            if value.lower() in ("logout", "signout", "clear", "revoke"):
+                srv_logout = await _state._registry.get_server(name)
+                if srv_logout and srv_logout.transport == "http" and srv_logout.url:
+                    from kitsune_mcp import oauth
+                    oauth.delete_tokens(oauth._origin(srv_logout.url))
+                    return (
+                        f"✓ OAuth tokens cleared for '{name}'.\n"
+                        f"  Next: auth('{name}') to re-authenticate."
+                    )
+                return f"'{name}' is not an OAuth server — no tokens to clear."
+            suggested = _to_env_var(name)
+            return "\n".join([
+                f"✗ '{name}' looks like a server ID, not an env var name.",
+                f"  To store a credential:  auth('{suggested}', '{value}')",
+                f"  To check server auth:   auth('{name}')",
+                f"  To revoke OAuth tokens: auth('{name}', 'logout')",
+            ])
         var = name.upper().replace(" ", "_").replace("-", "_")
         _save_to_env(var, value)
         _state._registry.bust_cache()
