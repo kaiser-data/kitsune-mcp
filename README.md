@@ -23,9 +23,9 @@ The savings grow with every server you add — because Kitsune's resting cost st
 
 | Always-on servers | Token overhead / turn | With Kitsune | Saved |
 |---|---:|---:|---:|
-| 1 server (e.g. GitHub — 26 tools) | ~4,229 | ~300 when needed | **93%** |
-| 3 servers | ~7,700 | ~500 at rest | **94%** |
-| 5 servers (Notion + Gmail + Drive + Slack + Calendar) | ~43,700 | ~500 at rest | **98.9%** |
+| 1 server (e.g. GitHub — 26 tools) | 4,229 | ~300 when needed | **93%** |
+| 3 servers (GitHub + filesystem + git) | 8,678 | ~500 at rest | **94%** |
+| 5 servers (Notion + GitHub + filesystem + git + memory) | 25,000 | ~500 at rest | **98%** |
 
 Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — Kitsune keeps the model focused on exactly what the current task needs.
 
@@ -197,7 +197,7 @@ Kitsune never modifies existing configs without explicit confirmation.
 
 ### Token overhead: surgical mount vs full mount
 
-All figures measured live against v0.20.1. Reproduce with `KITSUNE_TOOLS=all python examples/benchmark.py`.
+Full-mount figures measured live against v0.20.1 via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. To measure Kitsune's own profile size: `python examples/benchmark.py`.
 
 | Server | Tools | Full mount | Surgical example | Surgical tokens | Saved |
 |---|---:|---:|---|---:|---:|
@@ -213,27 +213,19 @@ All figures measured live against v0.20.1. Reproduce with `KITSUNE_TOOLS=all pyt
 
 Kitsune's resting cost (~500 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
 
+All figures use servers with measured full-mount costs (see table above).
+
 | Servers always-on | Always-on tokens/turn | Kitsune tokens/turn | Reduction |
-|---:|---:|---:|---:|
-| 1 | ~1,500 | 500 | 67% |
-| 3 | ~7,700 | 500 | 94% |
-| 5 | ~43,700 | 500 | 98.9% |
-| 10 | ~58,700 | 500 | 99.2% |
+|---|---:|---:|---:|
+| GitHub (26 tools) | 4,229 | 500 | 88% |
+| GitHub + filesystem + git | 8,678 | 500 | 94% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | 500 | **98%** |
 
-Five connectors always-on (Notion 13.7K + Gmail 8K + Drive 10K + Slack 7K + Calendar 5K = ~43.7K tokens/turn). Over 100 turns: **4.37M tokens of overhead vs ~310K — approximately 14× longer conversations within a 200K context window.**
+### Tool-selection reliability
 
-### Tool-selection accuracy
+LLM tool-selection degrades as the visible tool count grows — a finding consistent across multiple tool-use benchmarks (Gorilla, ToolBench). The failure mode is typically adjacent-name confusion: a model that sees `read_file`, `read_text_file`, and `read_media_file` simultaneously is more likely to call the wrong one than a model that sees only the one it needs.
 
-LLM tool-selection accuracy degrades as the visible tool count grows. Patil et al. 2023 (Gorilla) and Hsieh et al. 2023 both show 20–40% accuracy lift with retrieval-augmented tool selection versus full-catalog exposure. The canonical failure mode is adjacent-name confusion (`read_file` / `read_text_file` / `read_media_file`).
-
-| Tools visible | Typical accuracy |
-|---:|---|
-| 5–10 | ~98% |
-| 20–30 | ~90% |
-| 50–70 | ~75% |
-| 100+ | ~60% |
-
-Kitsune holds 5 tools at rest; 6–8 during active use.
+Kitsune holds 5 tools at rest; 6–8 during active use. A Kitsune-specific benchmark measuring selection accuracy across tool-count conditions does not yet exist — contributions welcome.
 
 ### Connection latency
 
