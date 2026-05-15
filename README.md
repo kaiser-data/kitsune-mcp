@@ -32,7 +32,12 @@ Saving formula: `1 − (Kitsune base 500 + surgical mount) / always-on total`
 Savings grow because Kitsune's 500-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost.svg" alt="Token cost comparison: always-on vs Kitsune" width="700"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost-dark.svg"/>
+    <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost-light.svg"
+         alt="Token cost comparison: always-on vs Kitsune" width="700"/>
+  </picture>
 </div>
 
 Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — Kitsune keeps the model focused on exactly what the current task needs.
@@ -120,7 +125,12 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
 `shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~500-token baseline.
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture.svg" alt="Kitsune MCP architecture" width="700"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture-dark.svg"/>
+    <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture-light.svg"
+         alt="Kitsune MCP architecture" width="700"/>
+  </picture>
 </div>
 
 ### Tool-schema RAG
