@@ -6,8 +6,10 @@ import json
 import os
 import re
 from datetime import UTC, datetime
+from typing import Annotated
 
 import httpx
+from pydantic import Field
 
 from kitsune_mcp.adapters import get_adapter, get_adapter_for_category
 from kitsune_mcp.app import mcp
@@ -138,13 +140,76 @@ def _blocked(what: str, why: str, fix: str, fallback: str = "") -> str:
 
 @mcp.tool()
 async def auto(
-    task: str,
-    tool_name: str = "",
-    arguments: dict | None = None,
-    server_hint: str = "",
-    keys: dict | None = None,
+    task: Annotated[
+        str,
+        Field(
+            description=(
+                "Natural-language description of what you want done — e.g. "
+                "'what time is it in Tokyo', 'search the web for X', "
+                "'list issues on owner/repo'. Used to pick a server and infer args."
+            ),
+        ),
+    ],
+    tool_name: Annotated[
+        str,
+        Field(
+            description=(
+                "Optional specific tool name to invoke. If omitted, auto() picks "
+                "the best-matching tool from the chosen server's schema."
+            ),
+        ),
+    ] = "",
+    arguments: Annotated[
+        dict | None,
+        Field(
+            description=(
+                "Optional arguments object. If omitted, auto() infers arguments "
+                "from the task using category-specific adapters (timezone, "
+                "owner/repo, search query, etc.)."
+            ),
+        ),
+    ] = None,
+    server_hint: Annotated[
+        str,
+        Field(
+            description=(
+                "Pin the server instead of searching. Accepts a server_id or "
+                "package name. Use when you already know which provider to use."
+            ),
+        ),
+    ] = "",
+    keys: Annotated[
+        dict | None,
+        Field(
+            description=(
+                "Inline credentials to persist before calling — e.g. "
+                "{'GITHUB_TOKEN': 'ghp_...'}. Stored to ~/.kitsune/.env (mode 0600)."
+            ),
+        ),
+    ] = None,
 ) -> str:
-    """Search → pick best server → call tool in one step."""
+    """One-shot: search → pick best server → infer args → call. The smart entry point.
+
+    Combines discovery, selection, credential resolution, and execution in a
+    single call. Servers are ranked by a composite score (works-now: credentials
+    present + trusted source + stdio > HTTP). Falls back through candidates
+    when the first choice is blocked by missing creds.
+
+    Use when:
+      - The user asks for a capability and you don't yet know which server has it.
+      - You want the shortest path from intent to result (no shapeshift step).
+      - One-off invocations where you won't reuse the server.
+
+    Avoid when:
+      - You'll make multiple calls to the same server — shapeshift() once instead.
+      - You need full control over which server runs — use search() + shapeshift().
+      - The capability is already mounted in the current form — call() directly.
+
+    Behavior:
+      - Resolves missing credentials by returning actionable auth() instructions.
+      - For ambiguous tasks, returns the available tools so you can pick.
+      - Tracks chosen servers in session['explored'] for status() reporting.
+    """
     if arguments is None:
         arguments = {}
     if keys is None:
@@ -974,13 +1039,59 @@ def _is_credential_key(key: str) -> bool:
 
 
 @mcp.tool()
-async def auth(server_id_or_var: str, value: str = "") -> str:
-    """Check or set credentials for a server or environment variable.
+async def auth(
+    server_id_or_var: Annotated[
+        str,
+        Field(
+            description=(
+                "Either an environment-variable name (ALL_CAPS, e.g. "
+                "'GITHUB_TOKEN') or a server identifier (e.g. 'mcp-server-time', "
+                "'@octocat/repo-server'). The shape of this argument selects "
+                "the operation."
+            ),
+        ),
+    ],
+    value: Annotated[
+        str,
+        Field(
+            description=(
+                "Credential value to store (when first arg is an env var name), "
+                "or the literal 'logout' to revoke OAuth tokens (when first arg "
+                "is an OAuth server id). Leave empty to query state."
+            ),
+        ),
+    ] = "",
+) -> str:
+    """Check or set credentials — env vars (persisted to ~/.kitsune/.env) or OAuth flows.
 
-    auth("EXA_API_KEY", "sk-...")  → save env var (persists to .env)
-    auth("EXA_API_KEY")            → check if set; show how to set if not
-    auth("mcp-server-time")        → check server's auth requirements
-    auth("my-oauth-server")        → run OAuth browser flow (http transport)
+    The unified auth surface. Behavior switches on the shape of the first arg:
+    ALL_CAPS → env var; contains '-', '/', or '@' → server id (stdio creds check
+    or OAuth browser flow); other → also treated as server id.
+
+    Use when:
+      - A tool call returned "missing credentials" and you need to set them.
+      - Onboarding a new provider key (Smithery, GitHub, OpenAI, etc.).
+      - Checking whether an env var is set before invoking a tool that needs it.
+      - Authenticating an HTTP/OAuth server before shapeshift().
+
+    Avoid when:
+      - The user pasted a key into chat — never echo it back; just call auth()
+        and confirm with a masked preview from the return value.
+      - You're updating non-credential config — use the appropriate tool's args.
+
+    Behavior:
+      - Setting a value writes to ~/.kitsune/.env with mode 0o600 and is active
+        immediately (no restart). The return value previews the saved value
+        with the middle masked.
+      - For OAuth servers, opens a browser tab and waits for redirect.
+      - Missing credentials are reported with copy-pasteable auth() commands.
+
+    Examples:
+        auth('GITHUB_TOKEN', 'ghp_...')   # set + persist env var
+        auth('GITHUB_TOKEN')              # check if set
+        auth('mcp-server-time')           # show server's auth requirements
+        auth('my-oauth-server')           # run OAuth flow (http transport)
+        auth('my-oauth-server', 'logout') # revoke stored OAuth tokens
     """
     name = server_id_or_var
 

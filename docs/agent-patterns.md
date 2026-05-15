@@ -136,7 +136,7 @@ release("voice")
 # ❌ Process leaks
 connect("uvx voice-mode", name="voice")
 # ... work ...
-shiftback()   # only removes form, doesn't kill process!
+shiftback()   # only kills the *shapeshifted* form's process, not connect()'d ones!
 
 # ✓ Always release hardware connections
 connect("uvx voice-mode", name="voice")
