@@ -31,6 +31,10 @@ Saving formula: `1 − (Kitsune base 500 + surgical mount) / always-on total`
 
 Savings grow because Kitsune's 500-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
 
+<div align="center">
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost.svg" alt="Token cost comparison: always-on vs Kitsune" width="700"/>
+</div>
+
 Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — Kitsune keeps the model focused on exactly what the current task needs.
 
 ---
@@ -114,6 +118,10 @@ shapeshift()
 Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target server via the appropriate transport (stdio subprocess, HTTP, WebSocket), fetches its `tools/list`, and registers each tool as a native FastMCP tool with the exact schema from the server. The AI client receives a `notifications/tools/list_changed` event and sees the new tools as first-class — no wrapper, no indirection.
 
 `shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~500-token baseline.
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/architecture.svg" alt="Kitsune MCP architecture" width="700"/>
+</div>
 
 ### Tool-schema RAG
 
