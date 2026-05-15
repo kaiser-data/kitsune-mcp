@@ -2,7 +2,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One config entry. Any MCP server on demand. Tools load when needed, release when done.</strong></p>
+  <p><strong>One config entry. 10,000+ servers on demand. Up to 99% less MCP token overhead.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -17,7 +17,17 @@
 
 ---
 
-Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 10,000+ MCP servers at runtime. It exposes 5 tools at rest (~500 tokens). Tools from other servers are mounted on demand via `shapeshift()` and released when done — the same retrieval-augmented pattern document-RAG uses for text chunks, applied to tool schemas.
+Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 10,000+ MCP servers at runtime. Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Five tools at rest. Thousands available on request. No restarts.
+
+The savings grow with every server you add — because Kitsune's resting cost stays flat at ~500 tokens no matter how many servers live behind it:
+
+| Always-on servers | Token overhead / turn | With Kitsune | Saved |
+|---|---:|---:|---:|
+| 1 server (e.g. GitHub — 26 tools) | ~4,229 | ~300 when needed | **93%** |
+| 3 servers | ~7,700 | ~500 at rest | **94%** |
+| 5 servers (Notion + Gmail + Drive + Slack + Calendar) | ~43,700 | ~500 at rest | **98.9%** |
+
+Fewer tokens in context also means better tool selection. LLM accuracy degrades measurably above 30 visible tools — Kitsune keeps the model focused on exactly what the current task needs.
 
 ---
 
