@@ -27,7 +27,7 @@ The savings grow with every server you add — because Kitsune's resting cost st
 | 3 servers | ~7,700 | ~500 at rest | **94%** |
 | 5 servers (Notion + Gmail + Drive + Slack + Calendar) | ~43,700 | ~500 at rest | **98.9%** |
 
-Fewer tokens in context also means better tool selection. LLM accuracy degrades measurably above 30 visible tools — Kitsune keeps the model focused on exactly what the current task needs.
+Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — Kitsune keeps the model focused on exactly what the current task needs.
 
 ---
 
