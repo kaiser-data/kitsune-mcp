@@ -2,7 +2,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One config entry. 10,000+ servers on demand. Up to 99% less MCP token overhead.</strong></p>
+  <p><strong>One config entry. 10,000+ servers on demand. Up to 97% less MCP token overhead.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -21,11 +21,15 @@ Kitsune is a gateway MCP server that discovers, installs, and dynamically loads 
 
 The savings grow with every server you add — because Kitsune's resting cost stays flat at ~500 tokens no matter how many servers live behind it:
 
-| Always-on servers | Token overhead / turn | With Kitsune | Saved |
+Saving formula: `1 − (Kitsune base 500 + surgical mount) / always-on total`
+
+| Always-on servers | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---:|---:|
-| 1 server (e.g. GitHub — 26 tools) | 4,229 | ~300 when needed | **93%** |
-| 3 servers (GitHub + filesystem + git) | 8,678 | ~500 at rest | **94%** |
-| 5 servers (Notion + GitHub + filesystem + git + memory) | 25,000 | ~500 at rest | **98%** |
+| GitHub (26 tools) | 4,229 | ~800 (500 + ~300) | **81%** |
+| GitHub + filesystem + git | 8,678 | ~800–1,190 | **86–91%** |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~800–2,450 | **90–97%** |
+
+Savings grow because Kitsune's 500-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
 
 Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — Kitsune keeps the model focused on exactly what the current task needs.
 
@@ -199,27 +203,31 @@ Kitsune never modifies existing configs without explicit confirmation.
 
 Full-mount figures measured live against v0.20.1 via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. To measure Kitsune's own profile size: `python examples/benchmark.py`.
 
-| Server | Tools | Full mount | Surgical example | Surgical tokens | Saved |
+Saved = 1 − (500 base + surgical) / always-on. Surgical estimates (~) are proportional; full-mount figures are measured.
+
+| Server | Tools | Always-on | Surgical example | 500 + surgical | Saved |
 |---|---:|---:|---|---:|---:|
-| `mcp-server-time` | 2 | 261 | (all tools) | 261 | 0% |
-| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~310 | 75% |
-| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~580 | 78% |
-| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~690 | 78% |
-| `brave` | 8 | 3,612 | brave_web_search | ~450 | 88% |
-| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~300 | 93% |
-| `notion-hosted` | 14 | 13,707 | search / fetch | ~1,950 | 86% |
+| `mcp-server-time` | 2 | 261 | (all tools) | ~761 | — ¹ |
+| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~810 | 35% |
+| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~1,080 | 59% |
+| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~1,190 | 63% |
+| `brave` | 8 | 3,612 | brave_web_search | ~950 | 74% |
+| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~800 | 81% |
+| `notion-hosted` | 14 | 13,707 | search / fetch | ~2,450 | 82% |
+
+¹ `mcp-server-time`'s full schema (261 tokens) is smaller than Kitsune's base. Kitsune pays off for small servers only when multiple servers share the baseline.
 
 ### Multi-server compounding
 
 Kitsune's resting cost (~500 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
 
-All figures use servers with measured full-mount costs (see table above).
+All figures use servers with measured full-mount costs. Kitsune cost = 500 base + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
 
-| Servers always-on | Always-on tokens/turn | Kitsune tokens/turn | Reduction |
-|---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | 500 | 88% |
-| GitHub + filesystem + git | 8,678 | 500 | 94% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | 500 | **98%** |
+| Servers always-on | Always-on/turn | Kitsune per active call | Saved |
+|---|---:|---|---:|
+| GitHub only | 4,229 | ~800 | 81% |
+| GitHub + filesystem + git | 8,678 | ~800–1,190 | 86–91% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~800–2,450 | **90–97%** |
 
 ### Tool-selection reliability
 
@@ -368,12 +376,16 @@ Test your server inside real Claude or Cursor sessions — not in an isolated in
 
 ## Why Kitsune?
 
-In Japanese folklore, the Kitsune (狐) is a fox spirit that shapeshifts between forms, gains new powers, and releases them at will. One fox. Many forms. Total fluidity.
+In Japanese folklore, the Kitsune (狐) is a fox spirit of extraordinary intelligence and magical power. What makes it remarkable is not what it is, but what it can *become*. With age and wisdom, a Kitsune grows new tails — each one a new ability mastered, a new form borrowed from the world around it. It can shapeshift into anything: a scholar, a warrior, a force of nature. And when the purpose is fulfilled, it casts off that form as easily as it took it on, returning to its true self — ready to become something else entirely.
 
-`shapeshift("brave-search")` — the fox takes on a new form, its tools appear natively.
-`shapeshift()` — it returns to its true shape, ready to become something else.
+One fox. Infinite forms. Every power available. Nothing carried that isn't needed.
 
-> *I am not Japanese, and I use this name with the highest respect for the mythology and culture it comes from.*
+`shapeshift("brave-search")` — the fox takes on a new form. Its tools appear as if they were always there.
+`shapeshift()` — it returns to its true shape. Context drops back to baseline. Ready for the next form.
+
+Each server mounted is a new tail. Each capability borrowed cleanly and released when done. One entry in your config. Every server in the MCP ecosystem, on demand — summoned, used, and let go.
+
+> *I am not Japanese, and I use this name with the highest respect for the mythology and culture it comes from. The parallel felt too precise to ignore — a spirit that shapeshifts between forms, gains new powers, and releases them at will. That is exactly what this tool does.*
 
 ---
 
