@@ -1,107 +1,190 @@
-<svg width="760" height="460" xmlns="http://www.w3.org/2000/svg"
+<svg width="760" height="520" xmlns="http://www.w3.org/2000/svg"
      font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+  <defs>
+
+    <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#f87171"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </linearGradient>
+
+    <linearGradient id="gAmber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fcd34d"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+
+    <filter id="drop" x="-10%" y="-5%" width="120%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5"
+                    flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+
+    <style>
+      .bg       { fill: #ffffff }
+      .chartbg  { fill: #f9fafb }
+      .grid     { stroke: #e5e7eb }
+      .base     { stroke: #d1d5db }
+      .axlabel  { fill: #9ca3af }
+      .axtitle  { fill: #6b7280 }
+      .title    { fill: #111827 }
+      .sub      { fill: #6b7280 }
+      .glabel   { fill: #374151 }
+      .gsub     { fill: #6b7280 }
+      .kval     { fill: #92400e }
+      .aoval    { fill: #374151 }
+      .lgtext   { fill: #374151 }
+
+      @media (prefers-color-scheme: dark) {
+        .bg       { fill: #1e293b }
+        .chartbg  { fill: #0f172a }
+        .grid     { stroke: #1e3a5f }
+        .base     { stroke: #334155 }
+        .axlabel  { fill: #475569 }
+        .axtitle  { fill: #64748b }
+        .title    { fill: #f1f5f9 }
+        .sub      { fill: #94a3b8 }
+        .glabel   { fill: #e2e8f0 }
+        .gsub     { fill: #94a3b8 }
+        .kval     { fill: #fbbf24 }
+        .aoval    { fill: #cbd5e1 }
+        .lgtext   { fill: #d1d5db }
+      }
+    </style>
+  </defs>
 
   <!-- Background -->
-  <rect width="760" height="460" fill="#ffffff" rx="10"/>
+  <rect width="760" height="520" class="bg" rx="12"/>
 
   <!-- Title -->
-  <text x="380" y="28" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">
-    Token cost per turn: always-on vs Kitsune
+  <text x="380" y="33" text-anchor="middle" class="title"
+        font-size="15" font-weight="700">
+    Token cost per turn — always-on vs Kitsune
   </text>
-  <text x="380" y="46" text-anchor="middle" font-size="11" fill="#6b7280">
-    Log scale · measured live v0.20.1 · Kitsune cost = 500 base + surgical mount per active call
+  <text x="380" y="52" text-anchor="middle" class="sub" font-size="11">
+    Linear scale · v0.20.1 measured · Kitsune = 500 base + surgical mount per call · savings = 1 − Kitsune ÷ always-on
   </text>
 
   <!-- Chart background -->
-  <rect x="78" y="56" width="626" height="330" fill="#f9fafb" rx="4"/>
+  <rect x="78" y="66" width="626" height="388" class="chartbg" rx="6"/>
 
-  <!-- Y-axis gridlines -->
-  <g stroke="#e5e7eb" stroke-width="1">
-    <line x1="78" y1="325" x2="704" y2="325"/>
-    <line x1="78" y1="280" x2="704" y2="280"/>
-    <line x1="78" y1="235" x2="704" y2="235"/>
-    <line x1="78" y1="175" x2="704" y2="175"/>
-    <line x1="78" y1="131" x2="704" y2="131"/>
-    <line x1="78" y1="71"  x2="704" y2="71"/>
+  <!-- Grid lines at 5K intervals -->
+  <g class="grid" stroke-width="1">
+    <line x1="78" y1="376" x2="704" y2="376"/>
+    <line x1="78" y1="299" x2="704" y2="299"/>
+    <line x1="78" y1="221" x2="704" y2="221"/>
+    <line x1="78" y1="144" x2="704" y2="144"/>
+    <line x1="78" y1="66"  x2="704" y2="66"/>
   </g>
 
-  <!-- Y-axis labels -->
-  <g font-size="10" fill="#9ca3af" text-anchor="end">
-    <text x="70" y="329">500</text>
-    <text x="70" y="284">1K</text>
-    <text x="70" y="239">2K</text>
-    <text x="70" y="179">5K</text>
-    <text x="70" y="135">10K</text>
-    <text x="70" y="75">25K</text>
+  <!-- Y axis labels -->
+  <g class="axlabel" font-size="10" text-anchor="end">
+    <text x="70" y="380">5K</text>
+    <text x="70" y="303">10K</text>
+    <text x="70" y="225">15K</text>
+    <text x="70" y="148">20K</text>
+    <text x="70" y="70">25K</text>
   </g>
 
-  <!-- Y-axis title -->
-  <text transform="rotate(-90,15,220)" x="15" y="220" text-anchor="middle"
-        font-size="11" fill="#6b7280">tokens / turn</text>
+  <!-- Y axis title -->
+  <text transform="rotate(-90,13,260)" x="13" y="260"
+        text-anchor="middle" class="axtitle" font-size="11">tokens / turn</text>
 
   <!-- Baseline -->
-  <line x1="78" y1="384" x2="704" y2="384" stroke="#d1d5db" stroke-width="1.5"/>
+  <line x1="78" y1="454" x2="704" y2="454" class="base" stroke-width="1.5"/>
 
-  <!-- 500-base reference dashed line -->
-  <line x1="78" y1="325" x2="704" y2="325"
-        stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5 3"/>
 
-  <!-- ═══ GROUP 1: GitHub only (4,229 vs 800) ═══ -->
+  <!-- ══════════════════════════════════════════════
+       GROUP 1 — GitHub only
+       always-on: 4,229 → y=388 h=66
+       kitsune:     800 → y=442 h=12
+       ══════════════════════════════════════════════ -->
 
-  <!-- Always-on bar: x=80, y=186, h=198 -->
-  <rect x="80" y="186" width="70" height="198" fill="#ef4444" rx="3"/>
-  <text x="115" y="204" text-anchor="middle" font-size="10" fill="white" font-weight="600">4,229</text>
-  <text x="115" y="278" text-anchor="middle" font-size="18" font-weight="700" fill="white">81%</text>
-  <text x="115" y="297" text-anchor="middle" font-size="10" fill="#fecaca">saved</text>
+  <text x="118" y="383" text-anchor="middle" class="aoval"
+        font-size="10" font-weight="600">4,229</text>
 
-  <!-- Kitsune bar: x=162, y=294, h=90 -->
-  <rect x="162" y="294" width="70" height="90" fill="#f59e0b" rx="3"/>
-  <text x="197" y="286" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">800</text>
+  <rect x="78" y="388" width="80" height="66"
+        fill="url(#gRed)" rx="4" filter="url(#drop)"/>
+  <text x="118" y="416" text-anchor="middle"
+        font-size="17" font-weight="800" fill="white">81%</text>
+  <text x="118" y="432" text-anchor="middle"
+        font-size="9" fill="#fecaca">saved</text>
 
-  <!-- Group 1 label -->
-  <text x="156" y="403" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">GitHub</text>
-  <text x="156" y="418" text-anchor="middle" font-size="10" fill="#6b7280">1 server · 26 tools</text>
+  <text x="213" y="436" text-anchor="middle" class="kval"
+        font-size="10" font-weight="600">800</text>
+  <rect x="173" y="442" width="80" height="12"
+        fill="url(#gAmber)" rx="3" filter="url(#drop)"/>
 
-  <!-- ═══ GROUP 2: 3 servers (8,678 vs 1,190) ═══ -->
+  <text x="165" y="471" text-anchor="middle" class="glabel"
+        font-size="11" font-weight="600">GitHub</text>
+  <text x="165" y="485" text-anchor="middle" class="gsub"
+        font-size="10">1 server · 26 tools</text>
 
-  <!-- Always-on bar: x=314, y=140, h=244 -->
-  <rect x="314" y="140" width="70" height="244" fill="#ef4444" rx="3"/>
-  <text x="349" y="158" text-anchor="middle" font-size="10" fill="white" font-weight="600">8,678</text>
-  <text x="349" y="256" text-anchor="middle" font-size="15" font-weight="700" fill="white">86–91%</text>
-  <text x="349" y="275" text-anchor="middle" font-size="10" fill="#fecaca">saved</text>
 
-  <!-- Kitsune bar: x=396, y=268, h=116 -->
-  <rect x="396" y="268" width="70" height="116" fill="#f59e0b" rx="3"/>
-  <text x="431" y="260" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">~1,190</text>
+  <!-- ══════════════════════════════════════════════
+       GROUP 2 — 3 servers
+       always-on: 8,678 → y=319 h=135
+       kitsune:   1,190 → y=436 h=18
+       ══════════════════════════════════════════════ -->
 
-  <!-- Group 2 label -->
-  <text x="390" y="403" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">GitHub + filesystem + git</text>
-  <text x="390" y="418" text-anchor="middle" font-size="10" fill="#6b7280">3 servers · 52 tools</text>
+  <text x="343" y="314" text-anchor="middle" class="aoval"
+        font-size="10" font-weight="600">8,678</text>
 
-  <!-- ═══ GROUP 3: 5 servers (25,000 vs 2,450) ═══ -->
+  <rect x="303" y="319" width="80" height="135"
+        fill="url(#gRed)" rx="4" filter="url(#drop)"/>
+  <text x="343" y="376" text-anchor="middle"
+        font-size="16" font-weight="800" fill="white">86–91%</text>
+  <text x="343" y="396" text-anchor="middle"
+        font-size="9" fill="#fecaca">saved</text>
 
-  <!-- Always-on bar: x=548, y=71, h=313 -->
-  <rect x="548" y="71" width="70" height="313" fill="#ef4444" rx="3"/>
-  <text x="583" y="89"  text-anchor="middle" font-size="10" fill="white" font-weight="600">25,000</text>
-  <text x="583" y="228" text-anchor="middle" font-size="15" font-weight="700" fill="white">90–97%</text>
-  <text x="583" y="247" text-anchor="middle" font-size="10" fill="#fecaca">saved</text>
+  <text x="438" y="430" text-anchor="middle" class="kval"
+        font-size="10" font-weight="600">~1,190</text>
+  <rect x="398" y="436" width="80" height="18"
+        fill="url(#gAmber)" rx="3" filter="url(#drop)"/>
 
-  <!-- Kitsune bar: x=630, y=222, h=162 -->
-  <rect x="630" y="222" width="70" height="162" fill="#f59e0b" rx="3"/>
-  <text x="665" y="214" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">~2,450</text>
+  <text x="390" y="471" text-anchor="middle" class="glabel"
+        font-size="11" font-weight="600">GitHub + filesystem + git</text>
+  <text x="390" y="485" text-anchor="middle" class="gsub"
+        font-size="10">3 servers · 52 tools</text>
 
-  <!-- Group 3 label -->
-  <text x="624" y="403" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Notion+GitHub+filesystem</text>
-  <text x="624" y="418" text-anchor="middle" font-size="10" fill="#6b7280">+git+memory · 5 servers</text>
 
-  <!-- ═══ Legend ═══ -->
-  <rect x="78"  y="436" width="12" height="12" fill="#ef4444" rx="2"/>
-  <text x="96"  y="447" font-size="11" fill="#374151">Always-on (every turn)</text>
+  <!-- ══════════════════════════════════════════════
+       GROUP 3 — 5 servers (dominant tower)
+       always-on: 25,000 → y=66 h=388
+       kitsune:    2,450 → y=416 h=38
+       ══════════════════════════════════════════════ -->
 
-  <rect x="260" y="436" width="12" height="12" fill="#f59e0b" rx="2"/>
-  <text x="278" y="447" font-size="11" fill="#374151">Kitsune (500 base + surgical mount per call)</text>
+  <rect x="528" y="66" width="80" height="388"
+        fill="url(#gRed)" rx="4" filter="url(#drop)"/>
+  <text x="568" y="90" text-anchor="middle"
+        font-size="11" fill="#fca5a5" font-weight="600">25,000</text>
 
-  <line x1="558" y1="442" x2="580" y2="442" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 3"/>
-  <text x="586" y="447" font-size="11" fill="#6b7280">500-token base</text>
+  <!-- Large dramatic savings text centred in tall bar -->
+  <text x="568" y="248" text-anchor="middle"
+        font-size="32" font-weight="900" fill="white">90–97%</text>
+  <text x="568" y="284" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#fecaca">saved</text>
+
+  <text x="663" y="410" text-anchor="middle" class="kval"
+        font-size="10" font-weight="600">~2,450</text>
+  <rect x="623" y="416" width="80" height="38"
+        fill="url(#gAmber)" rx="3" filter="url(#drop)"/>
+
+  <text x="615" y="471" text-anchor="middle" class="glabel"
+        font-size="11" font-weight="600">Notion+GitHub+filesystem</text>
+  <text x="615" y="485" text-anchor="middle" class="gsub"
+        font-size="10">+git+memory · 5 servers</text>
+
+
+  <!-- ══════════════════════════════════════════════
+       Legend
+       ══════════════════════════════════════════════ -->
+
+  <rect x="88"  y="500" width="13" height="13" fill="#ef4444" rx="2"/>
+  <text x="107" y="511" class="lgtext" font-size="11">
+    Always-on (every turn, whether used or not)
+  </text>
+
+  <rect x="360" y="500" width="13" height="13" fill="#f59e0b" rx="2"/>
+  <text x="379" y="511" class="lgtext" font-size="11">
+    Kitsune (500 token base + surgical mount per active call)
+  </text>
 
 </svg>
