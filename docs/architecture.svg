@@ -1,92 +1,215 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 410" width="760" height="410"
+<svg width="760" height="500" xmlns="http://www.w3.org/2000/svg"
      font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
-
   <defs>
-    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0,8 3,0 6" fill="#3b82f6"/>
+
+    <!-- Arrow markers — fixed colours, work on both light and dark -->
+    <marker id="arrBlue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0,9 3.5,0 7" fill="#3b82f6"/>
     </marker>
-    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0,8 3,0 6" fill="#22c55e"/>
+    <marker id="arrGreen" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0,9 3.5,0 7" fill="#22c55e"/>
     </marker>
-    <marker id="arrowAmber" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0,8 3,0 6" fill="#d97706"/>
+    <marker id="arrAmber" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0,9 3.5,0 7" fill="#d97706"/>
     </marker>
+
+    <style>
+      /* ── Light mode ── */
+      .bg            { fill: #f8fafc }
+      .client-box    { fill: #dbeafe; stroke: #3b82f6; stroke-width: 2 }
+      .client-title  { fill: #1d4ed8 }
+      .client-sub    { fill: #3b82f6 }
+      .kitsune-box   { fill: #f0fdf4; stroke: #22c55e; stroke-width: 2.5 }
+      .kitsune-title { fill: #15803d }
+      .pill          { fill: #bbf7d0; stroke: #4ade80; stroke-width: 1 }
+      .pill-text     { fill: #15803d }
+      .badge-box     { fill: #dcfce7; stroke: #86efac; stroke-width: 1 }
+      .badge-text    { fill: #16a34a }
+      .reg-box       { fill: #f1f5f9; stroke: #475569; stroke-width: 1.8 }
+      .reg-title     { fill: #1e293b }
+      .reg-body      { fill: #64748b }
+      .reg-note      { fill: #94a3b8 }
+      .srv-box       { fill: #fffbeb; stroke: #d97706; stroke-width: 1.8 }
+      .srv-title     { fill: #92400e }
+      .srv-body      { fill: #78716c }
+      .srv-note      { fill: #a8a29e }
+      .arrow-label-b { fill: #3b82f6 }
+      .arrow-label-g { fill: #16a34a }
+      .arrow-label-a { fill: #d97706 }
+      .divider       { stroke: #e2e8f0; stroke-width: 1 }
+
+      /* ── Dark mode ── */
+      @media (prefers-color-scheme: dark) {
+        .bg            { fill: #1e293b }
+        .client-box    { fill: #172554; stroke: #60a5fa; stroke-width: 2 }
+        .client-title  { fill: #93c5fd }
+        .client-sub    { fill: #60a5fa }
+        .kitsune-box   { fill: #052e16; stroke: #22c55e; stroke-width: 2.5;
+                         filter: drop-shadow(0 0 10px rgba(34,197,94,0.40)) }
+        .kitsune-title { fill: #4ade80 }
+        .pill          { fill: #14532d; stroke: #4ade80; stroke-width: 1 }
+        .pill-text     { fill: #86efac }
+        .badge-box     { fill: #14532d; stroke: #4ade80; stroke-width: 1 }
+        .badge-text    { fill: #4ade80 }
+        .reg-box       { fill: #0f172a; stroke: #475569; stroke-width: 1.8 }
+        .reg-title     { fill: #e2e8f0 }
+        .reg-body      { fill: #64748b }
+        .reg-note      { fill: #475569 }
+        .srv-box       { fill: #1c0a02; stroke: #f59e0b; stroke-width: 1.8 }
+        .srv-title     { fill: #fcd34d }
+        .srv-body      { fill: #78716c }
+        .srv-note      { fill: #57534e }
+        .arrow-label-b { fill: #60a5fa }
+        .arrow-label-g { fill: #4ade80 }
+        .arrow-label-a { fill: #fbbf24 }
+        .divider       { stroke: #334155; stroke-width: 1 }
+      }
+    </style>
   </defs>
 
-  <!-- Background -->
-  <rect width="760" height="410" fill="#f8fafc" rx="12"/>
 
-  <!-- ── AI Client ── -->
-  <rect x="205" y="18" width="350" height="56" rx="10"
-        fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="380" y="44" text-anchor="middle" fill="#1d4ed8" font-size="15" font-weight="600">Your AI Client</text>
-  <text x="380" y="62" text-anchor="middle" fill="#3b82f6" font-size="11">Claude · Cursor · OpenClaw · Cline · any MCP-compatible client</text>
+  <!-- ════════════════════════════════
+       Background
+       ════════════════════════════════ -->
+  <rect width="760" height="500" class="bg" rx="12"/>
 
-  <!-- Arrow: Client → Kitsune -->
-  <line x1="380" y1="74" x2="380" y2="116"
-        stroke="#3b82f6" stroke-width="2" marker-end="url(#arrowBlue)"/>
-  <text x="394" y="99" font-size="10" fill="#93c5fd">MCP stdio</text>
 
-  <!-- ── Kitsune MCP box ── -->
-  <rect x="18" y="120" width="724" height="134" rx="12"
-        fill="#f0fdf4" stroke="#22c55e" stroke-width="2.5"/>
-  <text x="380" y="146" text-anchor="middle" fill="#15803d" font-size="16" font-weight="700">🦊 Kitsune MCP · v0.20.1</text>
+  <!-- ════════════════════════════════
+       AI Client
+       y=22 → y=82
+       ════════════════════════════════ -->
+  <rect x="180" y="22" width="400" height="60" class="client-box" rx="10"/>
+  <text x="380" y="49" text-anchor="middle" class="client-title"
+        font-size="15" font-weight="700">Your AI Client</text>
+  <text x="380" y="68" text-anchor="middle" class="client-sub" font-size="12">
+    Claude · Cursor · OpenClaw · Cline · any MCP-compatible client
+  </text>
 
-  <!-- Tool pills — 6 tools -->
-  <rect x="46"  y="158" width="72"  height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
-  <text x="82"  y="175" text-anchor="middle" fill="#15803d" font-size="11">status()</text>
 
-  <rect x="128" y="158" width="72"  height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
-  <text x="164" y="175" text-anchor="middle" fill="#15803d" font-size="11">search()</text>
+  <!-- ════════════════════════════════
+       Arrow: Client → Kitsune
+       ════════════════════════════════ -->
+  <line x1="380" y1="82" x2="380" y2="128"
+        stroke="#3b82f6" stroke-width="2.2" marker-end="url(#arrBlue)"/>
+  <text x="395" y="109" class="arrow-label-b" font-size="12" font-weight="500">MCP stdio</text>
 
-  <rect x="210" y="158" width="96"  height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
-  <text x="258" y="175" text-anchor="middle" fill="#15803d" font-size="11">shapeshift()</text>
 
-  <rect x="316" y="158" width="58"  height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
-  <text x="345" y="175" text-anchor="middle" fill="#15803d" font-size="11">call()</text>
+  <!-- ════════════════════════════════
+       Kitsune MCP box
+       y=132 → y=302
+       ════════════════════════════════ -->
+  <rect x="18" y="132" width="724" height="170" class="kitsune-box" rx="14"/>
 
-  <rect x="384" y="158" width="58"  height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
-  <text x="413" y="175" text-anchor="middle" fill="#15803d" font-size="11">auth()</text>
+  <text x="380" y="160" text-anchor="middle" class="kitsune-title"
+        font-size="18" font-weight="800">🦊  Kitsune MCP · v0.20.1</text>
 
-  <rect x="452" y="158" width="58"  height="24" rx="12" fill="#bbf7d0" stroke="#4ade80" stroke-width="1"/>
-  <text x="481" y="175" text-anchor="middle" fill="#15803d" font-size="11">auto()</text>
+  <!-- Divider under title -->
+  <line x1="50" y1="170" x2="710" y2="170" class="divider"/>
 
-  <!-- ~500 tokens badge -->
-  <rect x="528" y="158" width="192" height="24" rx="6" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
-  <text x="624" y="175" text-anchor="middle" fill="#16a34a" font-size="11" font-weight="600">~500 tokens at rest</text>
+  <!-- Tool pills — row 1: status, search, shapeshift, call -->
+  <!-- Total width: 72+12+72+12+92+12+56 = 328 → starts at (760-328)/2 = 216 -->
+  <rect x="216" y="180" width="72"  height="26" rx="13" class="pill"/>
+  <text x="252" y="198" text-anchor="middle" class="pill-text" font-size="12">status()</text>
 
-  <!-- Mounted tools row (dashed) -->
-  <rect x="46" y="194" width="638" height="46" rx="7"
-        fill="white" stroke="#bbf7d0" stroke-width="1.5" stroke-dasharray="5 3"/>
-  <text x="365" y="213" text-anchor="middle" fill="#6b7280" font-size="10">after shapeshift( ) →  mounted tools appear natively in your client</text>
-  <text x="365" y="230" text-anchor="middle" fill="#94a3b8" font-size="10.5">read_file  ·  git_log  ·  brave_web_search  ·  get_current_time  ·  notion-search  ·  …</text>
+  <rect x="300" y="180" width="72"  height="26" rx="13" class="pill"/>
+  <text x="336" y="198" text-anchor="middle" class="pill-text" font-size="12">search()</text>
 
-  <!-- ── Arrows: Kitsune → bottom boxes ── -->
+  <rect x="384" y="180" width="92"  height="26" rx="13" class="pill"/>
+  <text x="430" y="198" text-anchor="middle" class="pill-text" font-size="12">shapeshift()</text>
+
+  <rect x="488" y="180" width="56"  height="26" rx="13" class="pill"/>
+  <text x="516" y="198" text-anchor="middle" class="pill-text" font-size="12">call()</text>
+
+  <!-- Tool pills — row 2: auth, auto, context badge -->
+  <!-- Total: 56+12+56+12+168 = 304 → starts at (760-304)/2 = 228 -->
+  <rect x="228" y="216" width="56"  height="26" rx="13" class="pill"/>
+  <text x="256" y="234" text-anchor="middle" class="pill-text" font-size="12">auth()</text>
+
+  <rect x="296" y="216" width="56"  height="26" rx="13" class="pill"/>
+  <text x="324" y="234" text-anchor="middle" class="pill-text" font-size="12">auto()</text>
+
+  <rect x="364" y="216" width="168" height="26" rx="8" class="badge-box"/>
+  <text x="448" y="234" text-anchor="middle" class="badge-text"
+        font-size="12" font-weight="700">~500 tokens at rest</text>
+
+  <!-- Subtitle row: what shapeshift adds -->
+  <text x="380" y="276" text-anchor="middle" class="reg-note" font-size="11.5">
+    After shapeshift( ) →  mounted server tools appear natively · shapeshift( ) with no args releases them
+  </text>
+  <text x="380" y="294" text-anchor="middle" class="reg-note" font-size="11">
+    read_file  ·  git_log  ·  brave_web_search  ·  get_current_time  ·  notion-search  ·  …
+  </text>
+
+
+  <!-- ════════════════════════════════
+       Arrows: Kitsune → bottom boxes
+       Kitsune bottom: y=302
+       ════════════════════════════════ -->
 
   <!-- Left: search() → Registries -->
-  <line x1="188" y1="254" x2="158" y2="298"
-        stroke="#22c55e" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
-  <text x="132" y="280" text-anchor="middle" font-size="10" fill="#16a34a" font-weight="600">search()</text>
+  <line x1="210" y1="302" x2="170" y2="356"
+        stroke="#22c55e" stroke-width="2.2" marker-end="url(#arrGreen)"/>
+  <text x="104" y="322" text-anchor="middle" class="arrow-label-g"
+        font-size="13" font-weight="700">search()</text>
 
-  <!-- Right: shapeshift/call → Servers -->
-  <line x1="558" y1="254" x2="588" y2="298"
-        stroke="#d97706" stroke-width="1.8" marker-end="url(#arrowAmber)"/>
-  <text x="636" y="274" text-anchor="middle" font-size="10" fill="#d97706" font-weight="600">shapeshift() / call()</text>
+  <!-- Right: shapeshift / call → Servers -->
+  <line x1="550" y1="302" x2="590" y2="356"
+        stroke="#d97706" stroke-width="2.2" marker-end="url(#arrAmber)"/>
+  <text x="658" y="318" text-anchor="start" class="arrow-label-a"
+        font-size="13" font-weight="700">shapeshift()</text>
+  <text x="666" y="336" text-anchor="start" class="arrow-label-a"
+        font-size="13" font-weight="700">call()</text>
 
-  <!-- ── Registries box ── -->
-  <rect x="18" y="298" width="336" height="96" rx="10"
-        fill="#f6f8fa" stroke="#334155" stroke-width="1.8"/>
-  <text x="186" y="323" text-anchor="middle" fill="#1e293b" font-size="13" font-weight="600">7 Registries (discovery)</text>
-  <text x="186" y="342" text-anchor="middle" fill="#64748b" font-size="10.5">official · mcpregistry · glama</text>
-  <text x="186" y="358" text-anchor="middle" fill="#64748b" font-size="10.5">npm · pypi · smithery · github</text>
-  <text x="186" y="378" text-anchor="middle" fill="#94a3b8" font-size="10">parallel search · ranked by token cost + operability</text>
 
-  <!-- ── Target Servers box ── -->
-  <rect x="406" y="298" width="336" height="96" rx="10"
-        fill="#fffbeb" stroke="#d97706" stroke-width="1.8"/>
-  <text x="574" y="323" text-anchor="middle" fill="#92400e" font-size="13" font-weight="600">Target Servers (on demand)</text>
-  <text x="574" y="342" text-anchor="middle" fill="#64748b" font-size="10.5">stdio via npx / uvx — spawned locally</text>
-  <text x="574" y="358" text-anchor="middle" fill="#64748b" font-size="10.5">HTTP + SSE — Smithery hosted · self-hosted</text>
-  <text x="574" y="378" text-anchor="middle" fill="#94a3b8" font-size="10">process pool kept warm · re-attach in 0 ms</text>
+  <!-- ════════════════════════════════
+       7 Registries box
+       x=18, y=360, w=338, h=120
+       ════════════════════════════════ -->
+  <rect x="18" y="360" width="338" height="122" class="reg-box" rx="10"/>
+
+  <text x="187" y="385" text-anchor="middle" class="reg-title"
+        font-size="14" font-weight="700">7 Registries</text>
+
+  <text x="187" y="405" text-anchor="middle" class="reg-body" font-size="12">
+    official · mcpregistry · glama
+  </text>
+  <text x="187" y="421" text-anchor="middle" class="reg-body" font-size="12">
+    npm · pypi · github · smithery
+  </text>
+  <text x="187" y="442" text-anchor="middle" class="reg-note" font-size="11">
+    search() fans out across all in parallel
+  </text>
+  <text x="187" y="458" text-anchor="middle" class="reg-note" font-size="11">
+    returns candidates ranked by token cost
+  </text>
+  <text x="187" y="474" text-anchor="middle" class="reg-note" font-size="11">
+    no single registry required
+  </text>
+
+
+  <!-- ════════════════════════════════
+       Target Servers box
+       x=404, y=360, w=338, h=120
+       ════════════════════════════════ -->
+  <rect x="404" y="360" width="338" height="122" class="srv-box" rx="10"/>
+
+  <text x="573" y="385" text-anchor="middle" class="srv-title"
+        font-size="14" font-weight="700">Target Servers  (on demand)</text>
+
+  <text x="573" y="405" text-anchor="middle" class="srv-body" font-size="12">
+    stdio  via  npx / uvx  —  local subprocess
+  </text>
+  <text x="573" y="421" text-anchor="middle" class="srv-body" font-size="12">
+    HTTP + SSE  —  Smithery  ·  self-hosted
+  </text>
+  <text x="573" y="437" text-anchor="middle" class="srv-body" font-size="12">
+    WebSocket  ·  Docker
+  </text>
+  <text x="573" y="458" text-anchor="middle" class="srv-note" font-size="11">
+    persistent process pool
+  </text>
+  <text x="573" y="474" text-anchor="middle" class="srv-note" font-size="11">
+    re-attach within session: 0 ms
+  </text>
 
 </svg>
