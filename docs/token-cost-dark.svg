@@ -14,15 +14,11 @@
       <stop offset="100%" stop-color="#b45309"/>
     </linearGradient>
 
-    <filter id="barShadow" x="-15%" y="-3%" width="130%" height="108%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.45"/>
-    </filter>
-
     <style>
-      .bg        { fill: #0f172a }
-      .chartbg   { fill: #1e293b }
-      .gridline  { stroke: #334155; stroke-width: 1 }
-      .baseline  { stroke: #64748b; stroke-width: 1.25 }
+      .bg        { fill: #0b1220 }
+      .chartbg   { fill: #131c2e; stroke: #1f2a44; stroke-width: 1 }
+      .gridline  { stroke: #1f2a44; stroke-width: 1 }
+      .baseline  { stroke: #475569; stroke-width: 1.25 }
       .axlabel   { fill: #94a3b8; font-weight: 500 }
       .axtitle   { fill: #cbd5e1; font-weight: 600 }
       .title     { fill: #f8fafc; letter-spacing: -0.01em }
@@ -32,14 +28,14 @@
       .vallabel-r{ fill: #fca5a5; font-weight: 700 }
       .vallabel-a{ fill: #fcd34d; font-weight: 700 }
       .savings-l { fill: #ffffff; font-weight: 800 }
-      .savings-s { fill: #fecaca; font-weight: 600 }
+      .savings-s { fill: #fecaca; font-weight: 600; letter-spacing: 0.05em }
       .legendlbl { fill: #cbd5e1 }
     </style>
   </defs>
 
   <rect width="760" height="540" class="bg"/>
 
-  <!-- ─────────── Title ─────────── -->
+  <!-- Title -->
   <text x="380" y="34" text-anchor="middle" class="title" font-size="16" font-weight="700">
     Token cost per turn — always-on MCP vs Kitsune
   </text>
@@ -47,10 +43,9 @@
     Linear scale  ·  v0.20.1 measured  ·  Kitsune = 500-token base + surgical mount per call  ·  saved = 1 − Kitsune ÷ always-on
   </text>
 
-  <!-- ─────────── Chart panel ─────────── -->
+  <!-- Chart panel -->
   <rect x="66" y="80" width="640" height="360" rx="8" class="chartbg"/>
 
-  <!-- Grid lines: 5K, 10K, 15K, 20K, 25K -->
   <g class="gridline">
     <line x1="66" y1="380" x2="706" y2="380"/>
     <line x1="66" y1="320" x2="706" y2="320"/>
@@ -59,7 +54,6 @@
     <line x1="66" y1="140" x2="706" y2="140"/>
   </g>
 
-  <!-- Y-axis labels -->
   <g class="axlabel" font-size="12" text-anchor="end">
     <text x="58" y="384">5K</text>
     <text x="58" y="324">10K</text>
@@ -68,61 +62,51 @@
     <text x="58" y="144">25K</text>
   </g>
 
-  <!-- Y-axis title -->
   <text transform="translate(20, 260) rotate(-90)" text-anchor="middle"
         class="axtitle" font-size="12">Tokens per turn</text>
 
-  <!-- Baseline (0) -->
   <line x1="66" y1="440" x2="706" y2="440" class="baseline"/>
 
-  <!-- ════════════════════════════════════════════
-       GROUP 1 — 1 server  (4,229 vs 800)
-       ════════════════════════════════════════════ -->
+  <!-- Group 1: 1 server (4,229 vs 800) -->
   <text x="127" y="383" text-anchor="middle" class="vallabel-r" font-size="11">4,229</text>
-  <rect x="84" y="389" width="86" height="51" fill="url(#gRed)" rx="3" filter="url(#barShadow)"/>
+  <rect x="84" y="389" width="86" height="51" fill="url(#gRed)" rx="3"/>
   <text x="127" y="421" text-anchor="middle" class="savings-l" font-size="15">81%</text>
-  <text x="127" y="434" text-anchor="middle" class="savings-s" font-size="9">saved</text>
+  <text x="127" y="434" text-anchor="middle" class="savings-s" font-size="9">SAVED</text>
 
   <text x="219" y="424" text-anchor="middle" class="vallabel-a" font-size="11">800</text>
-  <rect x="176" y="430" width="86" height="10" fill="url(#gAmber)" rx="2" filter="url(#barShadow)"/>
+  <rect x="176" y="430" width="86" height="10" fill="url(#gAmber)" rx="2"/>
 
   <text x="173" y="462" text-anchor="middle" class="grouplbl" font-size="13">1 server</text>
   <text x="173" y="479" text-anchor="middle" class="groupsub" font-size="11">26 tools always loaded</text>
 
-  <!-- ════════════════════════════════════════════
-       GROUP 2 — 3 servers  (8,678 vs 1,190)
-       ════════════════════════════════════════════ -->
+  <!-- Group 2: 3 servers (8,678 vs 1,190) -->
   <text x="331" y="330" text-anchor="middle" class="vallabel-r" font-size="11">8,678</text>
-  <rect x="288" y="336" width="86" height="104" fill="url(#gRed)" rx="3" filter="url(#barShadow)"/>
+  <rect x="288" y="336" width="86" height="104" fill="url(#gRed)" rx="3"/>
   <text x="331" y="382" text-anchor="middle" class="savings-l" font-size="17">86–91%</text>
-  <text x="331" y="399" text-anchor="middle" class="savings-s" font-size="10">saved</text>
+  <text x="331" y="399" text-anchor="middle" class="savings-s" font-size="10">SAVED</text>
 
   <text x="423" y="420" text-anchor="middle" class="vallabel-a" font-size="11">~1,190</text>
-  <rect x="380" y="426" width="86" height="14" fill="url(#gAmber)" rx="2" filter="url(#barShadow)"/>
+  <rect x="380" y="426" width="86" height="14" fill="url(#gAmber)" rx="2"/>
 
   <text x="377" y="462" text-anchor="middle" class="grouplbl" font-size="13">3 servers</text>
   <text x="377" y="479" text-anchor="middle" class="groupsub" font-size="11">52 tools always loaded</text>
 
-  <!-- ════════════════════════════════════════════
-       GROUP 3 — 5 servers  (25,000 vs 2,450)
-       ════════════════════════════════════════════ -->
+  <!-- Group 3: 5 servers (25,000 vs 2,450) -->
   <text x="535" y="130" text-anchor="middle" class="vallabel-r" font-size="12" font-weight="700">25,000</text>
-  <rect x="492" y="140" width="86" height="300" fill="url(#gRed)" rx="3" filter="url(#barShadow)"/>
-  <text x="535" y="280" text-anchor="middle" class="savings-l" font-size="24">90–97%</text>
-  <text x="535" y="303" text-anchor="middle" class="savings-s" font-size="12">saved</text>
+  <rect x="492" y="140" width="86" height="300" fill="url(#gRed)" rx="3"/>
+  <text x="535" y="280" text-anchor="middle" class="savings-l" font-size="22">90–97%</text>
+  <text x="535" y="302" text-anchor="middle" class="savings-s" font-size="12">SAVED</text>
 
   <text x="627" y="405" text-anchor="middle" class="vallabel-a" font-size="11">~2,450</text>
-  <rect x="584" y="411" width="86" height="29" fill="url(#gAmber)" rx="2" filter="url(#barShadow)"/>
+  <rect x="584" y="411" width="86" height="29" fill="url(#gAmber)" rx="2"/>
 
   <text x="581" y="462" text-anchor="middle" class="grouplbl" font-size="13">5 servers</text>
   <text x="581" y="479" text-anchor="middle" class="groupsub" font-size="11">75 tools always loaded</text>
 
-  <!-- ─────────── X-axis title ─────────── -->
   <text x="386" y="503" text-anchor="middle" class="axtitle" font-size="12">
     Number of always-on MCP servers  (every tool in context, every turn)
   </text>
 
-  <!-- ─────────── Legend ─────────── -->
   <g>
     <rect x="124" y="522" width="13" height="13" rx="2" fill="url(#gRed)"/>
     <text x="143" y="533" class="legendlbl" font-size="11">
