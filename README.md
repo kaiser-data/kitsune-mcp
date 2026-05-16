@@ -20,6 +20,24 @@
 
 Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 10,000+ MCP servers at runtime. Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Five tools at rest. Thousands available on request. No restarts.
 
+### Why not just shell out to a CLI?
+
+Shelling out to `aws`, `gcloud`, `kubectl`, or `gh` from a Bash tool *also* costs ~0 tokens at rest. So why MCP at all?
+
+**Because long-tail CLI commands fail.** LLMs have great recall on the top ~20 commands of a CLI they've seen in training (`git status`, `gh pr list`, `aws s3 cp`) and steeply degraded recall on everything else. For an API surface the size of `aws` (~9,000 subcommands), first-call success drops to **30–50%** on long-tail operations — wrong flag names, singular-vs-plural verbs, case-sensitive enums, and silently-deprecated options. Each miss costs a retry turn, and the worst failures aren't errors but *plausible-looking wrong calls that succeed*.
+
+MCP gives you structured tool schemas the model can read and validate against:
+
+| Approach | Long-tail accuracy | Failure mode | Token cost at rest |
+|---|---|---|---|
+| CLI fallback | ~30–50% on rare subcommands | Hallucinated flags, silent wrong calls | ~0 |
+| Always-on MCP | ~95% across the whole surface | Schema bloat in every turn | ~10–15K per server |
+| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~500 tokens** |
+
+That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accurate when it matters**. For one-off ops on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost (production AWS changes, billing operations, security flows), Kitsune gives you schema-validated execution without the always-on tax. See [`examples/scenarios/`](./examples/scenarios/) for seven worked use cases.
+
+### Token savings vs always-on
+
 The savings grow with every server you add — because Kitsune's resting cost stays flat at ~500 tokens no matter how many servers live behind it:
 
 Saving formula: `1 − (Kitsune base 500 + surgical mount) / always-on total`
@@ -47,6 +65,7 @@ Fewer tools in context also means more reliable answers. Research consistently s
 
 ## Contents
 
+- [Why not just shell out to a CLI?](#why-not-just-shell-out-to-a-cli)
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
