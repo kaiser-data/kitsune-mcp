@@ -1,6 +1,6 @@
 {
   "name": "kitsune-mcp",
-  "version": "0.20.6",
+  "version": "0.20.7",
   "description": "The shape-shifting MCP hub — shapeshift() into 130,000+ MCP servers at runtime. One entry point, no restarts, 7 registries.",
   "mcpName": "io.github.kaiser-data/kitsune-mcp",
   "bin": {

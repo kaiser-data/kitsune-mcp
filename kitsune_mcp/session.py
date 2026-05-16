@@ -25,6 +25,11 @@ _session: dict = {
         "tokens_sent": 0,
         "tokens_received": 0,
         "tokens_saved_browse": 0,
+        # Sum of schema-token costs for every server mounted this session.
+        # Represents "tokens you would now be paying per turn if every server
+        # used this session had been installed always-on". Keyed by server_id
+        # so re-mounting the same server in the same session doesn't double-count.
+        "tokens_avoided_shapeshift": {},
     },
 }
 

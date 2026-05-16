@@ -72,6 +72,28 @@ async def _commit_shapeshift(
     # have no backing process to kill so shiftback(kill=True) is a no-op for them.
     session["current_form_has_process"] = pool_key is not None
 
+    # Record per-turn savings: if this server had been installed always-on, the
+    # client would now be paying for its full schema in every turn. We mounted
+    # it lazily instead. Keyed by server_id so re-mounts in the same session
+    # don't double-count. Only counts what we actually registered (lean=subset).
+    registered_names = set(registered)
+    mounted_schemas = [
+        ts for ts in tool_schemas
+        if isinstance(ts, dict)
+        and _state._register_proxy_tools  # truthy guard for static analysis
+        and ts.get("name")
+    ]
+    # Filter by lean selection — only what's currently visible counts as "avoided".
+    from kitsune_mcp.shapeshift import _proxy_name_for
+    visible_schemas = [
+        ts for ts in mounted_schemas
+        if _proxy_name_for(server_id, ts.get("name", ""), _state._BASE_TOOL_NAMES) in registered_names
+    ]
+    mount_cost = _estimate_tokens(visible_schemas) if visible_schemas else 0
+    if mount_cost > 0:
+        # setdefault for resilience against tests that replace stats with a minimal dict
+        session["stats"].setdefault("tokens_avoided_shapeshift", {})[server_id] = mount_cost
+
     with contextlib.suppress(Exception):
         await ctx.session.send_tool_list_changed()
     if shapeshift_resources:
@@ -117,11 +139,16 @@ async def _commit_shapeshift(
     schema = example_schema.get("inputSchema", {})
     required = schema.get("required", [])
     props = schema.get("properties", {})
-    if required and required[0] in props:
-        p = required[0]
+    # Fill EVERY required param so beginners can copy/paste without hitting a
+    # schema-validation error. Falling back to a type-based placeholder is fine —
+    # the goal is to show "this is the shape of a valid call", not to invent
+    # semantically-correct values.
+    from kitsune_mcp.tools.onboarding import _PARAM_EXAMPLES
+    for p in required:
+        if p not in props:
+            continue
         ptype = props[p].get("type", "string")
-        from kitsune_mcp.tools.onboarding import _PARAM_EXAMPLES
-        example_args = {p: _PARAM_EXAMPLES.get(p, _state._EXAMPLE_VALUES.get(ptype, "value"))}
+        example_args[p] = _PARAM_EXAMPLES.get(p, _state._EXAMPLE_VALUES.get(ptype, "value"))
     lines += ["", f"In this session: call({example_tool!r}, arguments={example_args!r})"]
     lines.append(trust_note)
     if missing_env:
@@ -408,8 +435,10 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
         exact_key = session.pop("current_form_pool_key", None)
         has_process = session.pop("current_form_has_process", None)
         killed = []
-        if not exact_key and has_process is not False:
-            # Truly unexpected: was a stdio server but lost its pool key
+        if not exact_key and has_process is True:
+            # Truly unexpected: was a stdio server but lost its pool key.
+            # Suppressed for has_process is False (HTTP/SSE — no local process by design)
+            # and has_process is None (session restored from disk — can't reliably tell).
             result_lines.append(
                 "⚠️  Could not identify the backing process (pool key missing) — "
                 "use release() to kill specific connections by name."

@@ -45,6 +45,7 @@ class AuthMeta:
     code_challenge_methods_supported: list[str]
     grant_types_supported: list[str]
     token_endpoint_auth_methods_supported: list[str]
+    revocation_endpoint: str | None = None
 
 
 @dataclass
@@ -131,6 +132,7 @@ async def discover(base_url: str) -> AuthMeta | None:
             token_endpoint_auth_methods_supported=m.get(
                 "token_endpoint_auth_methods_supported", []
             ),
+            revocation_endpoint=m.get("revocation_endpoint"),
         )
     except KeyError:
         return None
@@ -245,8 +247,13 @@ def _make_handler(state: _CallbackState):
 # ---------------------------------------------------------------------------
 
 
-async def authorize(meta: AuthMeta, client: ClientInfo) -> TokenBundle:
-    """Run the PKCE authorization code flow via loopback. Returns a TokenBundle."""
+async def authorize(meta: AuthMeta, client: ClientInfo, force_login: bool = False) -> TokenBundle:
+    """Run the PKCE authorization code flow via loopback. Returns a TokenBundle.
+
+    force_login=True adds `prompt=login` to the auth URL — required after logout
+    so the IdP's existing session cookie cannot silently re-issue a code without
+    user interaction (OpenID Connect Core 1.0 §3.1.2.1).
+    """
     methods = meta.code_challenge_methods_supported or ["S256"]
     if "S256" not in methods:
         raise RuntimeError(
@@ -276,6 +283,8 @@ async def authorize(meta: AuthMeta, client: ClientInfo) -> TokenBundle:
             "code_challenge_method": "S256",
             "state": state_value,
         }
+        if force_login:
+            auth_params["prompt"] = "login"
         auth_url = f"{meta.authorization_endpoint}?{urllib.parse.urlencode(auth_params)}"
 
         headless = os.environ.get("KITSUNE_NO_BROWSER") == "1"
@@ -415,6 +424,66 @@ def delete_tokens(origin: str) -> None:
     tok_path.unlink(missing_ok=True)
 
 
+# Origins whose next ensure_token() must use prompt=login. Set by logout(),
+# consumed (and cleared) by the next ensure_token() call. Survives only within
+# the process — that's fine because logout + immediate re-auth is the only
+# path that exercises it, and re-auth always happens in the same process.
+_force_login_origins: set[str] = set()
+
+
+async def revoke(meta: AuthMeta, client: ClientInfo, bundle: TokenBundle) -> bool:
+    """Best-effort RFC 7009 revocation. Returns True if the IdP confirmed revocation.
+
+    Tries the refresh_token first (kills the long-lived credential) then the
+    access_token. Failures are swallowed — local deletion is the real source of
+    truth; revocation is belt-and-braces for server-side state.
+    """
+    if not meta.revocation_endpoint:
+        return False
+    tokens_to_try = [
+        ("refresh_token", bundle.refresh_token),
+        ("access_token", bundle.access_token),
+    ]
+    ok = False
+    for hint, tok in tokens_to_try:
+        if not tok:
+            continue
+        try:
+            r = await _get_http_client().post(
+                meta.revocation_endpoint,
+                data={
+                    "token": tok,
+                    "token_type_hint": hint,
+                    "client_id": client.client_id,
+                },
+                timeout=TIMEOUT_FETCH_URL,
+            )
+            if r.status_code in (200, 204):
+                ok = True
+        except Exception:
+            pass
+    return ok
+
+
+async def logout(base_url: str) -> tuple[bool, bool]:
+    """Revoke + delete tokens, and arm the next ensure_token() to prompt=login.
+
+    Returns (revoked_at_idp, deleted_locally). Local deletion is always
+    attempted; revocation depends on the IdP advertising a revocation_endpoint.
+    """
+    origin = _origin(base_url)
+    revoked = False
+    bundle = load_tokens(origin)
+    if bundle:
+        meta = await _get_meta(base_url)
+        client = _load_client(origin)
+        if meta and client:
+            revoked = await revoke(meta, client, bundle)
+    delete_tokens(origin)
+    _force_login_origins.add(origin)
+    return revoked, True
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -474,6 +543,8 @@ async def ensure_token(base_url: str) -> str:
         redirect_uri = f"http://127.0.0.1:{port}/callback"
         client = await register_client(meta, origin, redirect_uri)
 
-    new_bundle = await authorize(meta, client)
+    force_login = origin in _force_login_origins
+    _force_login_origins.discard(origin)
+    new_bundle = await authorize(meta, client, force_login=force_login)
     save_tokens(origin, new_bundle)
     return new_bundle.access_token

@@ -4,6 +4,49 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.7] — 2026-05-16
+
+### Fixed
+
+- **#43 — `auth(name, "logout")` did not actually log the user out.** Local
+  token deletion still happened, but the IdP's session cookie meant the next
+  `auth()` silently re-issued a token with no browser flow visible. Logout now:
+  - Calls the IdP's RFC 7009 revocation endpoint (when advertised via
+    `revocation_endpoint` in `.well-known/oauth-authorization-server`) to kill
+    the refresh token server-side, then
+  - Arms a per-origin force-login flag that the next `ensure_token()` consumes
+    by appending `prompt=login` to the authorization URL (OIDC §3.1.2.1) —
+    so the IdP must re-prompt even if a valid session cookie exists.
+- **#44 — `shapeshift()` hint showed `arguments={}` for tools with required
+  params.** Beginners hit a schema-validation error following the hint
+  verbatim. The hint now populates every required parameter with a typed
+  placeholder (from `_PARAM_EXAMPLES` or a type default), so the printed
+  call shape is always valid.
+- **#45 — Alarming "⚠️ Could not identify the backing process" warning on
+  every HTTP unmount.** Warning was gated on `has_process is not False`,
+  which fired for both the genuine stdio-lost-its-key case AND for HTTP
+  transports (where `False` is the by-design value). Now gated on
+  `has_process is True` — silent no-op for HTTP/SSE, warns only for the
+  truly unexpected stdio case.
+
+### Changed
+
+- **#42 — `status()` "Saved vs always-on" counter now sums measured schema
+  costs across every server shapeshifted this session, not just inspected
+  ones.** Previously the counter only grew via `inspect()`, which doesn't
+  exist in the 6-tool lean surface, so the figure under-reported by orders
+  of magnitude. New session stat `tokens_avoided_shapeshift: {server_id →
+  tokens}` keyed by server to avoid double-counting re-mounts. Rendered
+  alongside the legacy inspect figure in `status()`.
+
+### Tests
+
+- 5 new tests for the OAuth logout flow: revocation endpoint discovery,
+  RFC 7009 POST shape, no-endpoint short-circuit, `logout()` end-to-end,
+  and force-login flag consumption. 600 total tests pass.
+
+---
+
 ## [0.20.6] — 2026-05-16
 
 ### Fixed — Process-tree termination on unmount (zombie leak)

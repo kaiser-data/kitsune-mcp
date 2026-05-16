@@ -413,7 +413,7 @@ class TestEnsureToken:
         async def bad_refresh(*_a, **_kw):
             raise PermissionError("invalid_grant")
 
-        async def fake_authorize(_m, _c):
+        async def fake_authorize(_m, _c, force_login=False):
             return oauth.TokenBundle(access_token="fresh", expires_at=time.time() + 3600)
 
         with patch.object(oauth, "refresh", side_effect=bad_refresh), \
@@ -432,3 +432,117 @@ class TestEnsureToken:
         with patch.object(oauth, "discover", side_effect=no_meta):
             with pytest.raises(RuntimeError, match="well-known"):
                 asyncio.run(oauth.ensure_token("https://nope/mcp"))
+
+
+# ---------------------------------------------------------------------------
+# Logout / revoke / force-login
+# ---------------------------------------------------------------------------
+
+
+def _meta_with_revoke(issuer="https://lo"):
+    return oauth.AuthMeta(
+        issuer=issuer,
+        authorization_endpoint=f"{issuer}/a",
+        token_endpoint=f"{issuer}/t",
+        registration_endpoint=f"{issuer}/r",
+        code_challenge_methods_supported=["S256"],
+        grant_types_supported=["authorization_code", "refresh_token"],
+        token_endpoint_auth_methods_supported=["none"],
+        revocation_endpoint=f"{issuer}/revoke",
+    )
+
+
+class TestLogout:
+    def test_discover_parses_revocation_endpoint(self):
+        payload = {
+            "issuer": "https://x",
+            "authorization_endpoint": "https://x/a",
+            "token_endpoint": "https://x/t",
+            "revocation_endpoint": "https://x/revoke",
+            "code_challenge_methods_supported": ["S256"],
+            "grant_types_supported": ["authorization_code"],
+            "token_endpoint_auth_methods_supported": ["none"],
+        }
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = payload
+        client = MagicMock()
+        client.get = AsyncMock(return_value=resp)
+        with patch.object(oauth, "_get_http_client", return_value=client):
+            meta = asyncio.run(oauth.discover("https://x/mcp"))
+        assert meta.revocation_endpoint == "https://x/revoke"
+
+    def test_revoke_hits_endpoint_with_refresh_token(self):
+        meta = _meta_with_revoke()
+        client_info = oauth.ClientInfo(client_id="cid", redirect_uri="http://127.0.0.1/cb")
+        bundle = oauth.TokenBundle(access_token="at", expires_at=0, refresh_token="rt")
+        resp = MagicMock(status_code=200)
+        http_client = MagicMock()
+        http_client.post = AsyncMock(return_value=resp)
+        with patch.object(oauth, "_get_http_client", return_value=http_client):
+            ok = asyncio.run(oauth.revoke(meta, client_info, bundle))
+        assert ok is True
+        # Should hit endpoint at least once with the refresh token first
+        first_call = http_client.post.call_args_list[0]
+        assert first_call.args[0] == "https://lo/revoke"
+        assert first_call.kwargs["data"]["token"] == "rt"
+        assert first_call.kwargs["data"]["token_type_hint"] == "refresh_token"
+
+    def test_revoke_returns_false_without_endpoint(self):
+        meta = _meta_with_revoke()
+        meta.revocation_endpoint = None
+        client_info = oauth.ClientInfo(client_id="cid", redirect_uri="http://127.0.0.1/cb")
+        bundle = oauth.TokenBundle(access_token="at", expires_at=0)
+        ok = asyncio.run(oauth.revoke(meta, client_info, bundle))
+        assert ok is False
+
+    def test_logout_deletes_tokens_and_arms_force_login(self, tmp_path, monkeypatch):
+        import time
+        monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
+        oauth._meta_cache["https://lo/mcp"] = _meta_with_revoke()
+        origin = oauth._origin("https://lo/mcp")
+        oauth._save_client(origin, oauth.ClientInfo(
+            client_id="cid", redirect_uri="http://127.0.0.1/cb",
+        ))
+        oauth.save_tokens(origin, oauth.TokenBundle(
+            access_token="at", expires_at=time.time() + 3600, refresh_token="rt",
+        ))
+
+        resp = MagicMock(status_code=200)
+        http_client = MagicMock()
+        http_client.post = AsyncMock(return_value=resp)
+        with patch.object(oauth, "_get_http_client", return_value=http_client):
+            revoked, deleted = asyncio.run(oauth.logout("https://lo/mcp"))
+
+        assert deleted is True
+        assert revoked is True
+        assert oauth.load_tokens(origin) is None
+        assert origin in oauth._force_login_origins
+        oauth._meta_cache.pop("https://lo/mcp", None)
+        oauth._force_login_origins.discard(origin)
+
+    def test_ensure_token_consumes_force_login_flag(self, tmp_path, monkeypatch):
+        import time
+        monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
+        meta = _meta_with_revoke("https://fl")
+        oauth._meta_cache["https://fl/mcp"] = meta
+        origin = oauth._origin("https://fl/mcp")
+        oauth._save_client(origin, oauth.ClientInfo(
+            client_id="cid", redirect_uri="http://127.0.0.1/cb",
+        ))
+        # No bundle on disk → ensure_token falls through to authorize()
+        oauth._force_login_origins.add(origin)
+
+        seen = {}
+
+        async def fake_authorize(_m, _c, force_login=False):
+            seen["force_login"] = force_login
+            return oauth.TokenBundle(access_token="new", expires_at=time.time() + 3600)
+
+        with patch.object(oauth, "authorize", side_effect=fake_authorize):
+            tok = asyncio.run(oauth.ensure_token("https://fl/mcp"))
+
+        assert tok == "new"
+        assert seen["force_login"] is True
+        # Flag must be cleared after consumption
+        assert origin not in oauth._force_login_origins
+        oauth._meta_cache.pop("https://fl/mcp", None)

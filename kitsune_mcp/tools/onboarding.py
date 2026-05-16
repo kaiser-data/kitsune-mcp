@@ -996,11 +996,14 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
                 srv_logout = await _state._registry.get_server(name)
                 if srv_logout and srv_logout.transport == "http" and srv_logout.url:
                     from kitsune_mcp import oauth
-                    oauth.delete_tokens(oauth._origin(srv_logout.url))
-                    return (
-                        f"✓ OAuth tokens cleared for '{name}'.\n"
-                        f"  Next: auth('{name}') to re-authenticate."
-                    )
+                    revoked, _ = await oauth.logout(srv_logout.url)
+                    lines = [f"✓ OAuth tokens cleared for '{name}'."]
+                    if revoked:
+                        lines.append("  Refresh token revoked at the identity provider.")
+                    else:
+                        lines.append("  (Local-only — IdP did not advertise a revocation endpoint.)")
+                    lines.append(f"  Next: auth('{name}') will force a fresh browser login.")
+                    return "\n".join(lines)
                 return f"'{name}' is not an OAuth server — no tokens to clear."
             suggested = _to_env_var(name)
             return "\n".join([

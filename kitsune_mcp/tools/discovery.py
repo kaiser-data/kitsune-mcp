@@ -564,14 +564,18 @@ async def status() -> str:
             lines.append(f"  {sid} ~{t:,} tokens")
         lines.append("")
 
-    # Token savings vs always-on: sum measured schema costs for inspected servers
-    # that are NOT currently shapeshifted (those would be loaded if always-on).
-    not_shapeshifted = {
+    # Token savings vs always-on: sum measured schema costs for every server
+    # mounted this session (would be permanently loaded if installed always-on)
+    # plus any inspected-but-never-mounted schemas (legacy inspect() path).
+    shapeshift_savings_map = stats.get("tokens_avoided_shapeshift") or {}
+    shapeshift_saved = sum(shapeshift_savings_map.values()) if isinstance(shapeshift_savings_map, dict) else 0
+    inspected_not_shapeshifted = {
         sid: info
         for sid, info in explored.items()
-        if info.get("token_cost") and sid != current_form
+        if info.get("token_cost") and sid != current_form and sid not in shapeshift_savings_map
     }
-    lazy_saved = sum(info["token_cost"] for info in not_shapeshifted.values())
+    inspected_saved = sum(info["token_cost"] for info in inspected_not_shapeshifted.values())
+    total_saved = shapeshift_saved + inspected_saved
 
     lines += [
         "PERFORMANCE STATS",
@@ -584,11 +588,18 @@ async def status() -> str:
     if stats["total_calls"] > 0:
         avg = stats["tokens_received"] // stats["total_calls"]
         lines.append(f"  Avg response:    ~{avg} tokens")
-    if lazy_saved > 0:
-        n = len(not_shapeshifted)
+    if total_saved > 0:
+        parts = []
+        if shapeshift_saved > 0:
+            n_mounted = len(shapeshift_savings_map)
+            parts.append(f"{n_mounted} mounted server(s)")
+        if inspected_saved > 0:
+            n_inspected = len(inspected_not_shapeshifted)
+            parts.append(f"{n_inspected} inspected schema(s)")
+        breakdown = " + ".join(parts)
         lines.append(
-            f"  Saved vs always-on: ~{lazy_saved:,} tokens "
-            f"[based on {n} inspected schema(s)]"
+            f"  Saved vs always-on: ~{total_saved:,} tokens "
+            f"[{breakdown}]"
         )
 
     return "\n".join(lines)
