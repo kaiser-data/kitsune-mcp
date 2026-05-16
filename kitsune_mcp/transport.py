@@ -5,6 +5,8 @@ import datetime
 import json
 import os
 import re
+import signal
+import sys
 import time
 import urllib.parse
 from abc import ABC, abstractmethod
@@ -86,6 +88,45 @@ class BaseTransport(ABC):
 # Persistent Process Pool
 # ---------------------------------------------------------------------------
 
+# Spawn each child in a fresh process group so we can signal the whole tree on
+# shutdown. uvx/npx fork a real server as a child — killing only the wrapper
+# orphans the child and leaks one zombie per shapeshift cycle (#kill-tree).
+if sys.platform == "win32":
+    _SUBPROC_SPAWN_KWARGS: dict = {
+        "creationflags": getattr(__import__("subprocess"), "CREATE_NEW_PROCESS_GROUP", 0),
+    }
+else:
+    _SUBPROC_SPAWN_KWARGS = {"start_new_session": True}
+
+
+def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
+    """SIGKILL the process and any children it spawned in its session group.
+
+    POSIX: send SIGKILL to the negated PGID so wrappers (uvx, npx, sh -c …) and
+    their children all die at once. Windows: send CTRL_BREAK_EVENT to the
+    process group, then fall back to proc.kill().
+
+    All errors are suppressed — by the time we kill, the proc may already be
+    reaped (returncode set) or its pgid lookup may fail (Linux race after fork).
+    Always safe to call; never raises.
+    """
+    if proc.returncode is not None:
+        return
+    pid = proc.pid
+    if sys.platform == "win32":
+        with contextlib.suppress(Exception):
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        with contextlib.suppress(Exception):
+            proc.kill()
+        return
+    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    # Belt-and-braces: also kill the asyncio handle so its transport tears down
+    # cleanly even if killpg already reaped the leader.
+    with contextlib.suppress(ProcessLookupError, Exception):
+        proc.kill()
+
+
 @dataclass
 class _PoolEntry:
     proc: asyncio.subprocess.Process
@@ -121,8 +162,7 @@ def _kill_all_pool_processes() -> None:
     """
     _save_state()
     for entry in list(_process_pool.values()):
-        with contextlib.suppress(Exception):
-            entry.proc.kill()
+        _kill_process_tree(entry.proc)
     _process_pool.clear()
 
 
@@ -153,15 +193,15 @@ def _evict_stale_pool_entries(force: bool = False) -> list[str]:
         if not e.is_alive() or (now - e.last_used_at) > POOL_MAX_IDLE_SECONDS
     ]
     for k in to_remove:
-        with contextlib.suppress(Exception):
-            _process_pool[k].proc.kill()
+        entry = _process_pool.get(k)
+        if entry is not None:
+            _kill_process_tree(entry.proc)
         _process_pool.pop(k, None)
     # Hard cap: if still over limit, evict oldest by last_used_at
     if len(_process_pool) > POOL_MAX_PROCESSES:
         oldest = sorted(_process_pool.items(), key=lambda kv: kv[1].last_used_at)
         for k, e in oldest[:len(_process_pool) - POOL_MAX_PROCESSES]:
-            with contextlib.suppress(Exception):
-                e.proc.kill()
+            _kill_process_tree(e.proc)
             _process_pool.pop(k, None)
     return to_remove
 
@@ -617,6 +657,7 @@ class StdioTransport(BaseTransport):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 limit=STDIO_BUFFER_LIMIT,
+                **_SUBPROC_SPAWN_KWARGS,
             )
         except FileNotFoundError:
             return f"Cannot find '{self.install_cmd[0]}'. Is node/npx installed?"
@@ -663,12 +704,11 @@ class StdioTransport(BaseTransport):
         except Exception as e:
             return f"Stdio transport error: {e}"
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 proc.stdin.close()
-                proc.kill()
+            _kill_process_tree(proc)
+            with contextlib.suppress(Exception):
                 await asyncio.wait_for(proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -716,6 +756,7 @@ class PersistentStdioTransport(BaseTransport):
                 stderr=None if self.inherit_stderr else asyncio.subprocess.PIPE,
                 limit=STDIO_BUFFER_LIMIT,
                 env=self.probe_env,  # None = inherit host env (default)
+                **_SUBPROC_SPAWN_KWARGS,
             )
         except FileNotFoundError:
             raise RuntimeError(f"Cannot find '{self.install_cmd[0]}'. Is it installed?") from None
@@ -734,10 +775,10 @@ class PersistentStdioTransport(BaseTransport):
 
         init_resp = await StdioTransport._read_response(proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT)
         if init_resp is None:
-            proc.kill()
+            _kill_process_tree(proc)
             raise RuntimeError(f"No initialize response from {self.install_cmd[0]}")
         if "error" in init_resp:
-            proc.kill()
+            _kill_process_tree(proc)
             raise RuntimeError(f"Initialize error: {init_resp['error']}")
 
         proc.stdin.write(self._frame(_initialized_notification()))
@@ -758,8 +799,7 @@ class PersistentStdioTransport(BaseTransport):
         if entry is not None and entry.is_alive():
             if entry.dotenv_revision != _creds._dotenv_revision:
                 # .env changed since this process was spawned — kill and respawn
-                with contextlib.suppress(Exception):
-                    entry.proc.kill()
+                _kill_process_tree(entry.proc)
                 _process_pool.pop(self._pool_key, None)
             else:
                 return entry
@@ -836,8 +876,7 @@ class PersistentStdioTransport(BaseTransport):
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     if attempt == 0:
                         # Process died mid-write — evict and retry
-                        with contextlib.suppress(Exception):
-                            entry.proc.kill()
+                        _kill_process_tree(entry.proc)
                         _process_pool.pop(self._pool_key, None)
                         try:
                             entry = await self._start_process()

@@ -18,7 +18,7 @@
 
 ---
 
-Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 130,000+ MCP servers at runtime (134,945 indexed on Glama alone as of May 2026). Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Five tools at rest. Thousands available on request. No restarts.
+Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 130,000+ MCP servers at runtime (134,945 indexed on Glama alone as of May 2026). Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Six tools at rest. Thousands available on request. No restarts.
 
 ### Why not just shell out to a CLI?
 
@@ -40,15 +40,15 @@ That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accur
 
 The savings grow with every server you add — because Kitsune's resting cost stays flat at ~1,321 tokens (measured: 6 lean-profile tools) no matter how many servers live behind it:
 
-Saving formula: `1 − (Kitsune base 965 + surgical mount) / always-on total`
+Saving formula: `1 − (Kitsune base 1,321 + surgical mount) / always-on total`
 
 | Always-on servers | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | ~1,265 (965 + ~300) | **70%** |
-| GitHub + filesystem + git | 8,678 | ~1,265–1,655 | **81–85%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,265–2,915 | **88–95%** |
+| GitHub (26 tools) | 4,229 | ~1,621 (1,321 + ~300) | **62%** |
+| GitHub + filesystem + git | 8,678 | ~1,621–2,221 | **74–81%** |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,621–2,821 | **89–94%** |
 
-Savings grow because Kitsune's ~965-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
+Savings grow because Kitsune's ~1,321-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
 
 <div align="center">
   <picture>
@@ -142,7 +142,7 @@ shapeshift()
 
 Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target server via the appropriate transport (stdio subprocess, HTTP, WebSocket), fetches its `tools/list`, and registers each tool as a native FastMCP tool with the exact schema from the server. The AI client receives a `notifications/tools/list_changed` event and sees the new tools as first-class — no wrapper, no indirection.
 
-`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~965-token baseline.
+`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~1,321-token baseline.
 
 <div align="center">
   <picture>

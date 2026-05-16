@@ -2,7 +2,7 @@
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,Inter,Roboto,Helvetica,Arial,sans-serif"
      role="img" aria-labelledby="costTitle costDesc">
   <title id="costTitle">Token cost per turn: always-on MCP vs Kitsune</title>
-  <desc id="costDesc">Bar chart comparing tokens-per-turn for always-on MCP servers (4,229 / 8,678 / 25,000) versus Kitsune surgical mount (800 / 1,190 / 2,450) across 1, 3, and 5 servers. Savings: 81%, 86–91%, 90–97%.</desc>
+  <desc id="costDesc">Bar chart comparing tokens-per-turn for always-on MCP servers (4,229 / 8,678 / 25,000) versus Kitsune surgical mount (~1,621 / ~1,921 / ~2,221) across 1, 3, and 5 servers. Savings: 62%, 74–81%, 89–94%.</desc>
 
   <defs>
     <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1">
@@ -68,11 +68,11 @@
   <!-- Group 1: 1 server -->
   <text x="127" y="383" text-anchor="middle" class="vallabel-r" font-size="11">4,229</text>
   <rect x="84" y="389" width="86" height="51" fill="url(#gRed)" rx="3"/>
-  <text x="127" y="421" text-anchor="middle" class="savings-l" font-size="15">81%</text>
+  <text x="127" y="421" text-anchor="middle" class="savings-l" font-size="15">62%</text>
   <text x="127" y="434" text-anchor="middle" class="savings-s" font-size="9">SAVED</text>
 
-  <text x="219" y="424" text-anchor="middle" class="vallabel-a" font-size="11">800</text>
-  <rect x="176" y="430" width="86" height="10" fill="url(#gAmber)" rx="2"/>
+  <text x="219" y="415" text-anchor="middle" class="vallabel-a" font-size="11">~1,621</text>
+  <rect x="176" y="421" width="86" height="19" fill="url(#gAmber)" rx="2"/>
 
   <text x="173" y="462" text-anchor="middle" class="grouplbl" font-size="13">1 server</text>
   <text x="173" y="479" text-anchor="middle" class="groupsub" font-size="11">26 tools always loaded</text>
@@ -80,11 +80,11 @@
   <!-- Group 2: 3 servers -->
   <text x="331" y="330" text-anchor="middle" class="vallabel-r" font-size="11">8,678</text>
   <rect x="288" y="336" width="86" height="104" fill="url(#gRed)" rx="3"/>
-  <text x="331" y="382" text-anchor="middle" class="savings-l" font-size="17">86–91%</text>
+  <text x="331" y="382" text-anchor="middle" class="savings-l" font-size="17">74–81%</text>
   <text x="331" y="399" text-anchor="middle" class="savings-s" font-size="10">SAVED</text>
 
-  <text x="423" y="420" text-anchor="middle" class="vallabel-a" font-size="11">~1,190</text>
-  <rect x="380" y="426" width="86" height="14" fill="url(#gAmber)" rx="2"/>
+  <text x="423" y="411" text-anchor="middle" class="vallabel-a" font-size="11">~1,921</text>
+  <rect x="380" y="417" width="86" height="23" fill="url(#gAmber)" rx="2"/>
 
   <text x="377" y="462" text-anchor="middle" class="grouplbl" font-size="13">3 servers</text>
   <text x="377" y="479" text-anchor="middle" class="groupsub" font-size="11">52 tools always loaded</text>
@@ -92,11 +92,11 @@
   <!-- Group 3: 5 servers -->
   <text x="535" y="130" text-anchor="middle" class="vallabel-r" font-size="12" font-weight="700">25,000</text>
   <rect x="492" y="140" width="86" height="300" fill="url(#gRed)" rx="3"/>
-  <text x="535" y="280" text-anchor="middle" class="savings-l" font-size="22">90–97%</text>
+  <text x="535" y="280" text-anchor="middle" class="savings-l" font-size="22">89–94%</text>
   <text x="535" y="302" text-anchor="middle" class="savings-s" font-size="12">SAVED</text>
 
-  <text x="627" y="405" text-anchor="middle" class="vallabel-a" font-size="11">~2,450</text>
-  <rect x="584" y="411" width="86" height="29" fill="url(#gAmber)" rx="2"/>
+  <text x="627" y="407" text-anchor="middle" class="vallabel-a" font-size="11">~2,221</text>
+  <rect x="584" y="413" width="86" height="27" fill="url(#gAmber)" rx="2"/>
 
   <text x="581" y="462" text-anchor="middle" class="grouplbl" font-size="13">5 servers</text>
   <text x="581" y="479" text-anchor="middle" class="groupsub" font-size="11">75 tools always loaded</text>

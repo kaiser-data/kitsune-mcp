@@ -464,7 +464,8 @@ class TestPoolEviction:
 
         assert key in evicted
         assert key not in _process_pool
-        entry.proc.kill.assert_called()
+        # _kill_process_tree short-circuits on already-dead procs (returncode set)
+        entry.proc.kill.assert_not_called()
 
     def test_idle_process_is_evicted(self):
         from kitsune_mcp.constants import POOL_MAX_IDLE_SECONDS

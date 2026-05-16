@@ -20,7 +20,7 @@ from kitsune_mcp.credentials import (
 )
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import _ping, _process_pool
+from kitsune_mcp.transport import _kill_process_tree, _ping, _process_pool
 from kitsune_mcp.utils import _estimate_tokens, _rss_mb
 
 
@@ -33,8 +33,7 @@ def _kill_probe(pool_key: str) -> None:
     """
     entry = _process_pool.pop(pool_key, None)
     if entry is not None:
-        with contextlib.suppress(Exception):
-            entry.proc.kill()
+        _kill_process_tree(entry.proc)
 
 
 async def _compare_probe(srv, allow_low_trust: bool) -> dict:

@@ -25,7 +25,7 @@ from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.session import session
 from kitsune_mcp.shapeshift import _json_type_to_py
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import BaseTransport, _process_pool
+from kitsune_mcp.transport import BaseTransport, _kill_process_tree, _process_pool
 from kitsune_mcp.utils import _estimate_tokens, _is_safe_url, _ssrf_safe_request
 
 
@@ -419,8 +419,8 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
             entry = _process_pool.get(pool_key)
             if entry is None:
                 continue
+            _kill_process_tree(entry.proc)
             with contextlib.suppress(Exception):
-                entry.proc.kill()
                 await asyncio.wait_for(entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
             _process_pool.pop(pool_key, None)
             killed.append(entry.name or entry.install_cmd[0])
@@ -642,11 +642,9 @@ async def release(name: str) -> str:
     pid = found_entry.pid()
     label = found_entry.name or found_key
 
-    try:
-        found_entry.proc.kill()
+    _kill_process_tree(found_entry.proc)
+    with contextlib.suppress(Exception):
         await asyncio.wait_for(found_entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
-    except Exception:
-        pass
 
     _process_pool.pop(found_key, None)
     session["connections"].pop(found_key, None)

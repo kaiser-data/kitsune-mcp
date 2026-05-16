@@ -4,6 +4,45 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.6] — 2026-05-16
+
+### Fixed — Process-tree termination on unmount (zombie leak)
+
+`shapeshift()` (unmount) and pool eviction were only killing the immediate
+`uvx`/`npx` wrapper, orphaning the actual MCP server child. Every shapeshift
+cycle leaked one zombie process. Confirmed with `ps`: after `shapeshift()`,
+the wrapper PID was gone but its Python child kept running indefinitely.
+
+- Each subprocess is now spawned with `start_new_session=True` (POSIX) /
+  `CREATE_NEW_PROCESS_GROUP` (Windows) so the whole tree shares a process
+  group.
+- New `_kill_process_tree()` helper sends `SIGKILL` to the negated PGID on
+  POSIX (`os.killpg`) and `CTRL_BREAK_EVENT` on Windows, then falls back to
+  `proc.kill()`. Short-circuits on already-reaped processes.
+- All `proc.kill()` callsites that close pool entries now route through the
+  helper: atexit cleanup, idle eviction, LRU cap, `.env` rotation, `release()`,
+  `shiftback()`, `inspect()` probes, and reconnect retry.
+- Live verification: cold start → 4 procs (wrapper + Python child + prior
+  leftovers); after `shapeshift()` unmount, the whole tree for the current
+  shapeshift is gone instead of just the wrapper.
+
+### Docs — Honest token cost numbers across README and graphics
+
+Audit found stale "~965-token baseline" and "~500 tokens at rest" claims
+predating the v0.20.5 TDQS rebuild. Updated to live-measured values
+(`examples/benchmark.py`):
+
+- README savings table baseline `965` → `1,321`; recomputed percentages
+  (GitHub: 70% → **62%**; 3-server: 81-85% → **74-81%**; 5-server: 88-95% →
+  **89-94%**).
+- `docs/token-cost-{light,dark}.svg`: kitsune bar values 800/1,190/2,450 →
+  1,621/1,921/2,221; savings labels and bar heights re-laid to match.
+- `docs/architecture-{light,dark,base}.svg`: "~500 tokens at rest" → "~1,321
+  tokens at rest"; version label v0.20.1 → v0.20.6.
+- "Five tools at rest" → "Six tools at rest" (lean profile is 6).
+
+---
+
 ## [0.20.5] — 2026-05-16
 
 ### Fixed — TDQS Behavior/Usage/Completeness scoring for `call` and `search`
