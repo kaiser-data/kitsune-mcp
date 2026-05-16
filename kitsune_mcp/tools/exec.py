@@ -4,6 +4,9 @@ import asyncio
 import json
 import os
 import time
+from typing import Annotated
+
+from pydantic import Field
 
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
@@ -31,14 +34,22 @@ from kitsune_mcp.utils import (
 @mcp.tool()
 async def call(
     tool_name: str,
-    server_id: str | None = None,
-    arguments: dict | None = None,
+    server_id: Annotated[str | None, Field(description="Defaults to the currently shapeshifted form when omitted")] = None,
+    arguments: Annotated[dict | None, Field(description="Tool arguments matching its inputSchema (default {})")] = None,
     config: dict | None = None,
 ) -> str:
-    """Invoke a tool. server_id defaults to current shapeshifted form.
+    """Invoke a tool on an MCP server. Returns the tool's response as text.
 
-    call('get_current_time', arguments={'timezone': 'UTC'})
-    call('list_directory', '@mcp/server-fs', {'path': '/tmp'})
+    Routes through the warm pooled transport when a server is shapeshifted;
+    otherwise spins up a transient transport for the given server_id. Records
+    the call in session stats. Long responses (HTML, large outputs) are
+    truncated with a continuation note.
+
+    Use when: the tool name and target server are known. Avoid when: discovery
+    is needed — auto() does search → pick → call in one step.
+
+    call('get_current_time', arguments={'timezone': 'UTC'})       # after shapeshift
+    call('list_directory', '@mcp/server-fs', {'path': '/tmp'})    # ad-hoc one-shot
     """
     if server_id is None:
         server_id = session.get("current_form")

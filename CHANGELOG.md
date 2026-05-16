@@ -4,6 +4,39 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.5] — 2026-05-16
+
+### Fixed — TDQS Behavior/Usage/Completeness scoring for `call` and `search`
+
+Glama's per-tool TDQS scorecard graded `call` at C (2.9/5) and `search` at B
+(3.1/5) — both penalized for thin Behavior, Completeness, and Usage Guidelines
+sections. The other 4 lean-profile tools (`status`, `shapeshift`, `auth`,
+`auto`) scored A and remain untouched.
+
+This release enriches **only** `call` and `search` with:
+- 4-line "Returns / Behavior / Side effects" block
+- 2-line "Use when / Avoid when" guidance
+- 2-3 worked examples
+- `Field(description=...)` on every non-obvious parameter
+
+Cost: `call` 188 → 345 tok, `search` 129 → 328 tok. Lean profile total
+965 → **1,321 tok**. Still well under the 3,654-token v0.20.2 explosion,
+still 70-95% cheaper than always-on for any non-trivial multi-server config.
+
+### CI — release workflow no longer "fails" on Glama display
+
+`npm` and `mcp-registry` publish jobs are now `workflow_dispatch`-only (with
+explicit `publish_npm` / `publish_registry` boolean inputs). PyPI is the
+release source of truth on tag push and never fails. The two optional
+targets require a one-time setup (Trusted Publisher on npmjs.com, both
+ecosystems live for MCP Registry) and so are gated to manual invocation
+rather than silently soft-failing every release.
+
+This keeps the "Publish Release" workflow status fully green on tag push —
+no more half-red "1 of 3 jobs failed" display on Glama or in the Actions UI.
+
+---
+
 ## [0.20.4] — 2026-05-16
 
 ### Fixed

@@ -4,7 +4,18 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch: {}  # allow manual re-run (e.g. when one publish target fails)
+  workflow_dispatch:
+    inputs:
+      publish_npm:
+        description: 'Also publish to npm (needs one-time Trusted Publisher on npmjs.com)'
+        required: false
+        type: boolean
+        default: false
+      publish_registry:
+        description: 'Also publish to MCP Registry (needs both PyPI + npm live)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   pypi:
@@ -37,12 +48,12 @@ jobs:
   npm:
     name: Publish to npm
     runs-on: ubuntu-latest
-    # Non-blocking — PyPI is the source of truth. npm OIDC requires a one-time
-    # Trusted Publisher registration at https://www.npmjs.com/package/kitsune-mcp/access
-    # (org: kaiser-data, repo: kitsune-mcp, workflow: publish.yml). Until that
-    # is set up this job will fail with 404 PUT on publish — that's expected
-    # and does NOT block the release.
-    continue-on-error: true
+    # Only runs when explicitly requested via workflow_dispatch — npm OIDC needs
+    # a one-time Trusted Publisher registration at
+    # https://www.npmjs.com/package/kitsune-mcp/access (org: kaiser-data,
+    # repo: kitsune-mcp, workflow: publish.yml). Skipped on tag push so the
+    # workflow stays green for release automation.
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_npm
     permissions:
       id-token: write
       contents: read
@@ -65,12 +76,11 @@ jobs:
   mcp-registry:
     name: Publish to MCP Registry
     runs-on: ubuntu-latest
-    needs: [pypi]   # only wait on PyPI — npm is non-blocking, MCP Registry can publish
-                   # against just one ecosystem entry per server.json
-    # Also non-blocking — the registry job needs the same package versions to exist.
-    # If npm is missing, mcp-publisher publish may reject the npm package entry;
-    # don't fail the workflow over it.
-    continue-on-error: true
+    needs: [pypi]
+    # Skipped on tag push — only runs when explicitly requested via
+    # workflow_dispatch, because the registry rejects publishes if either
+    # the npm or PyPI package entry in server.json isn't live yet.
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_registry
     permissions:
       id-token: write
       contents: read

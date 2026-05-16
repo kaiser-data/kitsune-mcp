@@ -4,6 +4,9 @@ import asyncio
 import contextlib
 import os
 import shutil
+from typing import Annotated
+
+from pydantic import Field
 
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
@@ -137,8 +140,26 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
 
 
 @mcp.tool()
-async def search(query: str, compare: bool = False, registry: str = "all", limit: int = 5) -> str:
-    """Discover MCP servers. compare=True for token-cost table.
+async def search(
+    query: Annotated[str, Field(description="Keywords, capability description, or natural-language phrase")],
+    compare: Annotated[bool, Field(description="Return a side-by-side token-cost comparison table")] = False,
+    registry: str = "all",
+    limit: int = 5,
+) -> str:
+    """Discover MCP servers across registries — the entry point to mounting.
+
+    Returns a ranked list of server_ids with name, description, source, and
+    credential-readiness status. Records discovered servers in session so
+    status() can summarize them. Reports per-registry failures inline rather
+    than failing the whole call.
+
+    Use when: you need to find a server matching a capability before mounting.
+    Avoid when: the server_id is already known — go straight to shapeshift()
+    or inspect().
+
+    search('web search')                # find candidates
+    search('postgres', compare=True)    # side-by-side token-cost table
+    search('vector db', registry='smithery')
 
     registry: all|official|mcpregistry|glama|npm|smithery|pypi
     """
