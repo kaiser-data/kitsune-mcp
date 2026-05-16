@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.2] — 2026-05-16
+
+### Fixed — process leak in `shiftback()` (#38)
+
+- **`shiftback(kill=True)` is now the default.** Previously `kill=False` silently leaked the underlying server subprocess (~40-50 MB each). With 10 servers explored in a session that adds up to ~400 MB of dead-weight memory the user never asked for. Users who want to keep the pool warm for fast re-attach must now opt in with `kill=False`.
+- Docstring and `docs/agent-patterns.md` updated to reflect the new default.
+
+### Fixed — Glama Tool Definition Quality Score (TDQS)
+
+- **All 6 lean-profile tools (`status`, `search`, `auth`, `shapeshift`, `call`, `auto`) rewritten** to score well on Glama's TDQS rubric. Every parameter now carries `Annotated[type, Field(description=...)]` so descriptions surface in `inputSchema.properties[*].description`. Docstrings restructured with explicit "Use when / Avoid when / Behavior / Examples" sections — TDQS heavily penalizes missing usage boundaries (per Glama's research, 89% of surveyed MCP tools fail this).
+- `glama.json` `maintainers` array was malformed (objects instead of strings per the official schema at `https://glama.ai/mcp/schemas/server.json`). Fixed to `["kaiser-data"]`; passes schema validation.
+
+### Maintenance
+
+- Issues #35, #36, #37 confirmed fixed on main and closed.
+- Issue #38 fixed in this release.
+- Issue #34 (auto() ranker for generic web-search tasks) commented with fix plan; still tracked.
+
+---
+
 ## [0.15.0] — 2026-05-09
 
 ### Fixed — `auto()` arg inference and routing (continued from v0.14.0)
