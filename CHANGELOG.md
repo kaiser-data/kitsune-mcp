@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.4] — 2026-05-16
+
+### Fixed
+
+- **`pyproject.toml` now pins `pydantic>=2.10,<2.13`.** A fresh install on a
+  system with an older or newer pydantic crashes at startup with
+  `PydanticUserError: A non-annotated attribute was detected: 'result = <class 'str'>'`
+  because mcp 1.26's bundled FastMCP uses a `create_model()` pattern that
+  pydantic <2.10 and >=2.13 reject. Caught via end-to-end smoke test against
+  the published 0.20.3 PyPI artifact.
+- **README** updated from `~965 tokens` (benchmark estimator) to `~1,187 tokens`
+  (live JSON-RPC `tools/list` measurement). The benchmark's
+  `len(json.dumps) // 4` undercounts the envelope overhead; the live number is
+  what the model actually sees.
+
+### CI
+
+- npm publish + MCP Registry publish marked `continue-on-error: true`.
+  PyPI (via OIDC trusted publishing) is the source of truth and never fails;
+  npm needs a one-time Trusted Publisher registration at
+  https://www.npmjs.com/package/kitsune-mcp/access, MCP Registry needs both
+  ecosystems live. Until those are sorted, those legs fail silently rather
+  than blocking the workflow's overall status.
+
+---
+
 ## [0.20.3] — 2026-05-16
 
 ### Fixed — token diet for the 6 lean-profile tools

@@ -32,13 +32,13 @@ MCP gives you structured tool schemas the model can read and validate against:
 |---|---|---|---|
 | CLI fallback | ~30–50% on rare subcommands | Hallucinated flags, silent wrong calls | ~0 |
 | Always-on MCP | ~95% across the whole surface | Schema bloat in every turn | ~10–15K per server |
-| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~965 tokens** |
+| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~1,187 tokens** |
 
 That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accurate when it matters**. For one-off ops on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost (production AWS changes, billing operations, security flows), Kitsune gives you schema-validated execution without the always-on tax. See [`examples/scenarios/`](./examples/scenarios/) for seven worked use cases.
 
 ### Token savings vs always-on
 
-The savings grow with every server you add — because Kitsune's resting cost stays flat at ~965 tokens (measured: 6 lean-profile tools) no matter how many servers live behind it:
+The savings grow with every server you add — because Kitsune's resting cost stays flat at ~1,187 tokens (measured: 6 lean-profile tools) no matter how many servers live behind it:
 
 Saving formula: `1 − (Kitsune base 965 + surgical mount) / always-on total`
 
@@ -124,7 +124,7 @@ search("web scraping")
 # Mount specific tools, use them, release
 shapeshift("notion-hosted", tools=["notion-search"])
 call("notion-search", arguments={"query": "roadmap"})
-shapeshift()                          # context returns to ~965 tokens
+shapeshift()                          # context returns to ~1,187 tokens
 
 # One-shot via auto() — use server_hint for reliable routing
 auto("current time in Tokyo", server_hint="mcp-server-time")
@@ -187,7 +187,7 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
 | `auth()` | `server_or_var, value?` | Check or set env vars; trigger OAuth 2.1 browser flow for hosted servers |
 | `auto()` | `task, server_hint=, arguments=` | One-shot: search → mount → call → return result |
 
-Context overhead at rest: **~965 tokens** for all 6 lean-profile tools (measured via `examples/benchmark.py`).
+Context overhead at rest: **~1,187 tokens** for all 6 lean-profile tools (measured via `examples/benchmark.py`).
 
 > **`auto()` note:** `auto(task, server_hint="server-id")` gives reliable results. Without `server_hint`, routing is best-effort via semantic search and can misfire on ambiguous queries — use `search()` first when unsure.
 
@@ -257,7 +257,7 @@ Saved = 1 − (500 base + surgical) / always-on. Surgical estimates (~) are prop
 
 ### Multi-server compounding
 
-Kitsune's resting cost (~965 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
+Kitsune's resting cost (~1,187 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
 
 All figures use servers with measured full-mount costs. Kitsune cost = 965 base + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
 

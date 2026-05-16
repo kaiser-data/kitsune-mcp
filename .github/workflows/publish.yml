@@ -37,8 +37,14 @@ jobs:
   npm:
     name: Publish to npm
     runs-on: ubuntu-latest
+    # Non-blocking — PyPI is the source of truth. npm OIDC requires a one-time
+    # Trusted Publisher registration at https://www.npmjs.com/package/kitsune-mcp/access
+    # (org: kaiser-data, repo: kitsune-mcp, workflow: publish.yml). Until that
+    # is set up this job will fail with 404 PUT on publish — that's expected
+    # and does NOT block the release.
+    continue-on-error: true
     permissions:
-      id-token: write   # OIDC Trusted Publishing — no static token needed
+      id-token: write
       contents: read
 
     steps:
@@ -59,9 +65,14 @@ jobs:
   mcp-registry:
     name: Publish to MCP Registry
     runs-on: ubuntu-latest
-    needs: [pypi, npm]   # wait for both packages to be live first
+    needs: [pypi]   # only wait on PyPI — npm is non-blocking, MCP Registry can publish
+                   # against just one ecosystem entry per server.json
+    # Also non-blocking — the registry job needs the same package versions to exist.
+    # If npm is missing, mcp-publisher publish may reject the npm package entry;
+    # don't fail the workflow over it.
+    continue-on-error: true
     permissions:
-      id-token: write    # GitHub OIDC — no stored secret needed
+      id-token: write
       contents: read
 
     steps:

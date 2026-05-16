@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kitsune-mcp"
-version = "0.20.3"
+version = "0.20.4"
 description = "The shape-shifting MCP hub — shapeshift() into any MCP server at runtime. 7 registries. No restart."
 readme = "README.md"
 license = { text = "MIT" }
@@ -42,6 +42,10 @@ dependencies = [
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
     "mcp>=1.0.0",
+    # mcp 1.26's bundled FastMCP uses a create_model() pattern that pydantic
+    # <2.10 rejects ("non-annotated attribute") and pydantic >=2.13 also rejects
+    # (stricter inspect_namespace). Pin to the known-good 2.10–2.12 range.
+    "pydantic>=2.10,<2.13",
 ]
 
 [project.optional-dependencies]
