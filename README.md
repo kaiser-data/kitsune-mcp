@@ -2,7 +2,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One config entry. 10,000+ servers on demand. Up to 97% less MCP token overhead.</strong></p>
+  <p><strong>One config entry. 10,000+ servers on demand. Up to 95% less MCP token overhead.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -32,23 +32,23 @@ MCP gives you structured tool schemas the model can read and validate against:
 |---|---|---|---|
 | CLI fallback | ~30–50% on rare subcommands | Hallucinated flags, silent wrong calls | ~0 |
 | Always-on MCP | ~95% across the whole surface | Schema bloat in every turn | ~10–15K per server |
-| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~500 tokens** |
+| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~965 tokens** |
 
 That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accurate when it matters**. For one-off ops on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost (production AWS changes, billing operations, security flows), Kitsune gives you schema-validated execution without the always-on tax. See [`examples/scenarios/`](./examples/scenarios/) for seven worked use cases.
 
 ### Token savings vs always-on
 
-The savings grow with every server you add — because Kitsune's resting cost stays flat at ~500 tokens no matter how many servers live behind it:
+The savings grow with every server you add — because Kitsune's resting cost stays flat at ~965 tokens (measured: 6 lean-profile tools) no matter how many servers live behind it:
 
-Saving formula: `1 − (Kitsune base 500 + surgical mount) / always-on total`
+Saving formula: `1 − (Kitsune base 965 + surgical mount) / always-on total`
 
 | Always-on servers | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | ~800 (500 + ~300) | **81%** |
-| GitHub + filesystem + git | 8,678 | ~800–1,190 | **86–91%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~800–2,450 | **90–97%** |
+| GitHub (26 tools) | 4,229 | ~1,265 (965 + ~300) | **70%** |
+| GitHub + filesystem + git | 8,678 | ~1,265–1,655 | **81–85%** |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,265–2,915 | **88–95%** |
 
-Savings grow because Kitsune's 500-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
+Savings grow because Kitsune's ~965-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
 
 <div align="center">
   <picture>
@@ -124,7 +124,7 @@ search("web scraping")
 # Mount specific tools, use them, release
 shapeshift("notion-hosted", tools=["notion-search"])
 call("notion-search", arguments={"query": "roadmap"})
-shapeshift()                          # context returns to ~500 tokens
+shapeshift()                          # context returns to ~965 tokens
 
 # One-shot via auto() — use server_hint for reliable routing
 auto("current time in Tokyo", server_hint="mcp-server-time")
@@ -142,7 +142,7 @@ shapeshift()
 
 Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target server via the appropriate transport (stdio subprocess, HTTP, WebSocket), fetches its `tools/list`, and registers each tool as a native FastMCP tool with the exact schema from the server. The AI client receives a `notifications/tools/list_changed` event and sees the new tools as first-class — no wrapper, no indirection.
 
-`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~500-token baseline.
+`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~965-token baseline.
 
 <div align="center">
   <picture>
@@ -187,7 +187,7 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
 | `auth()` | `server_or_var, value?` | Check or set env vars; trigger OAuth 2.1 browser flow for hosted servers |
 | `auto()` | `task, server_hint=, arguments=` | One-shot: search → mount → call → return result |
 
-Context overhead at rest: **~500 tokens** for all 5 tools.
+Context overhead at rest: **~965 tokens** for all 6 lean-profile tools (measured via `examples/benchmark.py`).
 
 > **`auto()` note:** `auto(task, server_hint="server-id")` gives reliable results. Without `server_hint`, routing is best-effort via semantic search and can misfire on ambiguous queries — use `search()` first when unsure.
 
@@ -257,21 +257,21 @@ Saved = 1 − (500 base + surgical) / always-on. Surgical estimates (~) are prop
 
 ### Multi-server compounding
 
-Kitsune's resting cost (~500 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
+Kitsune's resting cost (~965 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
 
-All figures use servers with measured full-mount costs. Kitsune cost = 500 base + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
+All figures use servers with measured full-mount costs. Kitsune cost = 965 base + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
 
 | Servers always-on | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---|---:|
-| GitHub only | 4,229 | ~800 | 81% |
-| GitHub + filesystem + git | 8,678 | ~800–1,190 | 86–91% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~800–2,450 | **90–97%** |
+| GitHub only | 4,229 | ~1,265 | 70% |
+| GitHub + filesystem + git | 8,678 | ~1,265–1,655 | 81–85% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,265–2,915 | **88–95%** |
 
 ### Tool-selection reliability
 
 LLM tool-selection degrades as the visible tool count grows — a finding consistent across multiple tool-use benchmarks (Gorilla, ToolBench). The failure mode is typically adjacent-name confusion: a model that sees `read_file`, `read_text_file`, and `read_media_file` simultaneously is more likely to call the wrong one than a model that sees only the one it needs.
 
-Kitsune holds 5 tools at rest; 6–8 during active use. A Kitsune-specific benchmark measuring selection accuracy across tool-count conditions does not yet exist — contributions welcome.
+Kitsune holds 6 tools at rest; 7–9 during active use. A Kitsune-specific benchmark measuring selection accuracy across tool-count conditions does not yet exist — contributions welcome.
 
 ### Connection latency
 

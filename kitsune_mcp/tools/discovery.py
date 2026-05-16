@@ -4,9 +4,6 @@ import asyncio
 import contextlib
 import os
 import shutil
-from typing import Annotated
-
-from pydantic import Field
 
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
@@ -140,67 +137,10 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
 
 
 @mcp.tool()
-async def search(
-    query: Annotated[
-        str,
-        Field(
-            description=(
-                "Search phrase — keywords, capability description, or natural "
-                "language. Examples: 'web search', 'github issues', 'postgres', "
-                "'fetch and summarize web pages'."
-            ),
-        ),
-    ],
-    compare: Annotated[
-        bool,
-        Field(
-            description=(
-                "If True, return a side-by-side token-cost comparison table "
-                "instead of the default list — useful before committing to a "
-                "shapeshift() target."
-            ),
-        ),
-    ] = False,
-    registry: Annotated[
-        str,
-        Field(
-            description=(
-                "Which registry/registries to search. 'all' (default) fans out "
-                "across every configured source; pass a specific one to scope."
-            ),
-            examples=["all", "official", "mcpregistry", "glama", "npm", "smithery", "pypi"],
-        ),
-    ] = "all",
-    limit: Annotated[
-        int,
-        Field(
-            description="Maximum number of results to return (typical range 1-20).",
-            ge=1,
-            le=50,
-        ),
-    ] = 5,
-) -> str:
-    """Discover MCP servers across configured registries — the entry point to mounting.
+async def search(query: str, compare: bool = False, registry: str = "all", limit: int = 5) -> str:
+    """Discover MCP servers. compare=True for token-cost table.
 
-    Searches the union of official MCP Registry, mcpregistry.io, Glama, npm,
-    PyPI, and (if SMITHERY_API_KEY is set) Smithery. Returns server IDs that
-    can be passed to inspect(), shapeshift(), or auth().
-
-    Use when:
-      - The user describes a capability ("send slack messages", "query bigquery")
-        and you need to find a server that provides it.
-      - You want to compare candidates by token cost before mounting — pass
-        compare=True for the comparison table.
-
-    Avoid when:
-      - You already know the exact server_id — call inspect() or shapeshift() directly.
-      - You need to invoke a specific tool right now — auto() does search+call
-        in one step.
-
-    Behavior:
-      - Each result line shows: id | name — description | source/transport | cred status.
-      - Records explored servers in session so status() can summarize them.
-      - Reports per-registry failures inline rather than failing the whole call.
+    registry: all|official|mcpregistry|glama|npm|smithery|pypi
     """
     if compare:
         return await _run_compare(query, limit)
@@ -447,28 +387,7 @@ async def compare(query: str, limit: int = 6, probe: bool = False) -> str:
 
 @mcp.tool()
 async def status() -> str:
-    """Show Kitsune's runtime state — provider auth, current form, connections, stats.
-
-    A diagnostic snapshot. Reports which registries/providers are reachable
-    (Smithery key validated with a live ping), which server is currently
-    shapeshifted, persistent connections from connect(), explored history,
-    and cumulative token-savings stats for the session.
-
-    Use when:
-      - Onboarding a new session — confirms API keys are recognized.
-      - Debugging "why doesn't my tool work" — surfaces auth issues and
-        which form is active.
-      - The user asks "what's loaded" / "show status" / "what's connected".
-
-    Avoid when:
-      - You already know the active form (call() works without a status check).
-      - Doing this on every turn — it's a snapshot, not a stream.
-
-    Returns:
-      Multi-section text with PROVIDERS, optional GATEWAY (competing servers),
-      CURRENT FORM, PERSISTENT CONNECTIONS, EXPLORED, SKILLS, and
-      PERFORMANCE STATS sections — only non-empty sections are rendered.
-    """
+    """Show Kitsune runtime state: providers, current form, connections, token stats."""
     from kitsune_mcp.credentials import _smithery_available
 
     explored = session["explored"]

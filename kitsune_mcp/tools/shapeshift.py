@@ -8,11 +8,9 @@ import json
 import os
 import shlex
 import time
-from typing import Annotated
 
 import httpx
 from mcp.server.fastmcp import Context
-from pydantic import Field
 
 from kitsune_mcp.app import _registry_lock, mcp
 from kitsune_mcp.constants import (
@@ -164,101 +162,21 @@ async def _do_unmount(ctx, keep: bool) -> str:
 
 @mcp.tool()
 async def shapeshift(
-    server_id: Annotated[
-        str,
-        Field(
-            description=(
-                "Server identifier to mount — npm package, PyPI package, "
-                "registry slug, or full HTTP(S) URL. Leave empty to unmount "
-                "the current form. Examples: 'mcp-server-time', "
-                "'@modelcontextprotocol/server-filesystem', 'https://api.example.com/mcp'."
-            ),
-        ),
-    ] = "",
+    server_id: str = "",
     ctx: Context | None = None,
-    tools: Annotated[
-        list[str] | None,
-        Field(
-            description=(
-                "Optional allowlist of tool names to mount — load only these "
-                "instead of the full toolset. Use to keep context lean when "
-                "a server exposes many tools you don't need."
-            ),
-        ),
-    ] = None,
-    keep: Annotated[
-        bool,
-        Field(
-            description=(
-                "On unmount (empty server_id), keep the subprocess in the pool "
-                "for fast re-attach. Default False — fully cleans up on unmount."
-            ),
-        ),
-    ] = False,
-    confirm: Annotated[
-        bool,
-        Field(
-            description=(
-                "Bypass the community-trust gate after reviewing the server. "
-                "Required for npm/github/glama-via-github sources unless "
-                "KITSUNE_TRUST=community is set in the environment."
-            ),
-        ),
-    ] = False,
-    source: Annotated[
-        str,
-        Field(
-            description=(
-                "Registry/install source preference. "
-                "'auto' picks the best available; "
-                "'local' forces npx/uvx install (downloads + runs locally); "
-                "'smithery' requires SMITHERY_API_KEY; "
-                "'official' restricts to the verified MCP registry."
-            ),
-            examples=["auto", "local", "smithery", "official"],
-        ),
-    ] = "auto",
-    server_args: Annotated[
-        list[str] | None,
-        Field(
-            description=(
-                "Extra CLI arguments appended to the server's install command — "
-                "e.g. ['/private/tmp'] to scope the filesystem server to a directory."
-            ),
-        ),
-    ] = None,
+    tools: list[str] | None = None,
+    keep: bool = False,
+    confirm: bool = False,
+    source: str = "auto",
+    server_args: list[str] | None = None,
 ) -> str:
-    """Mount an MCP server at runtime — its tools become callable in this session.
+    """Mount an MCP server's tools at runtime. Empty server_id unmounts.
 
-    Dynamically attaches any of 10,000+ MCP servers without restarting the client.
-    Proxies the server's tools, resources, and prompts into the live session and
-    sends tools/list_changed so the client refreshes its catalog. Replaces any
-    currently mounted form (call shiftback() first if you need a clean state).
+    shapeshift('mcp-server-time')          # mount
+    shapeshift('id', tools=['only_this'])  # lean — mount only listed tools
+    shapeshift()                           # unmount + kill process
 
-    Use when:
-      - The user wants a capability not provided by the currently loaded tools
-        (e.g. timezone math, filesystem access, web fetch, GitHub API).
-      - You discovered a candidate via search()/compare()/auto() and are ready
-        to commit to calling its tools.
-
-    Avoid when:
-      - The capability is already available via a currently mounted server —
-        re-mounting wastes setup time.
-      - You only need a one-off call against an ad-hoc server — use call() with
-        an explicit server_id instead.
-
-    Side effects:
-      - Drops the previously mounted form's tools from the session.
-      - May install a package via npx/uvx on first use (source='local' or auto).
-      - Persists nothing beyond the session unless the user authorized it.
-
-    Examples:
-        shapeshift('mcp-server-time')                       # mount via auto
-        shapeshift('mcp-server-time', tools=['get_time'])   # lean — one tool only
-        shapeshift('@mod/server-fs', server_args=['/tmp'])  # pass server CLI args
-        shapeshift('https://api.example.com/mcp')           # remote SSE/HTTP
-        shapeshift()                                        # unmount + clean up
-        shapeshift(keep=True)                               # unmount, keep pool warm
+    source: auto|local|smithery|official. confirm=True for community sources.
     """
     if not server_id:
         return await _do_unmount(ctx, keep=keep)
@@ -447,55 +365,8 @@ async def shapeshift(
 
 
 @mcp.tool()
-async def shiftback(
-    ctx: Context,
-    kill: Annotated[
-        bool,
-        Field(
-            description=(
-                "Terminate the underlying server subprocess after unmounting. "
-                "Default True — prevents memory leaks. Set False to keep the "
-                "process pooled for fast re-attach via shapeshift()."
-            )
-        ),
-    ] = True,
-    uninstall: Annotated[
-        bool,
-        Field(
-            description=(
-                "Uninstall the locally installed package (implies kill=True). "
-                "Only applies when shapeshifted via source='local'. "
-                "uvx packages are fully removed; npx packages auto-expire from cache."
-            )
-        ),
-    ] = False,
-) -> str:
-    """Shift back to Kitsune's true form — unmount the current shapeshifted server.
-
-    Removes all proxied tools/resources/prompts from the session and, by default,
-    terminates the backing subprocess to free memory (~40-50 MB per leaked process).
-    Sends tools/list_changed so the client refreshes its tool catalog.
-
-    Use when:
-      - You're done calling tools from the currently mounted server.
-      - You want a clean slate before shapeshift()ing into a different server.
-      - The user asked to "stop", "unmount", or "clean up" tools.
-
-    Avoid when:
-      - You're about to call another tool on the same server — just call() it.
-      - No server is currently mounted (returns "Already in base form.").
-
-    Side effects:
-      - Drops all proxied tools/resources/prompts from the session.
-      - Kills the backing subprocess unless kill=False is passed explicitly.
-      - With uninstall=True, removes the local package (uvx) or notes the npx
-        cache will auto-expire.
-
-    Examples:
-        shiftback()                          # unmount + kill process (default)
-        shiftback(kill=False)                # unmount but keep process pooled
-        shiftback(uninstall=True)            # unmount + kill + uninstall package
-    """
+async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) -> str:
+    """Unmount current server. kill=False keeps process pooled. uninstall=True removes local package."""
     async with _registry_lock:
         has_tools = bool(session["shapeshift_tools"])
         has_resources = bool(session.get("shapeshift_resources"))

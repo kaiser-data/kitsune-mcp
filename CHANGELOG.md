@@ -4,6 +4,39 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.3] — 2026-05-16
+
+### Fixed — token diet for the 6 lean-profile tools
+
+v0.20.2's TDQS-grade docstrings ("Use when / Avoid when / Behavior / Examples"
+sections + verbose `Field(description=...)` on every parameter) ballooned the
+lean-profile resting cost from ~1,110 tok to **3,654 tok** — undercutting the
+whole "low context overhead" pitch.
+
+This release trims the descriptions to a sweet spot:
+- 1-3 line docstrings with a tight example block
+- `Field(description=...)` dropped where the param is obvious from name + docstring
+- `examples=[...]` arrays removed (they serialize into the schema)
+- Verbose `Use when / Avoid when / Behavior / Examples` blocks lifted to
+  `examples/scenarios/` instead of every tool's schema
+
+**Result (measured via `examples/benchmark.py`):**
+
+| | v0.20.1 | v0.20.2 (verbose) | v0.20.3 (this) |
+|---|---:|---:|---:|
+| Lean profile (6 tools) | 1,110 tok | 3,654 tok | **965 tok** |
+| Forge profile (20 tools) | 2,873 tok | 5,765 tok | **2,677 tok** |
+
+Per-tool (lean): shapeshift 252 · auto 194 · call 188 · auth 151 · search 129 · status 50.
+
+README "Token savings vs always-on" tables recalculated against the measured
+965-token baseline — savings still meaningful (70% on a single GitHub MCP,
+88–95% on a 5-server bundle).
+
+All 595 tests pass.
+
+---
+
 ## [0.20.2] — 2026-05-16
 
 ### Fixed — process leak in `shiftback()` (#38)

@@ -4,9 +4,6 @@ import asyncio
 import json
 import os
 import time
-from typing import Annotated
-
-from pydantic import Field
 
 from kitsune_mcp.app import mcp
 from kitsune_mcp.constants import (
@@ -33,76 +30,15 @@ from kitsune_mcp.utils import (
 
 @mcp.tool()
 async def call(
-    tool_name: Annotated[
-        str,
-        Field(
-            description=(
-                "Name of the tool to invoke on the target server. Use the bare "
-                "tool name (e.g. 'get_current_time') — Kitsune routes it to the "
-                "currently shapeshifted server, or to server_id if provided."
-            ),
-        ),
-    ],
-    server_id: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Target server identifier. Optional when a server is currently "
-                "shapeshifted — defaults to the active form. Accepts package "
-                "names, registry slugs, or full HTTP(S) URLs for ad-hoc servers."
-            ),
-        ),
-    ] = None,
-    arguments: Annotated[
-        dict | None,
-        Field(
-            description=(
-                "Arguments object for the tool, matching its inputSchema. "
-                "Example: {'path': '/tmp'} for filesystem.list_directory. "
-                "Defaults to an empty object."
-            ),
-        ),
-    ] = None,
-    config: Annotated[
-        dict | None,
-        Field(
-            description=(
-                "Per-call credential overrides for servers that need them (rarely "
-                "needed — prefer auth() to persist credentials to ~/.kitsune/.env). "
-                "Keys are credential names declared by the server."
-            ),
-        ),
-    ] = None,
+    tool_name: str,
+    server_id: str | None = None,
+    arguments: dict | None = None,
+    config: dict | None = None,
 ) -> str:
-    """Invoke a tool on an MCP server and return its raw response text.
+    """Invoke a tool. server_id defaults to current shapeshifted form.
 
-    The primary execution primitive. When a server is currently shapeshifted,
-    server_id can be omitted — the active form is used automatically. For
-    ad-hoc calls against any registered server, pass server_id explicitly
-    (no shapeshift needed for a single call).
-
-    Use when:
-      - You shapeshifted into a server and need to invoke one of its tools.
-      - You need a single-shot call without proxying tools into the session.
-      - The user's request maps to a known tool on a known server.
-
-    Avoid when:
-      - You don't yet know which server or tool to use — call auto() instead.
-      - You need to invoke many tools from the same server repeatedly — prefer
-        shapeshift() once so calls go through the warm pooled transport.
-
-    Behavior:
-      - Returns the tool's response as text (truncated for HTML/large outputs).
-      - For community sources, appends a "[source: ...]" trailer for transparency.
-      - Missing credentials surface as actionable auth() guidance, not an error.
-
-    Examples:
-        # After shapeshift("mcp-server-time"):
-        call("get_current_time", arguments={"timezone": "UTC"})
-
-        # Direct one-shot against any registered server:
-        call("list_directory", "@modelcontextprotocol/server-filesystem",
-             arguments={"path": "/tmp"})
+    call('get_current_time', arguments={'timezone': 'UTC'})
+    call('list_directory', '@mcp/server-fs', {'path': '/tmp'})
     """
     if server_id is None:
         server_id = session.get("current_form")
