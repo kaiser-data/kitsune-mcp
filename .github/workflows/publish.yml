@@ -44,14 +44,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node
+      - name: Set up Node 24 (ships with npm 11+ — required for OIDC Trusted Publishing)
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Upgrade npm (Trusted Publishing requires >= 11.5.1)
-        run: npm install -g npm@latest
+      - name: Verify npm version (need >= 11.5.1 for OIDC)
+        run: npm --version
 
       - name: Publish to npm with provenance
         run: npm publish --provenance --access public
