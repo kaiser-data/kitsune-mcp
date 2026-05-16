@@ -17,7 +17,7 @@
   },
   "capabilities": {
     "registries": ["official", "mcpregistry", "smithery", "glama", "npm", "pypi", "github"],
-    "server_count": "10000+",
+    "server_count": "130000+",
     "transports": ["http_sse", "stdio", "persistent_stdio"],
     "morphing": true,
     "hardware_support": true,

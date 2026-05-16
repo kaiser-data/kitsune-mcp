@@ -2,7 +2,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One config entry. 10,000+ servers on demand. Up to 95% less MCP token overhead.</strong></p>
+  <p><strong>One config entry. 130,000+ servers on demand. Up to 95% less MCP token overhead.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -18,7 +18,7 @@
 
 ---
 
-Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 10,000+ MCP servers at runtime. Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Five tools at rest. Thousands available on request. No restarts.
+Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 130,000+ MCP servers at runtime (134,945 indexed on Glama alone as of May 2026). Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Five tools at rest. Thousands available on request. No restarts.
 
 ### Why not just shell out to a CLI?
 
@@ -157,7 +157,7 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
 
 | Document RAG | Kitsune |
 |---|---|
-| Index all documents | Registry: 10,000+ servers across 7 sources |
+| Index all documents | Registry: 130,000+ servers across 7 sources |
 | Query → retrieve relevant chunks | `search("notion")` → ranked candidates with token estimates |
 | Inject only relevant content | `shapeshift(server, tools=[...])` → mount only what is needed |
 | Model reasons over those chunks | Agent calls those tools natively |

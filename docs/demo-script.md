@@ -55,7 +55,7 @@ setup(action="absorb")    # registers them all for shapeshift()
 
 ---
 
-**TITLE CARD**: *One config entry. 10,000+ servers. No restarts.*
+**TITLE CARD**: *One config entry. 130,000+ servers. No restarts.*
 ```
 pip install kitsune-mcp
 ```
