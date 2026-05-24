@@ -2,22 +2,27 @@
 
 _Last updated: 2026-05-24. Running MCP confirmed on v0.20.7._
 
-## Blocking / ship-critical
+## Publishing status (corrected 2026-05-24)
 
-### 1. PyPI publish is broken — v0.20.6 and v0.20.7 are NOT on PyPI
-- `~/.pypirc` holds a **project-scoped token for a different project**; upload 403s with
-  `Invalid API Token: project-scoped token is not valid for project: 'kitsune-mcp'`.
-- Consequence: `pip install kitsune-mcp` / `uvx kitsune-mcp` / `npx kitsune-mcp` users are
-  still on **0.20.5** and do NOT have the process-tree kill (#zombie) or the four issue fixes.
-- Fix: generate a project-scoped token for `kitsune-mcp` at
-  https://pypi.org/manage/account/token/, replace the `password` under `[pypi]` in `~/.pypirc`,
-  then:
-  ```
-  python3 -m build
-  python3 -m twine upload dist/kitsune_mcp-0.20.7*
-  ```
-- npm publish (`package.json` 0.20.7) and MCP Registry (`server.json` 0.20.7) also still need
-  pushing once PyPI is green.
+### PyPI — ✅ NOT a problem; auto-publishes on tag
+- `.github/workflows/publish.yml` uses **OIDC trusted publishing**
+  (`pypa/gh-action-pypi-publish`, `id-token: write`, `environment: pypi`), triggered on every
+  `vX.Y.Z` tag push. No token required.
+- Verified: PyPI `info.version` = **0.20.8**; publish runs for 0.20.5–0.20.8 all succeeded.
+- The local `~/.pypirc` token is project-scoped to a *different* project (hence the manual
+  `twine upload` 403 seen earlier) — but it is **irrelevant to releases**, which never touch it.
+  Optional cleanup: replace it with a kitsune-mcp-scoped token or delete the entry to avoid
+  confusion, but nothing depends on it.
+
+### npm — ⚠️ stale at 0.20.1 (the real gap)
+- `npx kitsune-mcp` resolves to **0.20.1**; PyPI is 7 patch releases ahead.
+- The npm job in `publish.yml` is gated behind a `workflow_dispatch` input
+  ("Also publish to npm — needs one-time Trusted Publisher on npmjs.com"), so tag pushes do
+  NOT publish npm automatically.
+- To ship npm: (1) one-time — configure a Trusted Publisher for `kitsune-mcp` on npmjs.com
+  pointing at this repo's `publish.yml`; (2) run the workflow via `workflow_dispatch` with the
+  npm flag enabled (or `gh workflow run publish.yml -f npm=true`). MCP Registry publish is
+  similarly gated and needs both PyPI + npm live first.
 
 ## Follow-ups from the v0.20.5 issue audit
 
