@@ -21,23 +21,10 @@ _Last updated: 2026-05-24. Running MCP confirmed on v0.20.7._
 
 ## Follow-ups from the v0.20.5 issue audit
 
-### 2. #44 is only half-fixed — Smithery mounts still show `arguments={}`
-- Root cause confirmed: Smithery's registry listing returns `inputSchema` with `type` +
-  `properties` but **no `required` array** (verified for `@upstash/context7-mcp`:
-  `resolve-library-id`, `query-docs` both have `required: None`).
-- The v0.20.7 hint loop fills every entry in `required` — works for official/stdio servers
-  (verified: `server-memory` hint correctly shows `{'entities': []}`), but Smithery servers
-  have an empty `required`, so the hint stays `{}`.
-- Decision needed (pick one):
-  - **(a)** When `required` is absent but `properties` exist, fetch the live schema via
-    `transport.list_tools()` before building the hint. Most correct; adds one round-trip to
-    Smithery mounts. Recommend gating it to *only* the hint path (don't slow proxy registration).
-  - **(b)** Fall back to showing all `properties` keys with a note like
-    `# params: query, libraryName (see inspect())` — cheap, but can't distinguish required
-    from optional.
-  - **(c)** Omit the example line entirely when `required` can't be determined.
-- Recommendation: (a), since the live `list_tools()` schema is the source of truth the proxy
-  already routes against.
+### 2. ✅ DONE in v0.20.8 — #44 completed for Smithery servers
+- Implemented option (a): `_commit_shapeshift` refetches the live schema via
+  `transport.list_tools()` when the registry listing is thin (`_schemas_missing_required`).
+  Fixes both proxy registration and the hint. 2 tests added; verified live against context7.
 
 ### 3. #43 logout — unit-tested, not yet live-verified end-to-end
 - Code + 5 unit tests landed (RFC 7009 revoke + `prompt=login` flag). Needs one real

@@ -4,6 +4,38 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.20.8] — 2026-05-24
+
+### Fixed — #44 completed for Smithery servers (thin registry schemas)
+
+v0.20.7 fixed the `shapeshift()` call-example hint for official/stdio servers
+but Smithery mounts still showed `arguments={}`. Root cause: Smithery's
+registry listing returns `inputSchema` with `type`/`properties` but **omits the
+`required` array**, so neither the registered proxy nor the hint knew which
+params were mandatory.
+
+- New `_schemas_missing_required()` detects the thin shape (properties present,
+  no `required` on any tool).
+- `_commit_shapeshift`'s mount path now refetches the live schema via
+  `transport.list_tools()` when the registry listing is thin — for both stdio
+  and HTTP transports. This corrects **both** the registered proxy schema (so
+  the model itself fills required params) and the printed call hint.
+- Verified live: `@upstash/context7-mcp` registry listing has `required: None`;
+  after refetch, `resolve-library-id` carries `required: ['query', 'libraryName']`.
+
+### Docs
+
+- README baseline framing rewritten to be explicit that Kitsune is itself an
+  always-on MCP server with a fixed ~1,321-token floor that never drops to
+  zero. Added a break-even note (a single sub-1,321-token server is cheaper
+  always-on) and recomputed the Performance tables, which still used a stale
+  500/965 base.
+- Added `NEXT.md` tracking remaining work (PyPI publish still blocked on a
+  mis-scoped token; #43 logout pending live OAuth verification; #34 auto()
+  capability filter).
+
+---
+
 ## [0.20.7] — 2026-05-16
 
 ### Fixed

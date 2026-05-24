@@ -29,6 +29,30 @@ from kitsune_mcp.transport import BaseTransport, _kill_process_tree, _process_po
 from kitsune_mcp.utils import _estimate_tokens, _is_safe_url, _ssrf_safe_request
 
 
+def _schemas_missing_required(schemas: list) -> bool:
+    """True if the registry listing looks thin: some tool declares `properties`
+    but no tool declares a `required` array.
+
+    Smithery's registry listing returns `inputSchema` with `type`/`properties`
+    but omits `required` entirely. That leaves both the registered proxy schema
+    and the call-example hint unable to tell which params are mandatory — so the
+    hint shows `arguments={}` and the model under-fills required params. A live
+    `list_tools()` recovers the full schema. The false-positive case (a server
+    whose tools genuinely have zero required params) just triggers a harmless
+    refetch that confirms the same thing.
+    """
+    has_props = False
+    for ts in schemas:
+        if not isinstance(ts, dict):
+            continue
+        isc = ts.get("inputSchema") or {}
+        if isc.get("required"):
+            return False
+        if isc.get("properties"):
+            has_props = True
+    return has_props
+
+
 async def _commit_shapeshift(
     server_id: str,
     transport: BaseTransport,
@@ -360,15 +384,23 @@ async def shapeshift(
             transport = _state.PersistentStdioTransport(cmd)
             pool_key: str | None = json.dumps(cmd, sort_keys=True)
             tool_schemas = srv.tools or []
-            if not tool_schemas:
+            # Refetch live when missing entirely OR when the registry listing is
+            # thin (properties but no `required`) — so the registered proxy and
+            # the call hint both carry correct required params.
+            if not tool_schemas or _schemas_missing_required(tool_schemas):
                 with contextlib.suppress(Exception):
-                    tool_schemas = await transport.list_tools()
+                    live = await transport.list_tools()
+                    if live:
+                        tool_schemas = live
         else:
             transport = _state._get_transport(server_id, srv)
             pool_key = None
             tool_schemas = srv.tools or []
-            if not tool_schemas and hasattr(transport, "list_tools"):
-                tool_schemas = await transport.list_tools(resolved_config)
+            if (not tool_schemas or _schemas_missing_required(tool_schemas)) and hasattr(transport, "list_tools"):
+                with contextlib.suppress(Exception):
+                    live = await transport.list_tools(resolved_config)
+                    if live:
+                        tool_schemas = live
 
         if not tool_schemas:
             return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."

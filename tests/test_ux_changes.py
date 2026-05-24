@@ -544,6 +544,80 @@ class TestShapeshiftCallExample:
         assert "alpha" in result
 
 
+class TestThinSchemaRefetch:
+    """Smithery's registry omits `required` — _commit_shapeshift must refetch the
+    live schema so both the proxy and the call hint carry required params (#44)."""
+
+    def test_helper_detects_thin_schema(self):
+        from kitsune_mcp.tools.shapeshift import _schemas_missing_required
+        thin = [{"name": "a", "inputSchema": {"type": "object", "properties": {"q": {}}}}]
+        full = [{"name": "a", "inputSchema": {"type": "object", "properties": {"q": {}}, "required": ["q"]}}]
+        no_props = [{"name": "a", "inputSchema": {"type": "object"}}]
+        assert _schemas_missing_required(thin) is True
+        assert _schemas_missing_required(full) is False
+        assert _schemas_missing_required(no_props) is False
+        assert _schemas_missing_required([]) is False
+
+    def _make_ctx(self):
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.session.send_tool_list_changed = AsyncMock()
+        ctx.session.send_resource_list_changed = AsyncMock()
+        ctx.session.send_prompt_list_changed = AsyncMock()
+        return ctx
+
+    def _make_thin_srv(self):
+        from kitsune_mcp.registry import ServerInfo
+        # Registry listing: properties but NO `required` (the Smithery shape)
+        thin_tools = [
+            {"name": "resolve-library-id", "description": "Resolve",
+             "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "libraryName": {"type": "string"}}}},
+        ]
+        return ServerInfo(
+            id="thin-server", name="Thin", description="Registry omits required",
+            source="smithery", transport="http", url="https://example.com",
+            install_cmd=[], credentials={}, tools=thin_tools, token_cost=0,
+        )
+
+    async def test_mount_refetches_and_hint_has_required(self):
+        from kitsune_mcp.tools import shapeshift
+        ctx = self._make_ctx()
+        srv = self._make_thin_srv()
+        # Live transport returns the FULL schema with required populated.
+        full_tools = [
+            {"name": "resolve-library-id", "description": "Resolve",
+             "inputSchema": {"type": "object",
+                             "properties": {"query": {"type": "string"}, "libraryName": {"type": "string"}},
+                             "required": ["query", "libraryName"]}},
+        ]
+
+        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
+             patch("kitsune_mcp.tools._state._do_shed", return_value=[]), \
+             patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})), \
+             patch("kitsune_mcp.tools._state._smithery_available", return_value=True), \
+             patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
+             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["resolve-library-id"], [])), \
+             patch("kitsune_mcp.tools._state._register_proxy_resources", return_value=[]), \
+             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
+             patch("kitsune_mcp.tools._state._probe_requirements", return_value={}):
+            mock_reg.get_server = AsyncMock(return_value=srv)
+            mock_reg._get = MagicMock(return_value=mock_reg)
+            mock_transport = AsyncMock()
+            mock_transport.list_tools = AsyncMock(return_value=full_tools)
+            mock_transport.list_resources = AsyncMock(return_value=[])
+            mock_transport.list_prompts = AsyncMock(return_value=[])
+            mock_transport_fn.return_value = mock_transport
+
+            result = await shapeshift("thin-server", ctx)
+
+        # The live schema was refetched because the registry listing was thin.
+        mock_transport.list_tools.assert_awaited()
+        # Hint must now show the required params, not an empty dict.
+        assert "arguments={}" not in result
+        assert "query" in result
+        assert "libraryName" in result
+
+
 # ---------------------------------------------------------------------------
 # Trust gate — KITSUNE_TRUST env var
 # ---------------------------------------------------------------------------
