@@ -1,0 +1,4 @@
+# Run artifacts are local and can be large. Ignore everything except docs.
+*
+!.gitignore
+!README.md

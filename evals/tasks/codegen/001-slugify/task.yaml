@@ -1,0 +1,53 @@
+id: 001-slugify
+category: codegen
+version: 1.0.0
+difficulty: easy
+languages: [python]
+
+prompt:
+  instruction: |
+    Implement the function `slugify(text: str, max_length: int = 50) -> str` in `slugify.py`.
+
+    Requirements:
+    - Convert to lowercase
+    - Replace any non-alphanumeric sequence with a single hyphen
+    - Strip leading/trailing hyphens
+    - Truncate to at most `max_length` characters, breaking only at a hyphen boundary if possible
+    - Return an empty string if the input has no alphanumerics
+    - Pure function: no I/O, no globals, no module-level side effects
+
+    Do NOT modify any file other than `slugify.py`. Do NOT add comments.
+
+  system_prompt_addendum: |
+    Match the existing project style. The codebase uses snake_case and 4-space indentation.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files]
+
+allowed_paths:
+  - slugify.py
+
+forbidden_paths:
+  - test_slugify_sealed.py
+
+limits:
+  wall_seconds: 300
+  output_tokens: 4000
+  max_diff_lines: 60
+
+tags: [pure-function, string-manipulation, easy]
+
+notes: |
+  Reference task for the framework. Trivially gradeable, exercises:
+  - pure-function discipline (must not modify other files)
+  - edge-case handling (empty input, unicode, max_length boundary)
+  - instruction following (no comments rule from system_prompt_addendum)
+  Don't read too much into results on this task alone — it's a smoke test for the harness,
+  not a meaningful capability benchmark.

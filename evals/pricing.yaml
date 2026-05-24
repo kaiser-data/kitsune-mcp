@@ -1,0 +1,101 @@
+# pricing.yaml — per-million-token rates by model.
+#
+# Update manually when providers change prices. Date the entry so historical
+# results can be re-priced if needed.
+#
+# Cost is computed by the runner as:
+#   input_cost  = tokens_in  * input_per_million  / 1e6
+#   output_cost = tokens_out * output_per_million / 1e6
+#   cached_cost = tokens_cached * cached_per_million / 1e6 (when applicable)
+#
+# Sources should be the provider's pricing page; record the URL.
+
+last_updated: 2026-05-24
+
+models:
+  # ── Anthropic ────────────────────────────────────────────────────────────
+  - model: claude-opus-4-7
+    vendor: anthropic
+    input_per_million: 15.00
+    output_per_million: 75.00
+    cached_per_million: 1.50         # 90% off, 5-min TTL
+    source: https://www.anthropic.com/pricing
+
+  - model: claude-sonnet-4-6-20251101
+    vendor: anthropic
+    input_per_million: 3.00
+    output_per_million: 15.00
+    cached_per_million: 0.30
+    source: https://www.anthropic.com/pricing
+
+  - model: claude-haiku-4-5-20251001
+    vendor: anthropic
+    input_per_million: 1.00
+    output_per_million: 5.00
+    cached_per_million: 0.10
+    source: https://www.anthropic.com/pricing
+
+  # ── OpenAI ───────────────────────────────────────────────────────────────
+  - model: gpt-4o-2024-11-20
+    vendor: openai
+    input_per_million: 2.50
+    output_per_million: 10.00
+    source: https://openai.com/api/pricing/
+
+  - model: o1
+    vendor: openai
+    input_per_million: 15.00
+    output_per_million: 60.00
+    source: https://openai.com/api/pricing/
+
+  - model: o3
+    vendor: openai
+    input_per_million: 60.00       # placeholder — verify before use
+    output_per_million: 240.00     # placeholder
+    source: https://openai.com/api/pricing/
+
+  # ── Google ───────────────────────────────────────────────────────────────
+  - model: gemini-1.5-pro
+    vendor: google
+    input_per_million: 1.25
+    output_per_million: 5.00
+    source: https://ai.google.dev/pricing
+
+  - model: gemini-2.0-flash
+    vendor: google
+    input_per_million: 0.10
+    output_per_million: 0.40
+    source: https://ai.google.dev/pricing
+
+  # ── Local / open weights ────────────────────────────────────────────────
+  - model: llama3.3:70b
+    vendor: local
+    input_per_million: 0.00
+    output_per_million: 0.00
+    note: "Cost is electricity + GPU amortisation; not modelled here. Report wall time."
+
+  - model: qwen2.5-coder:32b
+    vendor: local
+    input_per_million: 0.00
+    output_per_million: 0.00
+
+# ── Agentic harnesses (subscription-based) ──────────────────────────────────
+# These charge per seat/month, not per token. Token-level cost is N/A; report
+# wall time and harness fees separately.
+harnesses:
+  - name: claude-code
+    pricing_model: per_token_via_underlying_model
+    note: "Bills via the Anthropic API rate of whichever model is in use."
+
+  - name: cursor
+    pricing_model: subscription
+    monthly_usd_per_seat: 20.00
+    note: "Includes a quota of fast requests; over-quota uses pay-as-you-go."
+
+  - name: github-copilot
+    pricing_model: subscription
+    monthly_usd_per_seat: 10.00
+
+  - name: aider
+    pricing_model: per_token_via_underlying_model
+    note: "Free CLI; uses your API key for whichever model you point it at."

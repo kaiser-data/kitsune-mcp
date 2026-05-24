@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kaiser-data/kitsune-mcp/evals/result.schema.json",
+  "title": "Eval run result",
+  "description": "Every adapter MUST emit one of these per run, regardless of system under test. This is the only thing graders consume.",
+  "type": "object",
+  "required": ["task_id", "task_version", "system", "run", "diff", "metrics"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "task_version": {"type": "string"},
+
+    "system": {
+      "type": "object",
+      "required": ["adapter", "name", "version"],
+      "properties": {
+        "adapter": {"type": "string", "enum": ["api_only", "agentic", "ide_interactive"]},
+        "name": {"type": "string", "description": "e.g. 'claude-code', 'cursor', 'aider', 'raw-anthropic-api'."},
+        "version": {"type": "string", "description": "Specific version, not a family name."},
+        "model": {"type": "string", "description": "Underlying model ID, e.g. 'claude-sonnet-4-6-20251101'."},
+        "harness_config": {
+          "type": "object",
+          "description": "Any non-default settings — temperature, top_p, max_tokens, tool list, system prompt, etc."
+        }
+      }
+    },
+
+    "run": {
+      "type": "object",
+      "required": ["started_at", "ended_at", "seed", "n_in_series"],
+      "properties": {
+        "started_at": {"type": "string", "format": "date-time"},
+        "ended_at": {"type": "string", "format": "date-time"},
+        "seed": {"type": ["integer", "null"]},
+        "n_in_series": {"type": "integer", "description": "Which run this is in a repeated-runs series, 1-indexed."},
+        "sandbox_image": {"type": "string", "description": "Docker digest if applicable."}
+      }
+    },
+
+    "diff": {
+      "type": "string",
+      "description": "Unified diff (git apply-compatible) representing the system's changes against the fixture base. Empty string allowed for non-edit tasks."
+    },
+
+    "transcript": {
+      "type": "array",
+      "description": "Optional: message-by-message trace, mostly useful for agentic adapters. Schema-free per-adapter.",
+      "items": {"type": "object"}
+    },
+
+    "tool_calls": {
+      "type": "array",
+      "description": "Optional: structured tool-call log. Useful for tool_use category grading.",
+      "items": {
+        "type": "object",
+        "required": ["name", "ok"],
+        "properties": {
+          "name": {"type": "string"},
+          "input": {},
+          "output": {},
+          "latency_ms": {"type": "integer"},
+          "ok": {"type": "boolean"}
+        }
+      }
+    },
+
+    "metrics": {
+      "type": "object",
+      "required": ["tokens_in", "tokens_out", "wall_seconds"],
+      "properties": {
+        "tokens_in": {"type": "integer"},
+        "tokens_out": {"type": "integer"},
+        "tokens_cached": {"type": "integer", "description": "Anthropic prompt-cache hits, if applicable."},
+        "wall_seconds": {"type": "number"},
+        "tool_calls_n": {"type": "integer"},
+        "tool_calls_failed_n": {"type": "integer"},
+        "retries": {"type": "integer", "description": "Number of model-level retries (rate-limit / timeout)."},
+        "cost_usd": {"type": "number", "description": "Computed from pricing.yaml at run time. NaN/null if pricing unavailable."}
+      }
+    },
+
+    "errors": {
+      "type": "array",
+      "description": "Non-fatal errors during the run (rate limits, parse failures, etc.). Fatal errors should leave 'diff' empty and 'errors' populated.",
+      "items": {
+        "type": "object",
+        "required": ["stage", "message"],
+        "properties": {
+          "stage": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      }
+    }
+  }
+}

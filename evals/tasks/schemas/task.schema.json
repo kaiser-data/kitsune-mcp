@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kaiser-data/kitsune-mcp/evals/task.schema.json",
+  "title": "Eval task definition",
+  "description": "One self-contained task. Lives at tasks/<category>/<id>/task.yaml (or .json).",
+  "type": "object",
+  "required": ["id", "category", "version", "prompt", "fixture", "grader", "required_capabilities"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9]{3}-[a-z0-9-]+$",
+      "description": "Stable identifier, e.g. '001-slugify'."
+    },
+    "category": {
+      "type": "string",
+      "enum": ["codegen", "bugfix", "refactor", "testgen", "tool_use", "multi_step", "instruction_following", "ambiguous", "reliability"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver of the task definition. Bump when the prompt or grader changes in a way that invalidates prior runs."
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"],
+      "description": "Subjective; documented separately in tasks/README.md."
+    },
+    "languages": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Programming languages involved, e.g. ['python', 'typescript']."
+    },
+    "prompt": {
+      "type": "object",
+      "required": ["instruction"],
+      "properties": {
+        "instruction": {
+          "type": "string",
+          "description": "The natural-language task description shown to the system."
+        },
+        "system_prompt_addendum": {
+          "type": "string",
+          "description": "Optional extra system-level guidance (e.g. 'do not exceed 40 lines'). Adapters that don't support system prompts MUST prepend this to the instruction."
+        }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["dir", "tarball", "git"],
+          "description": "How the starting repo state is provided."
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative path to the fixture directory (when type=dir) or tarball."
+        },
+        "repo": {"type": "string", "description": "Git URL (when type=git)."},
+        "sha": {"type": "string", "description": "Commit SHA to check out (when type=git). Required for reproducibility."}
+      }
+    },
+    "grader": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["programmatic", "llm_judge", "human"]
+        },
+        "script": {
+          "type": "string",
+          "description": "Path to grader.py (when type=programmatic). Receives (workdir, result_json) and writes a score JSON."
+        },
+        "rubric": {
+          "type": "string",
+          "description": "Path to rubric.md (when type=llm_judge or human)."
+        },
+        "judge_models": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Cross-family judge model IDs (when type=llm_judge). E.g. ['gpt-4o', 'gemini-1.5-pro']."
+        }
+      }
+    },
+    "required_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["read_files", "write_files", "shell_exec", "multi_turn", "web_access", "long_context_64k", "long_context_128k", "tool_use"]
+      },
+      "description": "Adapters MUST refuse a task whose capabilities they can't satisfy. Prevents misleading 'system X failed' when system X simply can't write files."
+    },
+    "allowed_paths": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Glob patterns. Edits outside these are grader-failed. Prevents over-aggressive refactors."
+    },
+    "forbidden_paths": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Glob patterns the system must NOT touch. E.g. the sealed test file."
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "wall_seconds": {"type": "integer"},
+        "input_tokens": {"type": "integer"},
+        "output_tokens": {"type": "integer"},
+        "tool_calls": {"type": "integer"},
+        "max_diff_lines": {"type": "integer"}
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Free-form labels for filtering. E.g. ['async', 'small'], ['pydantic-migration', 'medium']."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Why this task exists, what it's designed to surface."
+    }
+  }
+}
