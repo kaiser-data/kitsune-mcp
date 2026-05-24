@@ -18,7 +18,9 @@
 
 ---
 
-Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 130,000+ MCP servers at runtime (134,945 indexed on Glama alone as of May 2026). Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Six tools at rest. Thousands available on request. No restarts.
+Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 130,000+ MCP servers at runtime (134,945 indexed on Glama alone as of May 2026). Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Thousands available on request. No restarts.
+
+**Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,321 tokens** in every turn, whether you use them or not. That is its fixed floor — it never drops to zero. The win is that this floor stays *flat* no matter how many servers sit behind it, whereas always-on servers stack linearly. So Kitsune only pays for itself once you'd otherwise be loading **more than one** non-trivial server (see the break-even note below).
 
 ### Why not just shell out to a CLI?
 
@@ -38,7 +40,7 @@ That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accur
 
 ### Token savings vs always-on
 
-The savings grow with every server you add — because Kitsune's resting cost stays flat at ~1,321 tokens (measured: 6 lean-profile tools) no matter how many servers live behind it:
+Kitsune carries a **fixed ~1,321-token floor** (measured: 6 lean-profile tools — run `python examples/benchmark.py` to reproduce). Every comparison below already includes that floor; it is never subtracted out or hidden. Savings come from the floor staying *flat* while always-on servers stack linearly:
 
 Saving formula: `1 − (Kitsune base 1,321 + surgical mount) / always-on total`
 
@@ -48,7 +50,7 @@ Saving formula: `1 − (Kitsune base 1,321 + surgical mount) / always-on total`
 | GitHub + filesystem + git | 8,678 | ~1,621–2,221 | **74–81%** |
 | Notion + GitHub + filesystem + git + memory | 25,000 | ~1,621–2,821 | **89–94%** |
 
-Savings grow because Kitsune's ~1,321-token baseline is shared across all registered servers — you only pay it once regardless of how many are behind it.
+**Break-even:** if you only ever run **one small server** (e.g. `mcp-server-time` at ~261 tokens), always-on is *cheaper* than Kitsune — you'd pay 261 tokens instead of Kitsune's 1,321 floor. Kitsune wins when the always-on alternative exceeds ~1,321 tokens, which happens as soon as you'd keep one medium server (GitHub-sized) or two-plus small ones loaded. The bigger and more numerous your servers, the bigger the win.
 
 <div align="center">
   <picture>
@@ -239,33 +241,33 @@ Kitsune never modifies existing configs without explicit confirmation.
 
 ### Token overhead: surgical mount vs full mount
 
-Full-mount figures measured live against v0.20.1 via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. To measure Kitsune's own profile size: `python examples/benchmark.py`.
+Full-mount figures measured live via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. Every Kitsune figure **includes the fixed ~1,321-token floor** — it is never omitted. To measure Kitsune's own profile size: `python examples/benchmark.py`.
 
-Saved = 1 − (500 base + surgical) / always-on. Surgical estimates (~) are proportional; full-mount figures are measured.
+Saved = 1 − (1,321 floor + surgical) / always-on. A negative result means always-on is cheaper for that single server.
 
-| Server | Tools | Always-on | Surgical example | 500 + surgical | Saved |
+| Server | Tools | Always-on | Surgical example | 1,321 + surgical | Saved |
 |---|---:|---:|---|---:|---:|
-| `mcp-server-time` | 2 | 261 | (all tools) | ~761 | — ¹ |
-| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~810 | 35% |
-| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~1,080 | 59% |
-| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~1,190 | 63% |
-| `brave` | 8 | 3,612 | brave_web_search | ~950 | 74% |
-| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~800 | 81% |
-| `notion-hosted` | 14 | 13,707 | search / fetch | ~2,450 | 82% |
+| `mcp-server-time` | 2 | 261 | (all tools) | ~1,582 | — ¹ |
+| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~1,631 | — ¹ |
+| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~1,901 | 27% |
+| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~2,011 | 37% |
+| `brave` | 8 | 3,612 | brave_web_search | ~1,771 | 51% |
+| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~1,621 | 62% |
+| `notion-hosted` | 14 | 13,707 | search / fetch | ~3,271 | 76% |
 
-¹ `mcp-server-time`'s full schema (261 tokens) is smaller than Kitsune's base. Kitsune pays off for small servers only when multiple servers share the baseline.
+¹ For a **single** server smaller than Kitsune's ~1,321-token floor (time, git), running it always-on is cheaper than Kitsune. Kitsune only pays off once the always-on alternative exceeds the floor — i.e. one medium server, or two-plus small ones sharing the single baseline.
 
 ### Multi-server compounding
 
-Kitsune's resting cost (~1,321 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added.
+Kitsune's resting cost (~1,321 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added — that linear stack is where Kitsune wins.
 
-All figures use servers with measured full-mount costs. Kitsune cost = 965 base + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
+All figures include the 1,321 floor + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
 
 | Servers always-on | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---|---:|
-| GitHub only | 4,229 | ~1,265 | 70% |
-| GitHub + filesystem + git | 8,678 | ~1,265–1,655 | 81–85% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,265–2,915 | **88–95%** |
+| GitHub only | 4,229 | ~1,621 | 62% |
+| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | 77–81% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
 
 ### Tool-selection reliability
 
