@@ -14,15 +14,27 @@ _Last updated: 2026-05-24. Running MCP confirmed on v0.20.7._
   Optional cleanup: replace it with a kitsune-mcp-scoped token or delete the entry to avoid
   confusion, but nothing depends on it.
 
-### npm — ⚠️ stale at 0.20.1 (the real gap)
+### npm — ⚠️ stale at 0.20.1 — BLOCKED on one-time npmjs.com setup (user action)
 - `npx kitsune-mcp` resolves to **0.20.1**; PyPI is 7 patch releases ahead.
-- The npm job in `publish.yml` is gated behind a `workflow_dispatch` input
-  ("Also publish to npm — needs one-time Trusted Publisher on npmjs.com"), so tag pushes do
-  NOT publish npm automatically.
-- To ship npm: (1) one-time — configure a Trusted Publisher for `kitsune-mcp` on npmjs.com
-  pointing at this repo's `publish.yml`; (2) run the workflow via `workflow_dispatch` with the
-  npm flag enabled (or `gh workflow run publish.yml -f npm=true`). MCP Registry publish is
-  similarly gated and needs both PyPI + npm live first.
+- Triggered `gh workflow run publish.yml -f publish_npm=true` (run 26371569186, 2026-05-24).
+  The npm job failed at publish with:
+  ```
+  npm error 404 Not Found - PUT https://registry.npmjs.org/kitsune-mcp
+  The requested resource 'kitsune-mcp@0.20.8' could not be found or you do not
+  have permission to access it.
+  ```
+  Provenance signed fine (sigstore logIndex 1625051052); the 404-on-PUT is npm's
+  misleading "OIDC rejected — no Trusted Publisher registered" error. No token is used.
+- **Fix (only the package owner can do this, web UI):**
+  1. https://www.npmjs.com/package/kitsune-mcp/access → **Trusted Publisher** / Publishing access.
+  2. Add GitHub Actions publisher:
+     - Organization or user: `kaiser-data`
+     - Repository: `kitsune-mcp`
+     - Workflow filename: `publish.yml`
+     - Environment: **leave blank** (the npm job in publish.yml declares no `environment:`).
+  3. Re-run: `gh workflow run publish.yml -f publish_npm=true`
+- After npm is live, MCP Registry publish (also gated) can run:
+  `gh workflow run publish.yml -f publish_registry=true` (needs both PyPI + npm entries live).
 
 ## Follow-ups from the v0.20.5 issue audit
 
