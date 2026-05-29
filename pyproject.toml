@@ -45,7 +45,7 @@ dependencies = [
     # mcp 1.26's bundled FastMCP uses a create_model() pattern that pydantic
     # <2.10 rejects ("non-annotated attribute") and pydantic >=2.13 also rejects
     # (stricter inspect_namespace). Pin to the known-good 2.10–2.12 range.
-    "pydantic>=2.10,<2.13",
+    "pydantic>=2.10,<2.14",
 ]
 
 [project.optional-dependencies]
