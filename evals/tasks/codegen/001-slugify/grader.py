@@ -69,7 +69,7 @@ def _no_comments(slugify_src: str) -> bool:
         for tok in tokenize.generate_tokens(io.StringIO(slugify_src).readline):
             if tok.type == tokenize.COMMENT:
                 return False
-    except tokenize.TokenizeError:
+    except tokenize.TokenError:
         return False
     return True
 
@@ -156,7 +156,7 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
-    score = grade(args.workdir)
+    score = grade(args.workdir.resolve())
 
     # Diff-line limit check (read from result.json)
     try:

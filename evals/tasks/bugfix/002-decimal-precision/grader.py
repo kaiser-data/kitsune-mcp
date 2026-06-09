@@ -113,7 +113,7 @@ def main() -> int:
     ap.add_argument("--out",    required=True, type=Path)
     args = ap.parse_args()
 
-    score = grade(args.workdir)
+    score = grade(args.workdir.resolve())
 
     try:
         result = json.loads(args.result.read_text())

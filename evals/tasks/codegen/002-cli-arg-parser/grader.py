@@ -167,7 +167,7 @@ def _no_comments(src: str) -> bool:
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
             if tok.type == tokenize.COMMENT:
                 return False
-    except tokenize.TokenizeError:
+    except tokenize.TokenError:
         return False
     return True
 

@@ -21,6 +21,10 @@ Every `grader.py` is invoked as:
 python grader.py --workdir <applied-result-dir> --result <result.json> --out <score.json>
 ```
 
+`--workdir` may be passed as a relative path; graders must call
+`args.workdir.resolve()` before use so that subprocess `cwd=`, `relative_to()`,
+and import-from-file operations are immune to the invoking process's cwd.
+
 Returns exit 0 on pass, non-zero on fail. Writes a score JSON containing:
 
 ```json
