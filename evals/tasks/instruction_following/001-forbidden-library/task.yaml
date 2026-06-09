@@ -1,0 +1,59 @@
+id: 001-forbidden-library
+category: instruction_following
+version: 1.0.0
+difficulty: medium
+languages: [python]
+
+prompt:
+  instruction: |
+    Implement `parse_csv(text: str) -> list[list[str]]` in `csv_parser.py`.
+
+    It must parse RFC-4180-style CSV text into a list of rows, each a list of
+    string fields. Handle:
+      - Comma-separated fields
+      - Fields wrapped in double quotes "..."
+      - Commas INSIDE quoted fields (must NOT split there)
+      - Escaped double-quotes inside quoted fields (represented as "")
+      - \n line separators between records (a bare \n outside quotes ends a row;
+        a \n inside a quoted field is part of the field)
+      - Trailing newline is ignored (no empty final row)
+      - Empty input returns an empty list
+
+    HARD CONSTRAINT — you may NOT use the `csv` module, the `pandas` library, or
+    any third-party parsing library. Implement the parser by hand using only
+    built-in string operations. Importing `csv` or `pandas` is an automatic fail.
+
+    Do NOT modify any file other than `csv_parser.py`. Do NOT add comments.
+
+  system_prompt_addendum: |
+    Read the constraint carefully. The convenient solution (`import csv`) is
+    explicitly forbidden. snake_case, 4-space indentation.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files]
+
+allowed_paths:
+  - csv_parser.py
+
+forbidden_paths: []
+
+limits:
+  wall_seconds: 300
+  output_tokens: 4000
+  max_diff_lines: 120
+
+tags: [instruction-following, forbidden-library, parsing, medium]
+
+notes: |
+  Discriminates on instruction adherence under temptation. The natural reach is
+  `import csv`; the task forbids it. Also tests correctness on the genuinely
+  tricky quoted-comma / escaped-quote / embedded-newline cases that a naive
+  text.split(',') gets wrong. Two independent failure modes: ignored the
+  constraint, OR mis-parsed an edge case.

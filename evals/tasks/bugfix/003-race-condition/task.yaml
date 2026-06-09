@@ -1,0 +1,65 @@
+id: 003-race-condition
+category: bugfix
+version: 1.0.0
+difficulty: hard
+languages: [python]
+
+prompt:
+  instruction: |
+    `metrics.py` defines `MetricsCollector`. Its `add(value)` method reads the
+    current total, persists a snapshot (a latency-bearing operation), then writes
+    the new total back. Under concurrent use from many threads, updates are LOST:
+    the final `total` is far below the number of `add` calls.
+
+    A reproducer is in `test_metrics.py`:
+        python3 test_metrics.py
+
+    Fix the race so that concurrent `add` calls are correct:
+      - After K total `add(1)` calls across any number of threads, `total == K`.
+      - Every call must STILL persist its snapshot — `history` must contain one
+        entry per `add` call (do not remove `_persist` or the persistence step).
+      - Keep the public API: `MetricsCollector()`, `.add(value)`, `.total`,
+        `.history`.
+
+    Make the read-modify-write atomic with respect to other threads. Do NOT fix
+    it by deleting the persistence step or busy-removing the latency — that is
+    not a thread-safety fix.
+
+    Do NOT modify `test_metrics.py`. Do NOT add comments.
+
+  system_prompt_addendum: |
+    This is a genuine concurrency bug: the critical section spans a read, an
+    I/O-like call, and a write. Real thread-safety requires synchronisation
+    around that whole section. Minimal, correct diff preferred.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files, shell_exec]
+
+allowed_paths:
+  - metrics.py
+
+forbidden_paths:
+  - test_metrics_sealed.py
+
+limits:
+  wall_seconds: 400
+  output_tokens: 3000
+  max_diff_lines: 30
+
+tags: [bugfix, concurrency, race-condition, threading, hard]
+
+notes: |
+  Hard tier. Grader uses sys.setswitchinterval + barrier-aligned high-contention
+  threads to reliably surface the lost-update race, repeated over many trials.
+  Two-axis grading defeats fake fixes: (1) functional — total and history both
+  exact under stress; (2) structural — a synchronisation primitive must be
+  present (Lock/RLock/Semaphore/Condition or a `with`-guarded lock). A submission
+  that just deletes the latency passes neither the spirit nor the structural
+  check. A real lock-based fix passes deterministically.

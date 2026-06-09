@@ -1,0 +1,73 @@
+id: 002-cli-arg-parser
+category: codegen
+version: 1.0.0
+difficulty: easy
+languages: [python]
+
+prompt:
+  instruction: |
+    Implement `wordcount.py` — a command-line word-count tool.
+
+    Interface:
+        python3 wordcount.py [OPTIONS] <file>
+
+    Options:
+        -w, --words    print word count  (whitespace-split tokens)
+        -l, --lines    print line count  (number of \n characters)
+        -c, --chars    print character count  (len of raw file bytes decoded as UTF-8)
+        -h, --help     print usage to stdout and exit 0
+
+    Behaviour:
+        - If no mode flag is given, output all three counts in order: lines words chars.
+        - Each active flag outputs exactly one line: "<count> <filename>"
+          with a single space, no leading zeros, no padding.
+        - When multiple flags are given output in fixed order: lines, then words, then chars.
+        - If <file> does not exist: print a message to stderr and exit with code 1.
+        - Invalid / unknown arguments: print a message to stderr and exit with code 2.
+        - Use argparse or manual sys.argv parsing — your choice.
+
+    Examples (file contains "hello world\nfoo bar baz\n"):
+        $ python3 wordcount.py -w sample.txt
+        5 sample.txt
+        $ python3 wordcount.py -l sample.txt
+        2 sample.txt
+        $ python3 wordcount.py -c sample.txt
+        24 sample.txt
+        $ python3 wordcount.py sample.txt
+        2 sample.txt
+        5 sample.txt
+        24 sample.txt
+        $ python3 wordcount.py --help
+        (usage text — any reasonable format)
+
+    Do NOT modify any file other than `wordcount.py`. Do NOT add comments.
+
+  system_prompt_addendum: |
+    Match the existing project style: snake_case, 4-space indentation, no type annotations required.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files]
+
+allowed_paths:
+  - wordcount.py
+
+forbidden_paths: []
+
+limits:
+  wall_seconds: 300
+  output_tokens: 4000
+  max_diff_lines: 100
+
+tags: [cli, argparse, file-io, easy]
+
+notes: |
+  Tests argv parsing, exit codes, and output format discipline.
+  Grader creates its own test files — the model never sees the test content.
+  Edge cases: missing file, no flags (default all), multiple flags, --help.

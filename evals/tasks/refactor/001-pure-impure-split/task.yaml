@@ -1,0 +1,59 @@
+id: 001-pure-impure-split
+category: refactor
+version: 1.0.0
+difficulty: medium
+languages: [python]
+
+prompt:
+  instruction: |
+    `stats.py` defines `compute_and_report(path)` which mixes file I/O,
+    calculation, and printing in one function.
+
+    Refactor it so the calculation logic lives in a NEW pure function:
+
+        compute_stats(nums: list[int]) -> dict
+
+    Requirements:
+      - `compute_stats` must be PURE: no file I/O (no `open`), no `print`, no
+        globals, no side effects. It takes a list of ints and returns the dict
+        {"total": int, "mean": float, "max": int | None, "count": int}.
+      - `compute_and_report(path)` must KEEP its existing behaviour exactly
+        (same return value, still prints the same line) but now delegate the
+        calculation to `compute_stats`.
+      - The existing test suite `test_stats.py` must still pass unchanged.
+      - For empty input: total=0, mean=0.0, max=None, count=0.
+
+    Do NOT modify `test_stats.py`. Do NOT add comments.
+
+  system_prompt_addendum: |
+    Behaviour preservation is graded by the existing tests. The pure function is
+    graded by calling it directly with no files present. snake_case, 4-space.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files, shell_exec]
+
+allowed_paths:
+  - stats.py
+
+forbidden_paths:
+  - test_stats_sealed.py
+
+limits:
+  wall_seconds: 300
+  output_tokens: 4000
+  max_diff_lines: 60
+
+tags: [refactor, purity, separation-of-concerns, medium]
+
+notes: |
+  Discriminates on two axes a naive rewrite fails: (1) actually achieving purity
+  (an AST check rejects `open`/`print` inside compute_stats), and (2) preserving
+  the original observable behaviour (return value + printed line) so the existing
+  suite stays green. Splitting I/O from logic cleanly is a core senior-eng skill.

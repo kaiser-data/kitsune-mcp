@@ -1,0 +1,67 @@
+id: 001-cross-file-rename
+category: multi_step
+version: 1.0.0
+difficulty: medium
+languages: [python]
+
+prompt:
+  instruction: |
+    The `bank` package exposes a class currently named `PaymentGateway`.
+    Rename it to `StripeGateway` consistently across the ENTIRE project.
+
+    "Consistently" means every occurrence of the token `PaymentGateway` must
+    become `StripeGateway`, including:
+      - the class definition and its docstring
+      - the `name` class attribute string value
+      - every `import` / re-export (including `__all__`)
+      - the string KEY in the `registry.GATEWAYS` dict and any lookups
+      - all references in the test suite
+      - the documentation in `README.md`
+
+    After your change:
+      - `from bank import StripeGateway` must work.
+      - `make_gateway("StripeGateway")` must return a `StripeGateway` instance.
+      - `charge()` output must report `"gateway": "StripeGateway"`.
+      - The string `PaymentGateway` must not appear ANYWHERE in the project.
+      - The existing test suite (renamed accordingly) must pass.
+
+    You may modify any file. Do NOT leave a single occurrence of the old name.
+
+  system_prompt_addendum: |
+    This is a coordination task: the symbol lives in source, a re-export, a
+    string-keyed registry, tests, and docs. A partial rename that misses the
+    string key or the docs is a failure. Search before you edit.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files, shell_exec, multi_turn]
+
+allowed_paths:
+  - "bank/**"
+  - "tests/**"
+  - "README.md"
+
+forbidden_paths:
+  - test_sealed.py
+
+limits:
+  wall_seconds: 400
+  output_tokens: 6000
+  max_diff_lines: 120
+
+tags: [multi-step, cross-file, rename, coordination, medium]
+
+notes: |
+  The SWE-bench-Pro-style discriminator: a change that must be applied
+  consistently across 6 files. The traps are the non-obvious occurrences —
+  the `name = "PaymentGateway"` literal, the registry string key, the `__all__`
+  entry, and the README. Agents that grep-then-edit pass; agents that edit only
+  the "code" miss the string/doc occurrences. Graded by: zero residual old-name
+  occurrences (project-wide scan) AND a sealed behavioural test using the new
+  name + new string key.

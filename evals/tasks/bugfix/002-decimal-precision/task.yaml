@@ -1,0 +1,57 @@
+id: 002-decimal-precision
+category: bugfix
+version: 1.0.0
+difficulty: medium
+languages: [python]
+
+prompt:
+  instruction: |
+    `invoice.py` contains `line_total(unit_price, quantity, tax_rate)` which
+    computes the total cost of an invoice line, rounded to whole cents (2 dp).
+
+    It produces wrong-but-plausible results: some inputs are off by one cent
+    because of binary floating-point representation error.
+
+    A failing test is in `test_invoice.py`:
+        python3 test_invoice.py
+
+    Fix `line_total` so that every result is correct to the cent for ALL
+    monetary inputs, using banker's-rounding-free, half-up rounding to 2 dp
+    (i.e. 0.005 rounds to 0.01, 2.675 rounds to 2.68).
+
+    Keep the signature `line_total(unit_price, quantity, tax_rate) -> float`
+    and return a float. Do NOT modify `test_invoice.py`. Do NOT add comments.
+
+  system_prompt_addendum: |
+    The bug is precision, not algebra. A naive round() does not fix half-up
+    cases like 2.675. Minimal, correct diff preferred.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files, shell_exec]
+
+allowed_paths:
+  - invoice.py
+
+forbidden_paths:
+  - test_invoice_sealed.py
+
+limits:
+  wall_seconds: 300
+  output_tokens: 3000
+  max_diff_lines: 30
+
+tags: [bugfix, float-precision, decimal, money, medium]
+
+notes: |
+  Discriminates on whether the fixer recognises that Python's round() uses
+  banker's rounding and that float(2.675) is actually 2.67499999..., so a
+  naive round(x, 2) still returns the wrong cent. The correct fix uses Decimal
+  with quantize(ROUND_HALF_UP). Naive fixes pass the visible test but fail
+  sealed half-up cases — that's the signal.

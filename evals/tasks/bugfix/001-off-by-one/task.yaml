@@ -1,0 +1,48 @@
+id: 001-off-by-one
+category: bugfix
+version: 1.0.0
+difficulty: easy
+languages: [python]
+
+prompt:
+  instruction: |
+    The file `binary_search.py` contains a bug. The function `binary_search` raises
+    an `IndexError` in certain inputs instead of returning -1 as documented.
+
+    A failing test is in `test_binary_search.py` — run it to reproduce the error:
+        python3 test_binary_search.py
+
+    Fix the bug in `binary_search.py`. Do NOT modify `test_binary_search.py`.
+    Do NOT add comments. Do NOT change the function signature or docstring.
+
+  system_prompt_addendum: |
+    Fix only what is broken. Minimal diff preferred.
+
+fixture:
+  type: dir
+  path: fixture/
+
+grader:
+  type: programmatic
+  script: grader.py
+
+required_capabilities: [read_files, write_files, shell_exec]
+
+allowed_paths:
+  - binary_search.py
+
+forbidden_paths:
+  - test_binary_search_sealed.py
+
+limits:
+  wall_seconds: 300
+  output_tokens: 2000
+  max_diff_lines: 20
+
+tags: [binary-search, off-by-one, debugging, easy]
+
+notes: |
+  Classic hi = len(nums) instead of len(nums)-1 bug.
+  Manifests as IndexError when searching for a value larger than all elements.
+  The model must read the code, run the failing test, identify the root cause,
+  and produce a minimal fix. Tests: found/not-found/edge cases + diff-size check.
