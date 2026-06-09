@@ -679,6 +679,51 @@ class TestPing:
 
 
 # ---------------------------------------------------------------------------
+# Protocol version negotiation (MCP-Protocol-Version header)
+# ---------------------------------------------------------------------------
+
+class TestProtocolVersionNegotiation:
+    def test_negotiated_version_extracted_from_init_response(self):
+        msg = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05"}}
+        assert tp._negotiated_version(msg) == "2024-11-05"
+
+    def test_missing_version_falls_back_to_ours(self):
+        assert tp._negotiated_version(None) == tp.MCP_PROTOCOL_VERSION
+        assert tp._negotiated_version({"result": {}}) == tp.MCP_PROTOCOL_VERSION
+
+    async def test_execute_echoes_server_version_in_header(self):
+        t, patcher = _patched_transport()
+        init_ok = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-03-26"}}
+        tool_ok = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "hi"}]}}
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tool_ok)]
+            )
+            result = await t.execute("tool", {}, {})
+        assert "hi" in result
+        init_req, notify_req, call_req = (c.request for c in route.calls)
+        assert "MCP-Protocol-Version" not in init_req.headers
+        assert notify_req.headers["MCP-Protocol-Version"] == "2025-03-26"
+        assert call_req.headers["MCP-Protocol-Version"] == "2025-03-26"
+
+    async def test_list_tools_sends_negotiated_header(self):
+        t, patcher = _patched_transport()
+        init_ok = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
+        tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}]}}
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tools)]
+            )
+            result = await t.list_tools()
+        assert result == [{"name": "a"}]
+        assert route.calls[2].request.headers["MCP-Protocol-Version"] == "2025-06-18"
+
+    def test_initialize_request_advertises_current_spec(self):
+        req = tp._initialize_request()
+        assert req["params"]["protocolVersion"] == "2025-06-18"
+
+
+# ---------------------------------------------------------------------------
 # WebSocketTransport — non-JSON reply
 # ---------------------------------------------------------------------------
 

@@ -1,4 +1,7 @@
-MCP_PROTOCOL_VERSION = "2024-11-05"
+# Latest MCP spec revision we speak. Servers negotiate down in the initialize
+# response; transports echo the server's negotiated version back via the
+# MCP-Protocol-Version header (required by Streamable HTTP since 2025-03-26).
+MCP_PROTOCOL_VERSION = "2025-06-18"
 try:
     import importlib.metadata as _meta
     _pkg_version = _meta.version("kitsune-mcp")

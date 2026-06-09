@@ -62,6 +62,17 @@ def _initialized_notification() -> dict:
     return {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 
 
+def _negotiated_version(init_msg: dict | None) -> str:
+    """Protocol version the server settled on in its initialize response.
+
+    Streamable HTTP (spec 2025-03-26+) requires the client to echo this back
+    in an MCP-Protocol-Version header on every subsequent request. Falls back
+    to our requested version when the server omits it (pre-2025 servers).
+    """
+    result = (init_msg or {}).get("result") or {}
+    return result.get("protocolVersion") or MCP_PROTOCOL_VERSION
+
+
 def _validate_install_cmd(cmd: list[str]) -> None:
     """Validate argv[0] of an install command for shell injection and path traversal.
 
@@ -486,10 +497,12 @@ class HTTPSSETransport(BaseTransport):
                 "Accept": "application/json, text/event-stream",
             }
 
-        async def _post(client, payload, bearer, session_id=None):
+        async def _post(client, payload, bearer, session_id=None, proto=None):
             hdrs = _headers(bearer)
             if session_id:
                 hdrs["mcp-session-id"] = session_id
+            if proto:
+                hdrs["MCP-Protocol-Version"] = proto
             return await client.post(
                 endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
             )
@@ -505,13 +518,14 @@ class HTTPSSETransport(BaseTransport):
             init_msg = _parse_sse(r.text)
             if init_msg and "error" in init_msg:
                 raise RuntimeError(f"Initialize failed: {init_msg['error']}")
+            proto = _negotiated_version(init_msg)
 
-            await _post(client, _initialized_notification(), bearer, mcp_session_id)
+            await _post(client, _initialized_notification(), bearer, mcp_session_id, proto)
 
             r2 = await _post(client, {
                 "jsonrpc": "2.0", "id": 2, "method": "tools/call",
                 "params": {"name": tool, "arguments": args},
-            }, bearer, mcp_session_id)
+            }, bearer, mcp_session_id, proto)
             r2.raise_for_status()
 
             msg = _parse_sse(r2.text)
@@ -588,10 +602,12 @@ class HTTPSSETransport(BaseTransport):
                 "Accept": "application/json, text/event-stream",
             }
 
-        async def _post(client, payload, bearer, session_id=None):
+        async def _post(client, payload, bearer, session_id=None, proto=None):
             hdrs = _headers(bearer)
             if session_id:
                 hdrs["mcp-session-id"] = session_id
+            if proto:
+                hdrs["MCP-Protocol-Version"] = proto
             return await client.post(
                 endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
             )
@@ -603,12 +619,13 @@ class HTTPSSETransport(BaseTransport):
                 raise PermissionError(f"HTTP {r.status_code}")
             r.raise_for_status()
             mcp_session_id = r.headers.get("mcp-session-id")
+            proto = _negotiated_version(_parse_sse(r.text))
 
-            await _post(client, _initialized_notification(), bearer, mcp_session_id)
+            await _post(client, _initialized_notification(), bearer, mcp_session_id, proto)
 
             r2 = await _post(client, {
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
-            }, bearer, mcp_session_id)
+            }, bearer, mcp_session_id, proto)
             r2.raise_for_status()
             msg = _parse_sse(r2.text)
             if msg and "result" in msg:
