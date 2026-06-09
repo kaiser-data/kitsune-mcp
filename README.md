@@ -337,7 +337,7 @@ shapeshift("brave", tools=["brave_web_search"])                              # ~
 shapeshift("mcp-server-fetch")                                               # ~289 tokens
 shapeshift("@modelcontextprotocol/server-memory",
            tools=["read_graph", "search_nodes"])                             # ~580 tokens
-# Peak: ~1,300 tokens vs 6,516 always-on  →  80% reduction
+# Mounts: ~1,300 tokens; total with ~1,321 floor: ~2,600 vs 6,516 always-on  →  60% reduction
 ```
 
 ### Code agent — filesystem + git
@@ -348,7 +348,7 @@ shapeshift("@modelcontextprotocol/server-filesystem",
            server_args=["/path/to/project"])                                 # ~690 tokens
 shapeshift("mcp-server-git",
            tools=["git_status", "git_diff", "git_log"])                     # ~310 tokens
-# Peak: ~1,000 tokens vs 4,449 always-on  →  78% reduction
+# Mounts: ~1,000 tokens; total with ~1,321 floor: ~2,300 vs 4,449 always-on  →  48% reduction
 ```
 
 ### Notes / PM agent — Notion + memory
@@ -358,7 +358,7 @@ shapeshift("notion-hosted",
            tools=["notion-search", "notion-append-block-children"])         # ~1,950 tokens
 shapeshift("@modelcontextprotocol/server-memory",
            tools=["add_memory", "search_nodes"])                            # ~580 tokens
-# Peak: ~2,500 tokens vs 16,322 always-on  →  85% reduction
+# Mounts: ~2,500 tokens; total with ~1,321 floor: ~3,850 vs 16,322 always-on  →  76% reduction
 ```
 
 ---

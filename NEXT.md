@@ -1,6 +1,22 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-05-24. Running MCP confirmed on v0.20.7._
+_Last updated: 2026-06-09. Running MCP confirmed on v0.20.7._
+
+## Done 2026-06-09 (repo health session, unreleased on main)
+
+- ✅ CI-breaking unused import removed (tools/discovery.py); Makefile lint/test
+  targets realigned with CI scope and switched to `uv run`.
+- ✅ transport.py test coverage 67% → 97% (59 new tests in
+  tests/test_transport_coverage.py: Smithery Connect auth, list_tools,
+  reconnect/broken-pipe paths, .env-revision respawn, pool lifecycle).
+- ✅ Test suite warning-clean: all 8 "coroutine never awaited" RuntimeWarnings
+  fixed (AsyncMock→MagicMock stdin/stdout; timeout fake closes the coroutine).
+- ✅ MCP protocol bumped 2024-11-05 → 2025-06-18 with proper negotiation:
+  HTTP transports echo the server's negotiated version via the
+  MCP-Protocol-Version header (required by Streamable HTTP since 2025-03-26).
+- ✅ Item 5 below (README "Peak" comments) — relabeled as mount cost + total
+  with the ~1,321 floor, reductions recomputed (60/48/76%).
+- These changes are commits on main, not yet released/tagged.
 
 ## Publishing status (corrected 2026-05-24)
 
@@ -51,10 +67,9 @@ manual `workflow_dispatch` flags (`-f publish_npm=true`, `-f publish_registry=tr
 
 ## Docs polish (non-blocking)
 
-### 5. README example-block "Peak" comments omit the floor
-- Lines ~336–361 show surgical-mount-only figures (e.g. `# Peak: ~1,300 tokens vs 6,516
-  always-on`). These exclude the ~1,321 floor, so they understate true context. Either add the
-  floor or relabel as "mount cost" for consistency with the now-honest baseline framing.
+### 5. ✅ DONE 2026-06-09 — README example-block "Peak" comments
+- Relabeled as mount cost and added totals including the ~1,321 floor;
+  reductions recomputed (60% / 48% / 76%).
 
 ### 6. token-cost SVG vs README Performance table drift
 - SVG (`docs/token-cost-{light,dark}.svg`) multi-server saved labels are 62 / 74–81 / 89–94.
