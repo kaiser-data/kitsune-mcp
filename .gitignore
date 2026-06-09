@@ -12,3 +12,5 @@ build/
 server.json.bak
 *.png
 graphify-out/
+.coverage
+uv.lock

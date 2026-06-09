@@ -1,7 +1,6 @@
 """Discovery tools: search, inspect, compare, status."""
 
 import asyncio
-import contextlib
 import os
 import shutil
 from typing import Annotated

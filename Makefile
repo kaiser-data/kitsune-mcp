@@ -1,28 +1,28 @@
 .PHONY: install dev test lint format build publish run clean
 
 install:
-	pip install -e .
+	uv pip install -e .
 
 dev:
-	pip install -e ".[dev]"
+	uv pip install -e ".[dev]"
 
 test:
-	pytest tests/ -v
+	uv run --extra dev -m pytest tests/ -v
 
 lint:
-	ruff check server.py tests/
+	uv run --extra dev -m ruff check server.py server_forge.py kitsune_mcp/ tests/
 
 format:
-	ruff format server.py tests/
+	uv run --extra dev -m ruff format server.py server_forge.py kitsune_mcp/ tests/
 
 build:
-	python -m build
+	uv run -m build
 
 publish:
-	python -m twine upload dist/*
+	uv run -m twine upload dist/*
 
 run:
-	python server.py
+	uv run python server.py
 
 clean:
 	rm -rf dist/ build/ *.egg-info __pycache__ .pytest_cache
