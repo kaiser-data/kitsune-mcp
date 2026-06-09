@@ -1,5 +1,4 @@
 """Tests for StdioTransport and HTTPSSETransport."""
-import asyncio
 import contextlib
 import json
 import os
@@ -90,8 +89,12 @@ class TestHTTPSSETransport:
         """HTTPSSETransport returns timeout message on asyncio.TimeoutError."""
         endpoint = "https://api.smithery.ai/connect/ns/kitsune-slow-server/mcp"
         transport = HTTPSSETransport("slow-server")
+        async def _timeout(coro, timeout=None):
+            coro.close()  # discard the unawaited _run() coroutine cleanly
+            raise TimeoutError
+
         with patch.object(transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))):
-            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
+            with patch("asyncio.wait_for", _timeout):
                 result = await transport.execute("tool", {}, {})
         assert "Timeout" in result or "timeout" in result.lower()
 

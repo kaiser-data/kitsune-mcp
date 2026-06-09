@@ -16,8 +16,10 @@ def _make_stdio_mock(responses: list[bytes]):
     mock_proc = MagicMock()
     mock_proc.returncode = None
     mock_proc.pid = 12345
-    mock_proc.stdin = AsyncMock()
-    mock_proc.stdout = AsyncMock()
+    # stdin.write/close are sync on asyncio streams; only drain is awaited
+    mock_proc.stdin = MagicMock()
+    mock_proc.stdin.drain = AsyncMock()
+    mock_proc.stdout = MagicMock()
     mock_proc.kill = MagicMock()
     mock_proc.wait = AsyncMock(return_value=0)
     # After the provided responses, return b"" (EOF)
