@@ -59,11 +59,14 @@ manual `workflow_dispatch` flags (`-f publish_npm=true`, `-f publish_registry=tr
   `auth("notion-hosted")` → `auth("notion-hosted", "logout")` → `shapeshift("notion-hosted")`
   should open a browser, not silently reuse `fe5fb9ad…`.
 
-### 4. #34 — auto() capability filter (commented, not implemented)
-- Added the `taskSupport: required ⊄ client_capabilities` filter idea as a comment on #34.
-- Still open: the ranker does not deprioritize servers whose declared required features the
-  connecting client can't satisfy. `auto("search the web …")` without a hint still risks
-  routing to `simulate-research-query`.
+### 4. ✅ DONE 2026-06-13 — #34 auto() capability filter (commit 002a5b3)
+- Implemented the 3-point plan from the issue: generic intent verbs stripped from
+  registry queries, intent-capability filter before ranking (a fetch-only server
+  can no longer win a "search the web" task), and a guidance refusal when no
+  candidate matches. 16 new tests in test_issue_34_capability_filter.py.
+- NOT implemented (no data source): the `taskSupport: required ⊄ client_capabilities`
+  filter from the issue comment — no registry currently exposes taskSupport, so
+  there is nothing to filter on. Revisit if/when registries ship capability metadata.
 
 ## Docs polish (non-blocking)
 
