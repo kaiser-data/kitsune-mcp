@@ -70,11 +70,13 @@ class TestSearchQueryFor:
         result = _search_query_for("search for AI news")
         assert "news" in result
 
-    def test_bare_query_unchanged(self):
+    def test_brand_word_survives_intent_strip(self):
+        # #34: "search" is a generic intent verb stripped from registry
+        # queries — the brand word alone is what discriminates.
         from kitsune_mcp.tools.onboarding import _search_query_for
         result = _search_query_for("brave search")
         assert "brave" in result
-        assert "search" in result
+        assert "search" not in result
 
     def test_fallback_when_all_stripped(self):
         from kitsune_mcp.tools.onboarding import _search_query_for

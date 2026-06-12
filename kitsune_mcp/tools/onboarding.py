@@ -200,6 +200,27 @@ async def auto(
             candidates = list(await _state._registry.search(task, limit=5))
         if not candidates:
             return f"No servers found for '{task}'. Use search() or provide server_hint."
+        # Capability filter (#34): when the task names an intent verb
+        # ("search", "fetch", …), keep only candidates that advertise a
+        # matching tool. Word-based relevance cannot distinguish "a server
+        # that searches the web" from "a server that fetches a URL" — picking
+        # a random non-matching server fails worse than asking for a hint.
+        intent = _intent_verb(task)
+        if intent:
+            matching = [s for s in candidates if _matches_intent(s, intent)]
+            if not matching:
+                tried = ", ".join(s.id for s in candidates[:3])
+                return _blocked(
+                    what=f"no candidate server can '{intent}'",
+                    why=f"top matches ({tried}) advertise no {intent}-capable tool",
+                    fix=f'search("<topic>") to find a {intent} server, then '
+                        f'auto("{task}", server_hint="<server-id>")',
+                    fallback=(
+                        f'known-good: auto("{task}", server_hint="exa") or '
+                        f'server_hint="brave-search"'
+                    ) if intent in ("search", "find", "lookup", "google") else "",
+                )
+            candidates = matching
         # Rank by works-now score: credentials set + trusted source + stdio > HTTP.
         candidates.sort(
             key=lambda s: _relevance_score(s, search_query) * 10.0 + _works_now_score(s),
@@ -579,6 +600,28 @@ _SEARCH_STOP_WORDS: frozenset[str] = frozenset({
     "make", "want", "need", "help", "some", "any",
 })
 
+# Intent verbs are stripped from registry queries too (#34): "search" and
+# "web" match almost every server's description, inflating relevance scores
+# for servers that cannot actually search the web. The verb still drives
+# ranking — see _intent_verb / _matches_intent below.
+_GENERIC_INTENT_WORDS: frozenset[str] = frozenset({
+    "search", "web", "look", "lookup", "browse",
+})
+
+# task verb → substrings that mark a candidate as actually capable of it.
+# Checked against server id/name/description and tool names/descriptions.
+_INTENT_TOOL_MARKERS: dict[str, tuple[str, ...]] = {
+    "search": ("search",),
+    "find": ("search",),
+    "lookup": ("search", "lookup"),
+    "google": ("search",),
+    "browse": ("browse", "navigate"),
+    "fetch": ("fetch", "download"),
+    "download": ("fetch", "download"),
+    "scrape": ("scrape", "crawl", "extract"),
+    "crawl": ("scrape", "crawl"),
+}
+
 
 def _search_query_for(task: str) -> str:
     """Extract registry-friendly keywords from a natural-language task.
@@ -587,14 +630,48 @@ def _search_query_for(task: str) -> str:
     "search for latest AI news" → "news"
     "get weather Berlin"        → "weather Berlin"
 
-    Words under 3 chars are always dropped (too generic). If no content words
-    remain, fall back to the raw task so search still has something to work with.
+    Words under 3 chars are always dropped (too generic). Generic intent
+    verbs ("search", "web", …) are dropped too (#34) — they match nearly
+    every server. If no content words remain, fall back to the raw task so
+    search still has something to work with.
     """
     words = [
         w for w in re.split(r'\W+', task)
         if len(w) >= 3 and w.lower() not in _SEARCH_STOP_WORDS
+        and w.lower() not in _GENERIC_INTENT_WORDS
     ]
     return " ".join(words) if words else task
+
+
+def _intent_verb(task: str) -> str:
+    """Return the first intent verb found in the task, or "" if none.
+
+    "search the web for X" → "search"; "what time in Tokyo" → "".
+    """
+    for w in re.split(r'\W+', task.lower()):
+        if w in _INTENT_TOOL_MARKERS:
+            return w
+    return ""
+
+
+def _matches_intent(srv, verb: str) -> bool:
+    """True if the server advertises a tool matching the task's intent verb.
+
+    A server whose tool is literally named web_search should outrank — and a
+    fetch-only server should never satisfy — a "search the web" task (#34).
+    Registry results often carry no tool list, so name/id/description count
+    as evidence too.
+    """
+    markers = _INTENT_TOOL_MARKERS.get(verb, (verb,))
+    hay = f"{srv.id} {srv.name} {srv.description}".lower()
+    if any(m in hay for m in markers):
+        return True
+    for t in srv.tools or []:
+        name = t.get("name", "") if isinstance(t, dict) else str(t)
+        desc = t.get("description", "") if isinstance(t, dict) else ""
+        if any(m in name.lower() or m in desc.lower() for m in markers):
+            return True
+    return False
 
 
 def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
