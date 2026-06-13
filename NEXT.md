@@ -74,10 +74,17 @@ manual `workflow_dispatch` flags (`-f publish_npm=true`, `-f publish_registry=tr
 - Relabeled as mount cost and added totals including the ~1,321 floor;
   reductions recomputed (60% / 48% / 76%).
 
-### 6. token-cost SVG vs README Performance table drift
-- SVG (`docs/token-cost-{light,dark}.svg`) multi-server saved labels are 62 / 74–81 / 89–94.
-- README Performance table (corrected this session) is 62 / 77–81 / 87–93.
-- Minor; reconcile the SVGs to the recomputed table next time the graphics are regenerated.
+### 6. ✅ DONE 2026-06-13 — token-cost SVG vs README table drift reconciled
+- Both `docs/token-cost-{light,dark}.svg` now read 62 / 77–81 / 87–93 (was 62 / 74–81 / 89–94),
+  matching the grounded per-server table. Kitsune bar values + heights updated to the range
+  midpoints (~1,621 / ~1,820 / ~2,450) and the stale "500-token base" caption corrected to
+  the measured "~1,321-token floor" in both the axis subtitle and the legend footnote.
+- README upper table (saving-formula section) reconciled to the lower per-server table —
+  both now read 62 / 77–81 / 87–93 with Kitsune ranges ~1,631–2,011 and ~1,631–3,271.
+- Removed orphan `docs/token-cost.svg` — unreferenced since the May light/dark <picture>
+  split and still carrying the pre-floor figures (800 / 81% etc.); recoverable from git.
+- Open judgment call (not changed): hero line still says "Up to 95%"; the highest documented
+  figure is now 93% (95% is reachable only for fleets larger than the 5-server example).
 
 ## Done this session (v0.20.7, verified live on running MCP)
 - ✅ #42 savings counter — `status()` now shows `~2,661 tokens [1 mounted server(s) + 2

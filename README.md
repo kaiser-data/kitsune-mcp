@@ -47,8 +47,8 @@ Saving formula: `1 − (Kitsune base 1,321 + surgical mount) / always-on total`
 | Always-on servers | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---:|---:|
 | GitHub (26 tools) | 4,229 | ~1,621 (1,321 + ~300) | **62%** |
-| GitHub + filesystem + git | 8,678 | ~1,621–2,221 | **74–81%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,621–2,821 | **89–94%** |
+| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | **77–81%** |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
 
 **Break-even:** if you only ever run **one small server** (e.g. `mcp-server-time` at ~261 tokens), always-on is *cheaper* than Kitsune — you'd pay 261 tokens instead of Kitsune's 1,321 floor. Kitsune wins when the always-on alternative exceeds ~1,321 tokens, which happens as soon as you'd keep one medium server (GitHub-sized) or two-plus small ones loaded. The bigger and more numerous your servers, the bigger the win.
 
