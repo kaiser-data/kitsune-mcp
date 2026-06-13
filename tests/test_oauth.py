@@ -546,3 +546,61 @@ class TestLogout:
         # Flag must be cleared after consumption
         assert origin not in oauth._force_login_origins
         oauth._meta_cache.pop("https://fl/mcp", None)
+
+    def test_logout_then_reauth_is_fresh_flow_not_silent_refresh(self, tmp_path, monkeypatch):
+        """Issue #43 reproduction, end-to-end and automatable.
+
+        The bug: after `auth(server, "logout")`, the next `auth(server)`
+        returned the SAME token with no browser flow — a surviving token
+        cache or a silent refresh_token grant. This test locks the fix by
+        running save → logout → ensure_token as one sequence and asserting
+        the re-auth (1) never calls refresh(), (2) runs authorize() with
+        force_login=True, and (3) returns a NEW token, not the old prefix.
+        The only thing it cannot assert is that a real browser window opens —
+        that is the single remaining manual check.
+        """
+        import time
+        monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
+        oauth._meta_cache["https://e2e/mcp"] = _meta_with_revoke("https://e2e")
+        origin = oauth._origin("https://e2e/mcp")
+        oauth._save_client(origin, oauth.ClientInfo(
+            client_id="cid", redirect_uri="http://127.0.0.1/cb",
+        ))
+        # A fully-authenticated session: valid (unexpired) access token AND a
+        # live refresh token — exactly the state that triggered the silent
+        # re-issue in the bug report.
+        oauth.save_tokens(origin, oauth.TokenBundle(
+            access_token="fe5fb9ad-OLD", expires_at=time.time() + 3600,
+            refresh_token="rt-old",
+        ))
+
+        resp = MagicMock(status_code=200)
+        http_client = MagicMock()
+        http_client.post = AsyncMock(return_value=resp)
+        with patch.object(oauth, "_get_http_client", return_value=http_client):
+            asyncio.run(oauth.logout("https://e2e/mcp"))
+
+        # After logout the token file is gone (no second cache survives)…
+        assert oauth.load_tokens(origin) is None
+
+        async def fake_refresh(*_a, **_k):
+            raise AssertionError("refresh() must not run after an explicit logout")
+
+        seen = {}
+
+        async def fake_authorize(_m, _c, force_login=False):
+            seen["force_login"] = force_login
+            return oauth.TokenBundle(
+                access_token="NEW-token", expires_at=time.time() + 3600,
+                refresh_token="rt-new",
+            )
+
+        with patch.object(oauth, "refresh", side_effect=fake_refresh), \
+             patch.object(oauth, "authorize", side_effect=fake_authorize):
+            tok = asyncio.run(oauth.ensure_token("https://e2e/mcp"))
+
+        assert tok == "NEW-token"            # not the stale fe5fb9ad prefix
+        assert seen.get("force_login") is True  # browser re-prompt armed
+        assert origin not in oauth._force_login_origins  # flag consumed
+        oauth._meta_cache.pop("https://e2e/mcp", None)
+        oauth._force_login_origins.discard(origin)

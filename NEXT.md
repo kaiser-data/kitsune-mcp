@@ -53,11 +53,18 @@ manual `workflow_dispatch` flags (`-f publish_npm=true`, `-f publish_registry=tr
   `transport.list_tools()` when the registry listing is thin (`_schemas_missing_required`).
   Fixes both proxy registration and the hint. 2 tests added; verified live against context7.
 
-### 3. #43 logout — unit-tested, not yet live-verified end-to-end
-- Code + 5 unit tests landed (RFC 7009 revoke + `prompt=login` flag). Needs one real
-  OAuth round-trip to confirm the browser actually re-prompts:
-  `auth("notion-hosted")` → `auth("notion-hosted", "logout")` → `shapeshift("notion-hosted")`
-  should open a browser, not silently reuse `fe5fb9ad…`.
+### 3. #43 logout — logic locked by tests, one manual browser check remains
+- Code + 6 unit tests landed (RFC 7009 revoke + `prompt=login` flag). Audited 2026-06-13:
+  `delete_tokens()` removes the whole bundle (access + refresh), `revoke()` hits the IdP
+  refresh-token-first, and after logout `load_tokens()` returns None so the silent-refresh
+  branch in `ensure_token()` is skipped — no second cache survives.
+- Added `test_logout_then_reauth_is_fresh_flow_not_silent_refresh` — encodes the exact #43
+  repro (save → logout → re-auth) and asserts re-auth never calls `refresh()`, calls
+  `authorize(force_login=True)`, and returns a NEW token, not `fe5fb9ad…`. This locks the
+  fix against regression.
+- ONLY remaining step (truly needs a human + real IdP): confirm a browser window actually
+  opens — `auth("notion-hosted")` → `auth("notion-hosted", "logout")` →
+  `shapeshift("notion-hosted")` should re-prompt, not reuse the prior token.
 
 ### 4. ✅ DONE 2026-06-13 — #34 auto() capability filter (commit 002a5b3)
 - Implemented the 3-point plan from the issue: generic intent verbs stripped from
