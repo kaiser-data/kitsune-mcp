@@ -53,18 +53,21 @@ manual `workflow_dispatch` flags (`-f publish_npm=true`, `-f publish_registry=tr
   `transport.list_tools()` when the registry listing is thin (`_schemas_missing_required`).
   Fixes both proxy registration and the hint. 2 tests added; verified live against context7.
 
-### 3. #43 logout — logic locked by tests, one manual browser check remains
-- Code + 6 unit tests landed (RFC 7009 revoke + `prompt=login` flag). Audited 2026-06-13:
-  `delete_tokens()` removes the whole bundle (access + refresh), `revoke()` hits the IdP
-  refresh-token-first, and after logout `load_tokens()` returns None so the silent-refresh
-  branch in `ensure_token()` is skipped — no second cache survives.
-- Added `test_logout_then_reauth_is_fresh_flow_not_silent_refresh` — encodes the exact #43
-  repro (save → logout → re-auth) and asserts re-auth never calls `refresh()`, calls
-  `authorize(force_login=True)`, and returns a NEW token, not `fe5fb9ad…`. This locks the
-  fix against regression.
-- ONLY remaining step (truly needs a human + real IdP): confirm a browser window actually
-  opens — `auth("notion-hosted")` → `auth("notion-hosted", "logout")` →
-  `shapeshift("notion-hosted")` should re-prompt, not reuse the prior token.
+### 3. ✅ DONE 2026-06-13 — #43 logout, LIVE-VERIFIED against Notion
+- Code + 6 unit tests (RFC 7009 revoke + `prompt=login`). Regression test
+  `test_logout_then_reauth_is_fresh_flow_not_silent_refresh` locks the repro.
+- **Live verification (real Notion OAuth, 2026-06-13 11:08 CEST):**
+  - `auth("notion-hosted")` → returned cached token (valid leftover), prefix `fe5fb9ad…`.
+  - `auth("notion-hosted", "logout")` → "Refresh token revoked at the identity provider" —
+    RFC 7009 revoke confirmed firing live.
+  - `auth("notion-hosted")` → a **browser window opened** (user-confirmed) and a FRESH token
+    was minted: `tokens.json` rewritten at 11:08 with `expires_at` 12:08 (+58 min) and a new
+    refresh token. Since logout deletes the bundle, the silent-refresh path is impossible —
+    a completed `authorize()` flow is the only way that file exists.
+- **Key finding — the `fe5fb9ad…` prefix is a Notion red herring.** Notion's 86-char access
+  tokens for this app/workspace carry a STABLE prefix; re-issued tokens share `fe5fb9ad…`
+  even when freshly minted. The original bug report's "same prefix ⟹ silently reused" was a
+  false signal — verify with `expires_at` / on-disk write time, never the prefix.
 
 ### 4. ✅ DONE 2026-06-13 — #34 auto() capability filter (commit 002a5b3)
 - Implemented the 3-point plan from the issue: generic intent verbs stripped from
