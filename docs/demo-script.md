@@ -69,7 +69,7 @@ pip install kitsune-mcp
 **[Screen: Claude Desktop config file — 5 servers listed]**
 
 **VO**: "Every MCP server you add loads all its tools, every turn, whether you use them or
-not. Five servers — that's up to 43,000 tokens of overhead on every single message.
+not. Five typical servers — that's around 25,000 tokens of overhead on every single message.
 And it gets worse the more you add."
 
 **VO**: "More tools in context means worse tool selection. The research is clear —
@@ -93,11 +93,13 @@ status()
 
 ```
 ACTIVE:  none
-RESTING: ~500 tokens
+RESTING: ~1,321 tokens   (Kitsune's own 6 tools — the fixed floor)
 GATEWAY: 2 other server(s) in claude-desktop (~24 tools)
 ```
 
-**VO**: "The GATEWAY shows me what I'm paying for in other clients.
+**VO**: "Kitsune isn't free at rest — its own six tools cost about 1,321 tokens.
+That's the floor. The point is it stays flat no matter how many servers sit behind it.
+The GATEWAY shows what I'm paying for in other clients.
 Now let's mount GitHub — but only one tool, not all 26."
 
 ```
@@ -105,7 +107,7 @@ shapeshift("@modelcontextprotocol/server-github",
            tools=["search_repositories"])
 ```
 ```
-✓ Mounted 1 tool  (~300 tokens)   [full server = 4,229]
+✓ Mounted 1 tool  (~300 tokens)   [full server always-on = 4,229]
 ```
 
 ```
@@ -118,11 +120,11 @@ call("search_repositories", {"query": "MCP servers productivity"})
 shapeshift()
 ```
 ```
-✓ Released. Back to ~500 tokens.
+✓ Released. Back to ~1,321 tokens.
 ```
 
-**VO**: "One tool. Real data. 93% fewer tokens than mounting the full server.
-The next task starts clean."
+**VO**: "One tool, real data. With the floor included that's about 1,621 tokens against
+4,229 always-on — 62% fewer, and the next task starts clean."
 
 ---
 
@@ -257,25 +259,33 @@ status()
 
 ## Token scorecard (for on-screen graphics)
 
-### Per-server savings
-| Server | Always-on | Lean mount | Saved |
-|---|---|---|---|
-| mcp-server-time | 261 | 261 | 0% |
-| mcp-server-git | 1,242 | ~310 | 75% |
-| server-filesystem | 3,207 | ~500 | 84% |
-| server-github | 4,229 | ~300 | **93%** |
-| notion-hosted | 13,707 | ~1,950 | 86% |
+**Every Kitsune figure below includes the fixed ~1,321-token floor — it is never
+subtracted out or hidden.** Saved = 1 − (1,321 floor + surgical mount) / always-on.
+These match the README Performance table; keep them in sync.
 
-### Multi-server compounding
-| Servers | Always-on/turn | Kitsune/turn | Saved |
-|---|---|---|---|
-| 3 | ~7,700 | 500 | 94% |
-| 5 | ~43,700 | 500 | 98.9% |
-| 10 | ~58,700 | 500 | **99.2%** |
-| 20 | ~130,000 | 500 | **99.6%** |
+### Per-server savings (floor included)
+| Server | Always-on | 1,321 floor + surgical | Saved |
+|---|---:|---:|---:|
+| mcp-server-time (2 tools) | 261 | ~1,582 | — ¹ |
+| mcp-server-git (12) | 1,242 | ~1,631 | — ¹ |
+| server-memory (9) | 2,615 | ~1,901 | 27% |
+| server-filesystem (14) | 3,207 | ~2,011 | 37% |
+| brave (8) | 3,612 | ~1,771 | 51% |
+| server-github (26) | 4,229 | ~1,621 | **62%** |
+| notion-hosted (14) | 13,707 | ~3,271 | 76% |
+
+¹ For a **single** server smaller than the 1,321 floor (time, git), always-on is
+cheaper — Kitsune only pays off past one medium server, or two-plus small ones.
+
+### Multi-server compounding (floor stays flat; always-on stacks)
+| Servers always-on | Always-on/turn | Kitsune/turn | Saved |
+|---|---:|---:|---:|
+| GitHub | 4,229 | ~1,621 | 62% |
+| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | 77–81% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
 
 ### Headline for thumbnail
-> "One server. 99%+ fewer tokens. Smarter tool selection."
+> "One server. Up to ~90% fewer tokens. Smarter tool selection."
 
 ---
 
