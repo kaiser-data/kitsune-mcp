@@ -52,6 +52,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.3.0",
     "ruff>=0.6.0",
     "respx>=0.21.0",
 ]
@@ -81,3 +82,10 @@ ignore = ["E501", "B008", "SIM117"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Per-test hang guard: any single test that blocks (real socket/subprocess with
+# no timeout) is killed at 60s with a stack dump instead of hanging the runner.
+# NOTE: this only covers test *execution*; a hang during collection/import is
+# bounded by the `timeout -s ABRT` wrapper + `timeout-minutes` in CI.
+addopts = "--timeout=60 --timeout-method=thread"
+# Dump tracebacks of all threads if a test runs longer than this (belt-and-braces).
+faulthandler_timeout = 90

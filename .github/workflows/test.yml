@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Hard backstop: a hung import/collection used to run the runner for ~50 min
+    # until it died with "lost communication". Cap the whole job instead.
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
@@ -28,7 +31,15 @@ jobs:
         run: ruff check server.py server_forge.py kitsune_mcp/ tests/
 
       - name: Run tests with coverage
-        run: pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml
+        # `timeout -s ABRT 300` sends SIGABRT after 5 min; with PYTHONFAULTHANDLER=1
+        # that dumps tracebacks of ALL threads to stderr before aborting — so a hang
+        # during collection/import (which pytest-timeout cannot catch) prints exactly
+        # where it is stuck instead of silently burning the runner. `-k 10` SIGKILLs
+        # 10s later if it ignores the abort. Healthy run is ~30s, so 5 min is ample.
+        run: |
+          PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 \
+            timeout -k 10 -s ABRT 300 \
+            pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml
         env:
           # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
