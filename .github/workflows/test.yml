@@ -31,18 +31,39 @@ jobs:
         run: ruff check server.py server_forge.py kitsune_mcp/ tests/
 
       - name: Run tests with coverage
-        # `timeout -s ABRT 300` sends SIGABRT after 5 min; with PYTHONFAULTHANDLER=1
-        # that dumps tracebacks of ALL threads to stderr before aborting — so a hang
-        # during collection/import (which pytest-timeout cannot catch) prints exactly
-        # where it is stuck instead of silently burning the runner. `-k 10` SIGKILLs
-        # 10s later if it ignores the abort. Healthy run is ~30s, so 5 min is ample.
+        # The suite has hung at collection/import time on Linux runners (a real
+        # subprocess spawn that never returns). Capturing *where* it hangs needs care:
+        #  - output goes to a FILE, not the step's stdout pipe. An orphaned grandchild
+        #    that pytest hung on would otherwise hold the pipe open, the step would
+        #    never close, and GitHub discards the buffered log on cancellation (which
+        #    is exactly what masked the hang before).
+        #  - `python -X importtime` logs every import as it happens → the LAST import
+        #    before the hang names the culprit module.
+        #  - PYTHONFAULTHANDLER + `timeout -s ABRT` dumps all-thread stacks at 4 min.
+        # Because output is a file (orphans hold the file, not the pipe), the step
+        # closes cleanly once `timeout` returns and the log is readable in the
+        # "Show test output" step below.
         run: |
+          set +e
           PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 \
-            timeout -k 10 -s ABRT 300 \
-            pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml
+            timeout -k 10 -s ABRT 240 \
+            python -X importtime -m pytest tests/ -v --tb=short \
+            --cov=kitsune_mcp --cov-report=xml \
+            > pytest-output.log 2>&1
+          code=$?
+          echo "pytest exit code: $code"
+          exit $code
         env:
           # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
+
+      - name: Show test output (always)
+        if: always()
+        run: |
+          echo "================= pytest output (tail 250) ================="
+          tail -250 pytest-output.log 2>/dev/null || echo "(no output file)"
+          echo "================= last imports before any hang ============="
+          grep -E "import time:" pytest-output.log 2>/dev/null | tail -40 || true
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
