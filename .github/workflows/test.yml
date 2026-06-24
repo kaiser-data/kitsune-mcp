@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Hard backstop: a hung import/collection used to run the runner for ~50 min
+    # until it died with "lost communication". Cap the whole job instead.
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
@@ -28,10 +31,31 @@ jobs:
         run: ruff check server.py server_forge.py kitsune_mcp/ tests/
 
       - name: Run tests with coverage
-        run: pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml
+        # The suite hangs on Linux runners in a way that is unkillable (uninterruptible
+        # D-state): SIGKILL, pytest-timeout, and even job cancellation could not reap it,
+        # and cancelled-step logs are NOT retained. The trick that survives this: a
+        # STEP-level `timeout-minutes` (not job-level). When a *step* times out the job
+        # is NOT cancelled — it proceeds to the `if: always()` diagnostics step below,
+        # which reads the import log written to disk. `-X importtime` writes each import
+        # as it happens (unbuffered), so the last line names the culprit module.
+        timeout-minutes: 4
+        run: |
+          PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 \
+            python -X importtime -m pytest tests/ -v --tb=short \
+            --cov=kitsune_mcp --cov-report=xml > test.log 2>&1
         env:
           # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
+
+      - name: Diagnostics (always — captures the hang location)
+        if: always()
+        run: |
+          echo "===================== last 50 imports (importtime) ====================="
+          grep 'import time:' test.log 2>/dev/null | tail -50 || echo "(no import log)"
+          echo "===================== tail of pytest output ============================"
+          tail -120 test.log 2>/dev/null || echo "(no output)"
+          echo "===================== first/last lines ================================="
+          head -15 test.log 2>/dev/null; echo "..."; tail -5 test.log 2>/dev/null
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
