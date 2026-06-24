@@ -31,39 +31,44 @@ jobs:
         run: ruff check server.py server_forge.py kitsune_mcp/ tests/
 
       - name: Run tests with coverage
-        # The suite has hung at collection/import time on Linux runners (a real
-        # subprocess spawn that never returns). Capturing *where* it hangs needs care:
-        #  - output goes to a FILE, not the step's stdout pipe. An orphaned grandchild
-        #    that pytest hung on would otherwise hold the pipe open, the step would
-        #    never close, and GitHub discards the buffered log on cancellation (which
-        #    is exactly what masked the hang before).
-        #  - `python -X importtime` logs every import as it happens → the LAST import
-        #    before the hang names the culprit module.
-        #  - PYTHONFAULTHANDLER + `timeout -s ABRT` dumps all-thread stacks at 4 min.
-        # Because output is a file (orphans hold the file, not the pipe), the step
-        # closes cleanly once `timeout` returns and the log is readable in the
-        # "Show test output" step below.
+        # The suite hangs at collection/import time on Linux runners. Evidence:
+        # the step produces zero output, and a previous `timeout -k -s ABRT` wrapper
+        # could NOT reap python even with SIGKILL — i.e. python is wedged in
+        # uninterruptible (D-state) sleep on a kernel syscall (a spawned subprocess /
+        # device / socket during import). Because the process is unkillable, any
+        # capture that relies on killing it and reading afterwards loses the log on
+        # cancellation. So instead: run pytest in the background writing to a file,
+        # and POLL that file from the step itself — echoing diagnostics to the step's
+        # stdout (which GitHub streams live and retains) BEFORE giving up. `-X importtime`
+        # logs each import as it happens, so the last line names the culprit module.
         run: |
           set +e
           PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 \
-            timeout -k 10 -s ABRT 240 \
             python -X importtime -m pytest tests/ -v --tb=short \
-            --cov=kitsune_mcp --cov-report=xml \
-            > pytest-output.log 2>&1
+            --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 &
+          PID=$!
+          DONE=0
+          for i in $(seq 1 36); do          # up to 180s (healthy run ~40s)
+            sleep 5
+            kill -0 $PID 2>/dev/null || { DONE=1; break; }
+          done
+          if [ $DONE -eq 0 ]; then
+            echo "::error::pytest still running after 180s — collection/import HANG."
+            echo "===================== last 40 imports (importtime) ====================="
+            grep 'import time:' test.log | tail -40
+            echo "===================== tail of pytest output ============================"
+            tail -100 test.log
+            echo "========================================================================"
+            kill -9 $PID 2>/dev/null || true   # may not reap a D-state process; diag is already printed
+            exit 124
+          fi
+          wait $PID
           code=$?
-          echo "pytest exit code: $code"
+          cat test.log
           exit $code
         env:
           # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
-
-      - name: Show test output (always)
-        if: always()
-        run: |
-          echo "================= pytest output (tail 250) ================="
-          tail -250 pytest-output.log 2>/dev/null || echo "(no output file)"
-          echo "================= last imports before any hang ============="
-          grep -E "import time:" pytest-output.log 2>/dev/null | tail -40 || true
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
