@@ -20,40 +20,10 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      # BISECTION round 7: single class per job across the five dead
-      # halves (tra-1 AND tra-2 died: >=2 killers in transports alone),
-      # plus a kitsune-free raw-asyncio-subprocess control.
       matrix:
         include:
-          - { python-version: "3.12", variant: raw-control, files: RAW }
-          - { python-version: "3.12", variant: per-readresource, files: "tests/test_persistent.py::TestReadResource" }
-          - { python-version: "3.12", variant: per-inheritstderr, files: "tests/test_persistent.py::TestInheritStderr" }
-          - { python-version: "3.12", variant: per-pooleviction, files: "tests/test_persistent.py::TestPoolEviction" }
-          - { python-version: "3.12", variant: per-midcallreconne, files: "tests/test_persistent.py::TestMidCallReconnect" }
-          - { python-version: "3.12", variant: per-dotenvrevision, files: "tests/test_persistent.py::TestDotenvRevisionInvariant" }
-          - { python-version: "3.12", variant: tra-filenotfound, files: "tests/test_transports.py::TestStdioTransportFileNotFound" }
-          - { python-version: "3.12", variant: tra-parsesse, files: "tests/test_transports.py::TestStdioTransportParseSSE" }
-          - { python-version: "3.12", variant: tra-httpssetranspo, files: "tests/test_transports.py::TestHTTPSSETransport" }
-          - { python-version: "3.12", variant: tra-websockettrans, files: "tests/test_transports.py::TestWebSocketTransport" }
-          - { python-version: "3.12", variant: tra-dockertranspor, files: "tests/test_transports.py::TestDockerTransport" }
-          - { python-version: "3.12", variant: tra-validateinstal, files: "tests/test_transports.py::TestValidateInstallCmd" }
-          - { python-version: "3.12", variant: tra-directoauth, files: "tests/test_transports.py::TestHTTPSSETransportDirectOAuth" }
-          - { python-version: "3.12", variant: tra-gettransportur, files: "tests/test_transports.py::TestGetTransportURLEscapeHatch" }
-          - { python-version: "3.12", variant: tra-stdiobufferlim, files: "tests/test_transports.py::TestStdioBufferLimit" }
-          - { python-version: "3.13", variant: too-skillpersisten, files: "tests/test_tools.py::TestSkillPersistence" }
-          - { python-version: "3.13", variant: too-connectserveri, files: "tests/test_tools.py::TestConnectServerIdResolution" }
-          - { python-version: "3.13", variant: too-crafttool, files: "tests/test_tools.py::TestCraftTool" }
-          - { python-version: "3.13", variant: too-leanmorph, files: "tests/test_tools.py::TestLeanMorph" }
-          - { python-version: "3.13", variant: too-morphcredentia, files: "tests/test_tools.py::TestMorphCredentialWarning" }
-          - { python-version: "3.13", variant: ux-shiftbackunins, files: "tests/test_ux_changes.py::TestShiftbackUninstall" }
-          - { python-version: "3.13", variant: ux-registryerrors, files: "tests/test_ux_changes.py::TestRegistryErrors" }
-          - { python-version: "3.13", variant: ux-searchregistry, files: "tests/test_ux_changes.py::TestSearchRegistryWarning" }
-          - { python-version: "3.13", variant: ux-inspectprobefa, files: "tests/test_ux_changes.py::TestInspectProbeFailure" }
-          - { python-version: "3.13", variant: ux-inspectprobetr, files: "tests/test_ux_changes.py::TestInspectProbeTrustGate" }
-          - { python-version: "3.13", variant: ux-probeenvsaniti, files: "tests/test_ux_changes.py::TestProbeEnvSanitization" }
-          - { python-version: "3.13", variant: ux-probeenvheuris, files: "tests/test_ux_changes.py::TestProbeEnvHeuristicPassthrough" }
-          - { python-version: "3.13", variant: ux-comparetool, files: "tests/test_ux_changes.py::TestCompareTool" }
-          - { python-version: "3.13", variant: ux-comparepolish, files: "tests/test_ux_changes.py::TestComparePolish" }
+          - { python-version: "3.12", variant: full, files: "tests/" }
+          - { python-version: "3.13", variant: full, files: "tests/" }
 
     steps:
       - uses: actions/checkout@v6
@@ -120,21 +90,14 @@ jobs:
           fi
           # Token via file, not env — sudo scrubs the environment even with -E
           # in some configs, and we need proof-of-life either way (heartbeat).
+          # The watcher is kept as a safety net now the root cause is fixed: if a
+          # regression ever re-introduces the wedge, it posts kernel stacks to the
+          # PR instead of silently timing out.
           umask 077; printf '%s' "$GH_TOKEN" > .ghtoken
           sudo GH_TOKEN_FILE="$PWD/.ghtoken" setsid python3 .github/scripts/ci-hang-watcher.py \
-            test.log pytest.exit "$GITHUB_REPOSITORY" "$PR_NUMBER" "${{ matrix.variant }}" \
+            test.log pytest.exit "$GITHUB_REPOSITORY" "$PR_NUMBER" "py${{ matrix.python-version }}" \
             < /dev/null > watcher.log 2>&1 &
-          # ulimit -v: the hang profile (VM dead in <12s at the same test, vitals
-          # healthy 4s prior) matches a runaway allocation burst. Capping address
-          # space at 6GB converts the VM-killer into a MemoryError traceback that
-          # names the exact line. -u caps a fork storm into BlockingIOError.
-          PYARGS="${{ matrix.files }}"
-          if [ "$PYARGS" = "RAW" ]; then
-            CMD="python .github/scripts/raw-spawn-repro.py"
-          else
-            CMD="python -m pytest $PYARGS -v --tb=long"
-          fi
-          setsid bash -c "ulimit -v 6291456; ulimit -u 2048; PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 $CMD > test.log 2>&1 & P=\$!; echo \$P > pytest.pid; wait \$P; echo \$? > pytest.exit" \
+          setsid bash -c "PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -m pytest ${{ matrix.files }} -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=\$!; echo \$P > pytest.pid; wait \$P; echo \$? > pytest.exit" \
             < /dev/null > wrapper.log 2>&1 &
           echo "watcher + pytest launched detached; this step exits before any wedge can start"
         env:
@@ -167,7 +130,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hang-forensics-${{ matrix.variant }}
+          name: hang-forensics-py${{ matrix.python-version }}
           path: |
             hang-report-*.md
             import.log
@@ -177,7 +140,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload coverage
-        if: false  # no coverage during bisection
+        if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
