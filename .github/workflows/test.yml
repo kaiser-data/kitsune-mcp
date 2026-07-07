@@ -91,7 +91,11 @@ jobs:
           sudo GH_TOKEN_FILE="$PWD/.ghtoken" setsid python3 .github/scripts/ci-hang-watcher.py \
             test.log pytest.exit "$GITHUB_REPOSITORY" "$PR_NUMBER" "py${{ matrix.python-version }}" \
             < /dev/null > watcher.log 2>&1 &
-          setsid bash -c 'PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=$!; echo $P > pytest.pid; wait $P; echo $? > pytest.exit' \
+          # ulimit -v: the hang profile (VM dead in <12s at the same test, vitals
+          # healthy 4s prior) matches a runaway allocation burst. Capping address
+          # space at 6GB converts the VM-killer into a MemoryError traceback that
+          # names the exact line. -u caps a fork storm into BlockingIOError.
+          setsid bash -c 'ulimit -v 6291456; ulimit -u 2048; PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=long --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=$!; echo $P > pytest.pid; wait $P; echo $? > pytest.exit' \
             < /dev/null > wrapper.log 2>&1 &
           echo "watcher + pytest launched detached; this step exits before any wedge can start"
         env:
