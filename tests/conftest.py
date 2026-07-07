@@ -240,3 +240,23 @@ def stdio_tool_call_responses():
             },
         },
     ]
+
+
+@pytest.fixture(autouse=True)
+def _clear_process_pool():
+    """Never let a test's mock/leaked pool entry survive to interpreter exit.
+
+    transport.py registers an atexit handler (_kill_all_pool_processes) that
+    calls _kill_process_tree() on every entry in the module-global
+    _process_pool. Tests populate that pool with MagicMock processes (some with
+    a hardcoded pid like 99999). If such an entry survives the test, the atexit
+    handler runs the real kill path against a fake pid at shutdown — which on a
+    busy Linux CI runner could resolve to a live, unrelated process group. Clear
+    the pool after every test so shutdown only ever sees genuine, dead state.
+    """
+    yield
+    try:
+        from kitsune_mcp.transport import _process_pool
+        _process_pool.clear()
+    except Exception:
+        pass

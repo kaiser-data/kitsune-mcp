@@ -494,6 +494,70 @@ class TestPersistentStartProcessErrors:
         killer.assert_called()
 
 
+class TestKillProcessTreeSafety:
+    """_kill_process_tree must never killpg a pid it doesn't own (CI VM-kill)."""
+
+    def test_no_killpg_for_non_leader_pid(self):
+        """A pid that isn't its own group leader (e.g. a stale/fake pool pid) is
+        never passed to os.killpg — that path once SIGKILLed a foreign group and
+        wedged the whole Linux CI runner."""
+        from unittest.mock import MagicMock, patch
+
+        import kitsune_mcp.transport as tpx
+
+        proc = MagicMock()
+        proc.returncode = None
+        proc.pid = 99999  # fake pid tests hardcode; not our session leader
+
+        with (
+            patch("os.getpgid", return_value=4242),  # pid 99999 in a FOREIGN group
+            patch("os.killpg") as killpg,
+        ):
+            tpx._kill_process_tree(proc)
+
+        killpg.assert_not_called()  # would have nuked group 4242 otherwise
+
+    def test_killpg_only_for_owned_session_leader(self):
+        from unittest.mock import MagicMock, patch
+
+        import kitsune_mcp.transport as tpx
+
+        proc = MagicMock()
+        proc.returncode = None
+        proc.pid = 4242
+
+        with (
+            patch("os.getpgid", return_value=4242),  # pid leads its own group
+            patch("os.killpg") as killpg,
+        ):
+            tpx._kill_process_tree(proc)
+
+        killpg.assert_called_once_with(4242, __import__("signal").SIGKILL)
+
+    async def test_reap_drains_pipes_to_avoid_full_pipe_deadlock(self):
+        """_reap must read stdout/stderr to EOF so a flooded child's full PIPE
+        cannot deadlock proc.wait() (the reproduced Linux-runner wedge)."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        import kitsune_mcp.transport as tpx
+
+        proc = MagicMock(spec=__import__("asyncio").subprocess.Process)
+        proc.returncode = None
+        proc.pid = 4242
+        proc.wait = AsyncMock(return_value=-9)
+        # stdout yields one chunk then EOF; _reap must keep reading until b"".
+        proc.stdout = MagicMock()
+        proc.stdout.read = AsyncMock(side_effect=[b"y" * 65536, b""])
+        proc.stderr = MagicMock()
+        proc.stderr.read = AsyncMock(return_value=b"")
+
+        with patch.object(tpx, "_kill_process_tree", MagicMock()):
+            await tpx._reap(proc, timeout=5.0)
+
+        proc.wait.assert_awaited()
+        assert proc.stdout.read.await_count >= 2  # drained past the first chunk
+
+
 class TestDotenvRevisionRespawn:
     async def test_env_change_kills_and_respawns(self, monkeypatch):
         t = PersistentStdioTransport(["mycmd"])

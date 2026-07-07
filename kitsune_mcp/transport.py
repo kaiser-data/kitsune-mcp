@@ -130,12 +130,55 @@ def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
         with contextlib.suppress(Exception):
             proc.kill()
         return
-    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    # SAFETY: only SIGKILL a *process group we own*. We spawn every child with
+    # start_new_session=True, so a real child is its own session/group leader
+    # (pgid == pid). Requiring that before killpg() prevents two ways this used
+    # to nuke the wrong group — and, on CI, the whole runner VM:
+    #   1. a leaked/mocked pool entry whose pid is a MagicMock or a stale/fake
+    #      integer (tests hardcode pid=99999); os.getpgid() on a live-by-chance
+    #      pid would return a *foreign* group and killpg() would SIGKILL it.
+    #   2. pid reuse racing a just-reaped child.
+    # A bare int that doesn't lead its own group is never something we started.
+    if isinstance(pid, int) and pid > 1:
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            if os.getpgid(pid) == pid:
+                os.killpg(pid, signal.SIGKILL)
     # Belt-and-braces: also kill the asyncio handle so its transport tears down
-    # cleanly even if killpg already reaped the leader.
+    # cleanly even if killpg already reaped the leader. proc.kill() targets only
+    # this one pid (never a group), so it is safe on both real and mock procs.
     with contextlib.suppress(ProcessLookupError, Exception):
         proc.kill()
+
+
+async def _reap(proc: asyncio.subprocess.Process, timeout: float) -> None:
+    """Kill a child and reap it without ever deadlocking on a full pipe.
+
+    A child that has flooded its stdout/stderr PIPE blocks in write(); the
+    kernel then keeps the pipe's write end open until the buffered bytes are
+    drained. Calling proc.wait() while those pipes stay full can hang forever
+    (reproduced on Linux CI: an unread-PIPE child + SIGKILL + wait wedges the
+    whole runner). So we drain stdout/stderr to EOF *concurrently* with wait(),
+    all under a hard timeout. Safe on mocked procs (guards on a real Process).
+    """
+    _kill_process_tree(proc)
+    if not isinstance(proc, asyncio.subprocess.Process):
+        return
+
+    async def _drain(stream) -> None:
+        if stream is None:
+            return
+        with contextlib.suppress(Exception):
+            while await stream.read(65536):
+                pass
+
+    with contextlib.suppress(asyncio.TimeoutError, Exception):
+        await asyncio.wait_for(
+            asyncio.gather(
+                proc.wait(), _drain(proc.stdout), _drain(proc.stderr),
+                return_exceptions=True,
+            ),
+            timeout=timeout,
+        )
 
 
 @dataclass
@@ -723,9 +766,9 @@ class StdioTransport(BaseTransport):
         finally:
             with contextlib.suppress(Exception):
                 proc.stdin.close()
-            _kill_process_tree(proc)
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
+            # Drain stdout/stderr while reaping — a child that flooded its PIPE
+            # would otherwise deadlock proc.wait(). See _reap().
+            await _reap(proc, timeout=TIMEOUT_RESOURCE_LIST)
 
 
 # ---------------------------------------------------------------------------

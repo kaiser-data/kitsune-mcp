@@ -6,12 +6,24 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  issues: write        # hang watcher posts forensics as a PR comment
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Hard backstop: a hung import/collection used to run the runner for ~50 min
+    # until it died with "lost communication". Cap the whole job instead.
+    # (import 3 + tests 10 + forensics/upload leaves headroom at 20.)
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        include:
+          - { python-version: "3.12", variant: full, files: "tests/" }
+          - { python-version: "3.13", variant: full, files: "tests/" }
 
     steps:
       - uses: actions/checkout@v6
@@ -27,11 +39,105 @@ jobs:
       - name: Lint with ruff
         run: ruff check server.py server_forge.py kitsune_mcp/ tests/
 
-      - name: Run tests with coverage
-        run: pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml
+      # The suite hangs on Linux runners in a way that is unkillable (suspected
+      # uninterruptible D-state): SIGKILL, pytest-timeout, job cancellation and even
+      # STEP-level timeouts could not surface evidence — when the runner's teardown
+      # tries to reap the wedged child it wedges TOO, the job dies, and logs of
+      # unfinished steps are not retained (run 28068852528: cancelled, zero steps).
+      #
+      # This version never lets the runner own the wedged process:
+      #   1. pytest runs DETACHED in its own session (setsid) — step teardown never
+      #      touches it, so every step here finishes cleanly and keeps its logs.
+      #   2. The step shell only polls for an exit-code file.
+      #   3. On hang, forensics are captured live (/proc wchan + kernel stacks +
+      #      py-spy --nonblocking) and uploaded as an artifact BEFORE anything
+      #      times out. Red status is applied by the final gate step, after the
+      #      evidence is safe.
+      - name: Import check (isolates a collection-time hang from a test-body hang)
+        timeout-minutes: 3
+        run: |
+          # CRITICAL: redirect stdout/stderr too — a detached child that inherits
+          # the step's output pipe keeps the step "running" forever (the runner
+          # waits for EOF on the pipe, and a wedged process never closes it).
+          setsid bash -c 'PYTHONUNBUFFERED=1 python -X importtime -c "import server, server_forge" > import.log 2>&1 & P=$!; echo $P > import.pid; wait $P; echo $? > import.exit' < /dev/null > import-wrapper.log 2>&1 &
+          for i in $(seq 1 90); do [ -f import.exit ] && break; sleep 1; done
+          if [ -f import.exit ]; then
+            echo "import exited $(cat import.exit) — module import is clean"
+            tail -5 import.log
+          else
+            echo "IMPORT-HANG" >> hang.flag
+            tail -30 import.log 2>/dev/null || true
+          fi
         env:
-          # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
+
+      # The wedge poisons process creation machine-wide: once pytest hangs, ANY
+      # fork on the runner blocks uninterruptibly (this is why pgrep, sleep
+      # loops, probe launches and the runner's own teardown all wedged in every
+      # earlier capture attempt). So everything is PRE-ARMED before pytest
+      # starts, and the post-wedge path is 100% fork-free:
+      #   - a root watcher holds pre-opened fds to /dev/kmsg + /proc/sysrq-trigger
+      #   - on hang it fires SysRq-W (kernel stacks of all D-state tasks) and
+      #     POSTS test.log tail + stacks to the PR via HTTPS — immune to job
+      #     cancellation and log retention.
+      - name: Enable kernel diagnostics
+        run: sudo sysctl -w kernel.sysrq=1 kernel.hung_task_timeout_secs=60
+
+      - name: Launch watcher + tests (returns immediately)
+        run: |
+          if [ -f hang.flag ]; then
+            echo "skipping — bare import already hangs (see previous step)"; exit 0
+          fi
+          # Token via file, not env — sudo scrubs the environment even with -E
+          # in some configs, and we need proof-of-life either way (heartbeat).
+          # The watcher is kept as a safety net now the root cause is fixed: if a
+          # regression ever re-introduces the wedge, it posts kernel stacks to the
+          # PR instead of silently timing out.
+          umask 077; printf '%s' "$GH_TOKEN" > .ghtoken
+          sudo GH_TOKEN_FILE="$PWD/.ghtoken" setsid python3 .github/scripts/ci-hang-watcher.py \
+            test.log pytest.exit "$GITHUB_REPOSITORY" "$PR_NUMBER" "py${{ matrix.python-version }}" \
+            < /dev/null > watcher.log 2>&1 &
+          setsid bash -c "PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -m pytest ${{ matrix.files }} -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=\$!; echo \$P > pytest.pid; wait \$P; echo \$? > pytest.exit" \
+            < /dev/null > wrapper.log 2>&1 &
+          echo "watcher + pytest launched detached; this step exits before any wedge can start"
+        env:
+          SMITHERY_API_KEY: ""
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      # NOTE: on hang, test.log's writer is wedged mid-write() holding i_rwsem —
+      # ANY read of test.log blocks forever. Only touch it on the success path.
+      - name: Report results
+        timeout-minutes: 12
+        run: |
+          [ -f hang.flag ] && exit 1
+          for i in $(seq 1 600); do
+            if [ -f pytest.exit ] || ls hang-report-*.md >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          if [ -f pytest.exit ]; then
+            code=$(cat pytest.exit)
+            echo "pytest exited $code"
+            tail -60 test.log
+            exit "$code"
+          fi
+          echo "::error::suite hang — forensics posted to the PR by the watcher (and attached as artifact)"
+          sudo cat hang-report-*.md 2>/dev/null || true
+          tail -40 watcher.log 2>/dev/null || true
+          exit 1
+
+      - name: Upload logs (never test.log — reading it blocks on a wedged writer)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hang-forensics-py${{ matrix.python-version }}
+          path: |
+            hang-report-*.md
+            import.log
+            watcher.log
+            wrapper.log
+            hang.flag
+          if-no-files-found: ignore
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
