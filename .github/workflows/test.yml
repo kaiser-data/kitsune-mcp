@@ -48,7 +48,10 @@ jobs:
       - name: Import check (isolates a collection-time hang from a test-body hang)
         timeout-minutes: 3
         run: |
-          setsid bash -c 'PYTHONUNBUFFERED=1 python -X importtime -c "import server, server_forge" > import.log 2>&1 & P=$!; echo $P > import.pid; wait $P; echo $? > import.exit' < /dev/null &
+          # CRITICAL: redirect stdout/stderr too — a detached child that inherits
+          # the step's output pipe keeps the step "running" forever (the runner
+          # waits for EOF on the pipe, and a wedged process never closes it).
+          setsid bash -c 'PYTHONUNBUFFERED=1 python -X importtime -c "import server, server_forge" > import.log 2>&1 & P=$!; echo $P > import.pid; wait $P; echo $? > import.exit' < /dev/null > import-wrapper.log 2>&1 &
           for i in $(seq 1 90); do [ -f import.exit ] && break; sleep 1; done
           if [ -f import.exit ]; then
             echo "import exited $(cat import.exit) — module import is clean"
@@ -71,7 +74,9 @@ jobs:
           if [ -f hang.flag ]; then
             echo "skipping — bare import already hangs (see previous step)"; exit 0
           fi
-          setsid bash .github/scripts/run-tests-watchdog.sh < /dev/null &
+          # CRITICAL: >file, not the step's pipe — the wedged pytest holds every
+          # inherited fd open forever, and the runner only ends a step on pipe EOF.
+          setsid bash .github/scripts/run-tests-watchdog.sh < /dev/null > watchdog.log 2>&1 &
           # wrapper: 300s watchdog + ~60s forensics grace; poll up to 480s
           for i in $(seq 1 480); do
             if [ -f pytest.exit ] || [ -f forensics.done ]; then break; fi
@@ -105,6 +110,7 @@ jobs:
             forensic-probes/
             test.log
             import.log
+            watchdog.log
             hang.flag
           if-no-files-found: ignore
 
