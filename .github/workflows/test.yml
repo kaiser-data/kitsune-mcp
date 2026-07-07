@@ -61,16 +61,22 @@ jobs:
           SMITHERY_API_KEY: ""
 
       - name: Run tests with coverage (detached + watchdog)
-        timeout-minutes: 10
+        # This step NEVER opens /proc and never owns the pytest process: the
+        # detached wrapper runs the watchdog AND the forensics; probes on the
+        # wedged pid each run in their own throwaway session (any of them can
+        # block forever — v1/v2 learned that the hard way). The step only
+        # polls plain files, so it always finishes and keeps its log.
+        timeout-minutes: 12
         run: |
           if [ -f hang.flag ]; then
             echo "skipping — bare import already hangs (see previous step)"; exit 0
           fi
-          setsid bash -c 'PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=$!; echo $P > pytest.pid; wait $P; echo $? > pytest.exit' < /dev/null &
-          # Suite takes ~15s when healthy; 300s gives pytest-timeout (60s/test),
-          # faulthandler_timeout (90s), and the kernel hung-task detector (120s)
-          # room to fire first.
-          for i in $(seq 1 300); do [ -f pytest.exit ] && break; sleep 1; done
+          setsid bash .github/scripts/run-tests-watchdog.sh < /dev/null &
+          # wrapper: 300s watchdog + ~60s forensics grace; poll up to 480s
+          for i in $(seq 1 480); do
+            if [ -f pytest.exit ] || [ -f forensics.done ]; then break; fi
+            sleep 1
+          done
           if [ -f pytest.exit ]; then
             code=$(cat pytest.exit)
             echo "pytest exited $code"
@@ -78,7 +84,13 @@ jobs:
             exit "$code"
           fi
           echo "TEST-HANG" >> hang.flag
-          bash .github/scripts/hang-forensics.sh test.log pytest.pid
+          if [ -f forensics.done ]; then
+            cat hang-forensics.txt
+          else
+            echo "wrapper never finished forensics; dumping whatever probes returned:"
+            tail -150 test.log 2>/dev/null || true
+            for f in forensic-probes/*.txt; do echo "--- $f"; cat "$f" 2>/dev/null; done || true
+          fi
         env:
           # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
