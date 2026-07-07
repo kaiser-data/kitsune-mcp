@@ -1,6 +1,53 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-06-09. Running MCP confirmed on v0.20.7._
+_Last updated: 2026-07-07. Running MCP confirmed on v0.20.7._
+
+## RESOLVED 2026-07-07 — CI Linux VM-kill (PR #49) — root-caused and fixed
+
+**Status:** ✅ Fixed. Commit `2a3a059` on `ci/harden-test-hang-diagnostics`.
+Full suite is green on `ubuntu-latest` for both 3.12 and 3.13 — run
+**28881784462**: `686 passed in 6.67s`, `pytest exited 0`. First passing
+full-suite Linux CI since May 16. **Ready to merge PR #49.**
+
+**It was never a hang — it was the runner VM being killed.** An `asyncio`
+subprocess with a full, unread **stdout PIPE** that is then SIGKILLed via
+`os.killpg` and awaited (`proc.wait()`) wedges the entire GitHub runner —
+hard enough that step teardown *and* shell builtins stall, which is exactly
+why all prior post-mortem attempts died with the job and retained no logs.
+Proven with a **kitsune-free** control: `yes` → unread PIPE → `killpg(SIGKILL)`
+→ `wait()` wedged the box; draining the pipe, using `/dev/null`, or not
+flooding all survived (repro run 28880054696, case `yes-pipe-kill`).
+
+**Two production defects in `transport.py`, both fixed:**
+1. `_kill_process_tree()` called `os.killpg(os.getpgid(pid), SIGKILL)` on **any**
+   pid — including leaked/mock pool entries (tests hardcode `pid=99999`). At the
+   `atexit` `_kill_all_pool_processes` sweep a fake pid could resolve to a
+   **live, unrelated group** on the busy runner and SIGKILL it (potentially the
+   runner agent). Now killpg fires only for a real `int > 1` that leads its own
+   session group (`getpgid(pid) == pid`, guaranteed by `start_new_session=True`).
+2. `execute()` reaped with `proc.wait()` but never drained stdout/stderr → a
+   flooded PIPE deadlocked. New `_reap()` drains both pipes to EOF concurrently
+   with `wait()`, under a hard timeout.
+
+**Also landed:** autouse conftest fixture clears `_process_pool` after every
+test (no mock entry survives to the atexit killer); regression tests for the
+safe-killpg guard and the drain reaper (`TestKillProcessTreeSafety`).
+
+**How it was found:** 7 rounds of matrix bisection (file → class → single test)
+narrowed it to transport/pool tests, then a kitsune-free raw-asyncio control
+reproduced it with zero project code — reframing it from "our bug" to an
+environmental asyncio/kernel interaction that our teardown happened to trigger.
+The **pre-armed hang watcher** (`.github/scripts/ci-hang-watcher.py`, posts
+`/dev/kmsg` + SysRq-W kernel stacks to the PR over HTTPS) is kept in CI as a
+safety net: a future regression posts stacks instead of silently timing out.
+
+**Follow-up (optional):** consider `pytest-timeout` at the session level and a
+CONTRIBUTING note that a bare `uv run pytest` needs `--extra dev` (addopts pull
+in pytest-timeout). Non-blocking.
+
+**Session setup note:** `kitsune` MCP server is registered for this folder
+(local scope in `~/.claude.json`): `uv run --directory <repo> kitsune-mcp` —
+serves the live dev source; verified connected.
 
 ## Done 2026-06-09 (repo health session, unreleased on main)
 
