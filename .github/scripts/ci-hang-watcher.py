@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Pre-armed hang watcher for the Linux CI test hang (PR #49).
+"""Pre-armed, self-evidencing hang watcher for the Linux CI test hang (PR #49).
 
-Root cause of every failed capture so far: pytest wedges MID-write() to
-test.log — a page fault during the write needs mmap_sem (held by another
-wedged thread), so the writer sleeps in D-state holding the file's i_rwsem.
-From that moment, ANY read() of test.log (tail, cat, artifact upload) and any
-/proc/<pid> access needing mmap_sem (cmdline, environ, py-spy) blocks
-uninterruptibly too — including the runner's own teardown.
+The wedge poisons the runner VM progressively (reads of test.log block on the
+wedged writer's i_rwsem; /proc/<pid> reads block on its mmap_sem; possibly
+process spawning too) — so this watcher trusts NOTHING on the box after the
+wedge and reports exclusively over HTTPS:
 
-So this watcher, started BEFORE pytest as root and fully detached:
-  - tails test.log incrementally in a DISPOSABLE daemon thread while the
-    suite is healthy (post-wedge reads block — only that thread is lost)
-  - detects the hang with os.stat() only (never blocks)
-  - fires SysRq-W through a PRE-OPENED fd — kernel stacks of every D-state
-    task land in the kmsg ring, read back via a pre-opened non-blocking fd
-  - posts the last-started test + kernel stacks as a PR comment over HTTPS,
-    immune to job cancellation, VM teardown, and step-log retention
+  - posts an "armed" PR comment at startup, then EDITS it every 30s as a
+    heartbeat (elapsed, log size, freeze age, collected tail) — if the
+    watcher itself ever wedges, the last heartbeat pinpoints where
+  - tails test.log incrementally in a DISPOSABLE daemon thread while healthy
+    (post-wedge reads block; only that thread is lost)
+  - detects the freeze via os.stat() only
+  - fires SysRq-W through a pre-opened fd (kernel stacks of all D-state tasks
+    into the kmsg ring, read via a pre-opened non-blocking fd)
+  - posts the final forensics as a NEW comment; deletes the heartbeat comment
+    if the suite finishes cleanly
 
 Usage: ci-hang-watcher.py <test-log> <exit-file> <repo> <pr-number> <label>
-Env:   GH_TOKEN (posting skipped if empty), WATCH_SECONDS (default 480)
+Env:   GH_TOKEN_FILE (path to token file), WATCH_SECONDS (default 480)
 """
 import json
 import os
@@ -30,15 +30,38 @@ import urllib.request
 LOG, EXIT_FILE, REPO, PR, LABEL = sys.argv[1:6]
 WATCH_SECONDS = int(os.environ.get("WATCH_SECONDS", "480"))
 FREEZE_SECONDS = 90
-TOKEN = os.environ.get("GH_TOKEN", "")
+HEARTBEAT_SECONDS = 30
+try:
+    TOKEN = open(os.environ.get("GH_TOKEN_FILE", ".ghtoken")).read().strip()
+except OSError:
+    TOKEN = ""
 
 def note(*a):
     print(f"[{time.strftime('%H:%M:%S')}]", *a, flush=True)
 
-note("armed — token:", "present" if TOKEN else "MISSING", "| pr:", PR or "(none)",
-     "| watch:", WATCH_SECONDS, "s")
+def api(method, path, body=None):
+    if not (TOKEN and PR):
+        return None
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{REPO}{path}",
+        data=json.dumps(body).encode() if body is not None else None,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read() or "{}")
+    except Exception as e:
+        note(f"api {method} {path} failed:", e)
+        return None
 
-# --- pre-arm: everything opened before pytest can wedge ---------------------
+note("armed — token:", "present" if TOKEN else "MISSING", "| pr:", PR or "(none)")
+
+# --- pre-arm fds --------------------------------------------------------------
 try:
     kmsg = os.open("/dev/kmsg", os.O_RDONLY | os.O_NONBLOCK)
 except OSError as e:
@@ -50,8 +73,8 @@ except OSError as e:
     sysrq = -1
     note("sysrq unavailable:", e)
 
-# --- disposable tail thread: the ONLY thing that ever reads test.log --------
-tail_buf: list = []          # chunks, capped to ~64KB total
+# --- disposable tail thread: the ONLY thing that ever reads test.log ---------
+tail_buf: list = []
 tail_lock = threading.Lock()
 
 def _tailer():
@@ -76,10 +99,10 @@ def _tailer():
 
 threading.Thread(target=_tailer, daemon=True).start()
 
-def collected_tail(n=6000):
+def collected_tail(n):
     with tail_lock:
         data = b"".join(tail_buf)
-    return data[-n:].decode(errors="replace") or "(nothing collected)"
+    return data[-n:].decode(errors="replace") or "(nothing collected yet)"
 
 def drain_kmsg():
     out = []
@@ -97,32 +120,31 @@ def drain_kmsg():
         out.append(rec.decode(errors="replace"))
     return out
 
-def post_comment(body):
-    if not (TOKEN and PR):
-        note("no token/PR — skipping post")
-        return
-    req = urllib.request.Request(
-        f"https://api.github.com/repos/{REPO}/issues/{PR}/comments",
-        data=json.dumps({"body": body}).encode(),
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            note("posted comment:", r.status)
-    except Exception as e:
-        note("post failed:", e)
+drain_kmsg()  # discard boot backlog
 
-# --- watch loop: main thread never opens test.log ----------------------------
-drain_kmsg()  # discard boot backlog so later reads are wedge-era only
+# --- heartbeat comment --------------------------------------------------------
+hb = api("POST", f"/issues/{PR}/comments",
+         {"body": f"🫀 hang watcher `{LABEL}` armed — heartbeats will edit this comment"})
+hb_id = hb.get("id") if hb else None
+note("heartbeat comment id:", hb_id)
+
+def heartbeat(status):
+    if hb_id:
+        body = (f"🫀 hang watcher `{LABEL}` — {status}\n\n"
+                f"<details><summary>collected test.log tail</summary>\n\n"
+                f"```\n{collected_tail(3000)}\n```\n</details>")
+        api("PATCH", f"/issues/comments/{hb_id}", {"body": body})
+
+# --- watch loop ---------------------------------------------------------------
 start = time.time()
 last_size, last_change = -1, time.time()
+last_beat = 0.0
+frozen = False
 while time.time() - start < WATCH_SECONDS:
     if os.path.exists(EXIT_FILE):
-        note("pytest exited cleanly — watcher done")
+        note("pytest exited cleanly — removing heartbeat comment")
+        if hb_id:
+            api("DELETE", f"/issues/comments/{hb_id}")
         os._exit(0)
     try:
         size = os.stat(LOG).st_size
@@ -131,10 +153,17 @@ while time.time() - start < WATCH_SECONDS:
     if size != last_size:
         last_size, last_change = size, time.time()
     elif size >= 0 and time.time() - last_change > FREEZE_SECONDS:
+        frozen = True
         break
+    if time.time() - last_beat >= HEARTBEAT_SECONDS:
+        last_beat = time.time()
+        heartbeat(f"t+{int(time.time()-start)}s, log={last_size}B, "
+                  f"unchanged for {int(time.time()-last_change)}s")
     time.sleep(5)
 
-note(f"HANG: {LOG} frozen at {last_size}B for {int(time.time() - last_change)}s")
+state = "FROZEN" if frozen else "watch window expired without freeze"
+note(f"HANG ({state}): {LOG} at {last_size}B for {int(time.time() - last_change)}s")
+heartbeat(f"{state} at t+{int(time.time()-start)}s — firing SysRq-W")
 
 if sysrq >= 0:
     try:
@@ -145,13 +174,14 @@ if sysrq >= 0:
 time.sleep(10)
 kernel = "".join(drain_kmsg())
 
-body = f"""## 🔍 CI hang forensics — `{LABEL}` (posted live by the pre-armed watcher)
+body = f"""## 🔍 CI hang forensics — `{LABEL}`
 
-`{LOG}` frozen at **{last_size}** bytes for {FREEZE_SECONDS}s+ ({int(time.time() - start)}s into the run).
+`{LOG}` {state}: **{last_size}** bytes, unchanged {int(time.time() - last_change)}s, \
+{int(time.time() - start)}s after pytest launch.
 
 ### tail of {LOG}, collected pre-wedge (the last test that started never finished)
 ```
-{collected_tail()}
+{collected_tail(6000)}
 ```
 
 ### SysRq-W — kernel stacks of all uninterruptible (D-state) tasks
@@ -164,6 +194,6 @@ try:
         f.write(body)
 except OSError:
     pass
-post_comment(body)
+api("POST", f"/issues/{PR}/comments", {"body": body})
 note("watcher done (hang path)")
 os._exit(1)

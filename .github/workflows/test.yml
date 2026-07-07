@@ -85,7 +85,10 @@ jobs:
           if [ -f hang.flag ]; then
             echo "skipping — bare import already hangs (see previous step)"; exit 0
           fi
-          sudo -E setsid python3 .github/scripts/ci-hang-watcher.py \
+          # Token via file, not env — sudo scrubs the environment even with -E
+          # in some configs, and we need proof-of-life either way (heartbeat).
+          umask 077; printf '%s' "$GH_TOKEN" > .ghtoken
+          sudo GH_TOKEN_FILE="$PWD/.ghtoken" setsid python3 .github/scripts/ci-hang-watcher.py \
             test.log pytest.exit "$GITHUB_REPOSITORY" "$PR_NUMBER" "py${{ matrix.python-version }}" \
             < /dev/null > watcher.log 2>&1 &
           setsid bash -c 'PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=$!; echo $P > pytest.pid; wait $P; echo $? > pytest.exit' \
