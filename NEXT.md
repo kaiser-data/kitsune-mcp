@@ -2,12 +2,22 @@
 
 _Last updated: 2026-07-07. Running MCP confirmed on v0.20.7._
 
-## RESOLVED 2026-07-07 — CI Linux VM-kill (PR #49) — root-caused and fixed
+## RESOLVED + MERGED 2026-07-07 — CI Linux VM-kill (PR #49, #50)
 
-**Status:** ✅ Fixed. Commit `2a3a059` on `ci/harden-test-hang-diagnostics`.
-Full suite is green on `ubuntu-latest` for both 3.12 and 3.13 — run
-**28881784462**: `686 passed in 6.67s`, `pytest exited 0`. First passing
-full-suite Linux CI since May 16. **Ready to merge PR #49.**
+**Status:** ✅ Fixed and merged to `main`; main CI green on 3.12 + 3.13
+(run 28885353577, `686 passed`). Two PRs:
+- **#49** (`adf9a40`) — the real fix (safe process-group kill + pipe drain).
+- **#50** (`6a6dc9a`) — follow-up: the diagnostic hang-watcher had a leftover
+  `FREEZE_SECONDS=6` from bisection that false-positived on healthy runs (a
+  few-second static-log gap while coverage writes before `pytest.exit`) and
+  failed the *green* post-merge run on main. Raised to 120s. Same PR carried
+  two doc fixes: README hero token-savings `95% → 93%` (matches the reconciled
+  savings table; the `~95%` long-tail *accuracy* figures are separate and
+  correct, unchanged), and a CONTRIBUTING note that a bare `uv run pytest`
+  needs `--extra dev` (addopts require pytest-timeout).
+
+**Only open follow-up:** record the demo video (script is verified
+reproducible; needs a human at the keyboard).
 
 **It was never a hang — it was the runner VM being killed.** An `asyncio`
 subprocess with a full, unread **stdout PIPE** that is then SIGKILLed via
