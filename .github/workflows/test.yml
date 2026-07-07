@@ -96,29 +96,34 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
-      - name: Report results (may wedge on a poisoned runner — evidence already safe)
-        timeout-minutes: 8
+      # NOTE: on hang, test.log's writer is wedged mid-write() holding i_rwsem —
+      # ANY read of test.log blocks forever. Only touch it on the success path.
+      - name: Report results
+        timeout-minutes: 12
         run: |
           [ -f hang.flag ] && exit 1
-          for i in $(seq 1 300); do [ -f pytest.exit ] && break; sleep 1; done
+          for i in $(seq 1 600); do
+            if [ -f pytest.exit ] || ls hang-report-*.md >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
           if [ -f pytest.exit ]; then
             code=$(cat pytest.exit)
             echo "pytest exited $code"
             tail -60 test.log
             exit "$code"
           fi
-          echo "::error::suite hang — forensics were posted to the PR by the watcher"
+          echo "::error::suite hang — forensics posted to the PR by the watcher (and attached as artifact)"
+          sudo cat hang-report-*.md 2>/dev/null || true
           tail -40 watcher.log 2>/dev/null || true
           exit 1
 
-      - name: Upload logs
+      - name: Upload logs (never test.log — reading it blocks on a wedged writer)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hang-forensics-py${{ matrix.python-version }}
           path: |
             hang-report-*.md
-            test.log
             import.log
             watcher.log
             wrapper.log

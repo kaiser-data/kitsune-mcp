@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Pre-armed, fork-free hang watcher for the Linux CI test hang (PR #49).
+"""Pre-armed hang watcher for the Linux CI test hang (PR #49).
 
-Every post-mortem capture so far died because the wedge poisons process
-creation machine-wide: after pytest wedges, ANY fork on the runner blocks
-uninterruptibly (pgrep, sleep, probe launches, the runner's own teardown).
-So this watcher is started BEFORE pytest (as root, detached) and after the
-wedge does strictly fork-free work:
+Root cause of every failed capture so far: pytest wedges MID-write() to
+test.log — a page fault during the write needs mmap_sem (held by another
+wedged thread), so the writer sleeps in D-state holding the file's i_rwsem.
+From that moment, ANY read() of test.log (tail, cat, artifact upload) and any
+/proc/<pid> access needing mmap_sem (cmdline, environ, py-spy) blocks
+uninterruptibly too — including the runner's own teardown.
 
-  - hang detection : os.stat() on test.log (frozen size + no exit file)
-  - kernel stacks  : SysRq-W via a PRE-OPENED fd to /proc/sysrq-trigger,
-                     read back via a PRE-OPENED non-blocking fd to /dev/kmsg
-  - exfiltration   : PR comment via urllib HTTPS (sockets don't fork) —
-                     immune to step/job cancellation and log retention
-
-Never touches /proc/<wedged-pid>/* — those reads block on the wedged task.
+So this watcher, started BEFORE pytest as root and fully detached:
+  - tails test.log incrementally in a DISPOSABLE daemon thread while the
+    suite is healthy (post-wedge reads block — only that thread is lost)
+  - detects the hang with os.stat() only (never blocks)
+  - fires SysRq-W through a PRE-OPENED fd — kernel stacks of every D-state
+    task land in the kmsg ring, read back via a pre-opened non-blocking fd
+  - posts the last-started test + kernel stacks as a PR comment over HTTPS,
+    immune to job cancellation, VM teardown, and step-log retention
 
 Usage: ci-hang-watcher.py <test-log> <exit-file> <repo> <pr-number> <label>
 Env:   GH_TOKEN (posting skipped if empty), WATCH_SECONDS (default 480)
@@ -21,6 +23,7 @@ Env:   GH_TOKEN (posting skipped if empty), WATCH_SECONDS (default 480)
 import json
 import os
 import sys
+import threading
 import time
 import urllib.request
 
@@ -32,7 +35,10 @@ TOKEN = os.environ.get("GH_TOKEN", "")
 def note(*a):
     print(f"[{time.strftime('%H:%M:%S')}]", *a, flush=True)
 
-# --- pre-arm everything that must not fork/open later -----------------------
+note("armed — token:", "present" if TOKEN else "MISSING", "| pr:", PR or "(none)",
+     "| watch:", WATCH_SECONDS, "s")
+
+# --- pre-arm: everything opened before pytest can wedge ---------------------
 try:
     kmsg = os.open("/dev/kmsg", os.O_RDONLY | os.O_NONBLOCK)
 except OSError as e:
@@ -44,6 +50,37 @@ except OSError as e:
     sysrq = -1
     note("sysrq unavailable:", e)
 
+# --- disposable tail thread: the ONLY thing that ever reads test.log --------
+tail_buf: list = []          # chunks, capped to ~64KB total
+tail_lock = threading.Lock()
+
+def _tailer():
+    f = None
+    while f is None:
+        try:
+            f = open(LOG, "rb")
+        except OSError:
+            time.sleep(1)
+    while True:
+        try:
+            chunk = f.read()  # may block forever once the writer wedges — expendable
+        except OSError:
+            return
+        if chunk:
+            with tail_lock:
+                tail_buf.append(chunk)
+                while sum(len(c) for c in tail_buf) > 65536:
+                    tail_buf.pop(0)
+        else:
+            time.sleep(2)
+
+threading.Thread(target=_tailer, daemon=True).start()
+
+def collected_tail(n=6000):
+    with tail_lock:
+        data = b"".join(tail_buf)
+    return data[-n:].decode(errors="replace") or "(nothing collected)"
+
 def drain_kmsg():
     out = []
     if kmsg < 0:
@@ -53,7 +90,7 @@ def drain_kmsg():
             rec = os.read(kmsg, 8192)
         except BlockingIOError:
             break
-        except OSError:  # EPIPE on ring-buffer overrun — keep reading
+        except OSError:  # EPIPE on ring overrun — keep reading
             continue
         if not rec:
             break
@@ -79,22 +116,14 @@ def post_comment(body):
     except Exception as e:
         note("post failed:", e)
 
-def tail_of(path, n=6000):
-    try:
-        with open(path, errors="replace") as f:
-            return f.read()[-n:]
-    except OSError as e:
-        return f"(cannot read {path}: {e})"
-
-# --- watch loop: fork-free ---------------------------------------------------
-drain_kmsg()  # discard boot-time backlog so later reads are wedge-era only
+# --- watch loop: main thread never opens test.log ----------------------------
+drain_kmsg()  # discard boot backlog so later reads are wedge-era only
 start = time.time()
 last_size, last_change = -1, time.time()
-hang = False
 while time.time() - start < WATCH_SECONDS:
     if os.path.exists(EXIT_FILE):
         note("pytest exited cleanly — watcher done")
-        sys.exit(0)
+        os._exit(0)
     try:
         size = os.stat(LOG).st_size
     except OSError:
@@ -102,16 +131,11 @@ while time.time() - start < WATCH_SECONDS:
     if size != last_size:
         last_size, last_change = size, time.time()
     elif size >= 0 and time.time() - last_change > FREEZE_SECONDS:
-        hang = True
         break
     time.sleep(5)
 
-if not hang:
-    note("watch window ended without a frozen log; treating as hang anyway")
-
 note(f"HANG: {LOG} frozen at {last_size}B for {int(time.time() - last_change)}s")
 
-# Kernel stacks of ALL blocked (D-state) tasks, via the pre-opened fds.
 if sysrq >= 0:
     try:
         os.write(sysrq, b"w")
@@ -123,11 +147,11 @@ kernel = "".join(drain_kmsg())
 
 body = f"""## 🔍 CI hang forensics — `{LABEL}` (posted live by the pre-armed watcher)
 
-`{LOG}` frozen at **{last_size}** bytes for {FREEZE_SECONDS}s+, no exit file after {int(time.time() - start)}s.
+`{LOG}` frozen at **{last_size}** bytes for {FREEZE_SECONDS}s+ ({int(time.time() - start)}s into the run).
 
-### tail of {LOG} (the last test that started never finished)
+### tail of {LOG}, collected pre-wedge (the last test that started never finished)
 ```
-{tail_of(LOG)}
+{collected_tail()}
 ```
 
 ### SysRq-W — kernel stacks of all uninterruptible (D-state) tasks
@@ -142,4 +166,4 @@ except OSError:
     pass
 post_comment(body)
 note("watcher done (hang path)")
-sys.exit(1)
+os._exit(1)
