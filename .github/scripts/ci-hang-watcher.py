@@ -27,8 +27,13 @@ import urllib.request
 
 LOG, EXIT_FILE, REPO, PR, LABEL = sys.argv[1:6]
 WATCH_SECONDS = int(os.environ.get("WATCH_SECONDS", "480"))
-FREEZE_SECONDS = 6
-BEAT_SECONDS = 4
+# The healthy full suite finishes in ~7s, but test.log can sit static for a few
+# seconds at the tail while coverage is written before pytest.exit lands. Only a
+# genuine regression-wedge holds the log frozen far longer, so require a long
+# freeze before crying hang — a short value (6s, used during bisection) false-
+# positives on normal runs and fails green builds.
+FREEZE_SECONDS = int(os.environ.get("FREEZE_SECONDS", "120"))
+BEAT_SECONDS = 15
 try:
     TOKEN = open(os.environ.get("GH_TOKEN_FILE", ".ghtoken")).read().strip()
 except OSError:

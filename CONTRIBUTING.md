@@ -15,6 +15,11 @@ make lint       # ruff lint check
 make format     # auto-format with ruff
 ```
 
+> **Running pytest directly?** The test config in `pyproject.toml` (`addopts`)
+> requires `pytest-timeout`, which is a dev dependency. A bare `uv run pytest`
+> fails to start with `unrecognized arguments: --timeout`. Use `make test`, or
+> include the dev extra: `uv run --extra dev pytest tests/`.
+
 ## Tool Patterns
 
 Every tool in `server.py` follows this pattern:
