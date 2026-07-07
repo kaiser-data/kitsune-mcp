@@ -48,14 +48,14 @@ jobs:
       - name: Import check (isolates a collection-time hang from a test-body hang)
         timeout-minutes: 3
         run: |
-          setsid bash -c 'PYTHONUNBUFFERED=1 python -X importtime -c "import server, server_forge" > import.log 2>&1; echo $? > import.exit' < /dev/null &
+          setsid bash -c 'PYTHONUNBUFFERED=1 python -X importtime -c "import server, server_forge" > import.log 2>&1 & P=$!; echo $P > import.pid; wait $P; echo $? > import.exit' < /dev/null &
           for i in $(seq 1 90); do [ -f import.exit ] && break; sleep 1; done
           if [ -f import.exit ]; then
             echo "import exited $(cat import.exit) — module import is clean"
             tail -5 import.log
           else
             echo "IMPORT-HANG" >> hang.flag
-            bash .github/scripts/hang-forensics.sh import.log
+            bash .github/scripts/hang-forensics.sh import.log import.pid
           fi
         env:
           SMITHERY_API_KEY: ""
@@ -66,9 +66,10 @@ jobs:
           if [ -f hang.flag ]; then
             echo "skipping — bare import already hangs (see previous step)"; exit 0
           fi
-          setsid bash -c 'PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1; echo $? > pytest.exit' < /dev/null &
-          # Suite takes ~15s when healthy; 300s gives pytest-timeout (60s/test) and
-          # faulthandler_timeout (90s) room to fire into test.log first.
+          setsid bash -c 'PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=$!; echo $P > pytest.pid; wait $P; echo $? > pytest.exit' < /dev/null &
+          # Suite takes ~15s when healthy; 300s gives pytest-timeout (60s/test),
+          # faulthandler_timeout (90s), and the kernel hung-task detector (120s)
+          # room to fire first.
           for i in $(seq 1 300); do [ -f pytest.exit ] && break; sleep 1; done
           if [ -f pytest.exit ]; then
             code=$(cat pytest.exit)
@@ -77,7 +78,7 @@ jobs:
             exit "$code"
           fi
           echo "TEST-HANG" >> hang.flag
-          bash .github/scripts/hang-forensics.sh test.log
+          bash .github/scripts/hang-forensics.sh test.log pytest.pid
         env:
           # No real API keys needed — tests use mocks
           SMITHERY_API_KEY: ""
@@ -89,6 +90,7 @@ jobs:
           name: hang-forensics-py${{ matrix.python-version }}
           path: |
             hang-forensics.txt
+            forensic-probes/
             test.log
             import.log
             hang.flag
