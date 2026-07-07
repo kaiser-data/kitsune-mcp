@@ -27,8 +27,8 @@ import urllib.request
 
 LOG, EXIT_FILE, REPO, PR, LABEL = sys.argv[1:6]
 WATCH_SECONDS = int(os.environ.get("WATCH_SECONDS", "480"))
-FREEZE_SECONDS = 45
-BEAT_SECONDS = 8
+FREEZE_SECONDS = 6
+BEAT_SECONDS = 4
 try:
     TOKEN = open(os.environ.get("GH_TOKEN_FILE", ".ghtoken")).read().strip()
 except OSError:
@@ -71,6 +71,8 @@ kmsg = _pre_open("/dev/kmsg", os.O_RDONLY | os.O_NONBLOCK)
 sysrq = _pre_open("/proc/sysrq-trigger", os.O_WRONLY)
 meminfo_fd = _pre_open("/proc/meminfo", os.O_RDONLY)
 loadavg_fd = _pre_open("/proc/loadavg", os.O_RDONLY)
+psi_io_fd = _pre_open("/proc/pressure/io", os.O_RDONLY)
+psi_mem_fd = _pre_open("/proc/pressure/memory", os.O_RDONLY)
 
 def read_fd(fd, n=4096):
     if fd < 0:
@@ -87,7 +89,10 @@ def vitals():
         k = line.split(":")[0]
         if k in ("MemTotal", "MemAvailable", "MemFree", "SwapTotal", "SwapFree", "Committed_AS"):
             mem[k] = line.split()[1]  # kB
-    return f"loadavg={read_fd(loadavg_fd).strip()} | " + \
+    psi = " ".join(
+        f"psi_{n}={read_fd(fd).splitlines()[0].split()[1] if read_fd(fd) else '?'}"
+        for n, fd in (("io", psi_io_fd), ("mem", psi_mem_fd)))
+    return f"loadavg={read_fd(loadavg_fd).strip()} | {psi} | " + \
            " ".join(f"{k}={int(v)//1024}M" for k, v in mem.items())
 
 # --- kmsg ring (drained continuously; keep last ~200 lines) --------------------
@@ -192,15 +197,13 @@ while time.time() - start < WATCH_SECONDS:
 
 state = "FROZEN" if frozen else "WATCH WINDOW EXPIRED"
 note(f"{state}: {LOG} at {last_size}B for {int(time.time() - last_change)}s")
-heartbeat(f"t+{int(time.time()-start)}s {state} — firing SysRq-W + SysRq-M")
-
-for key in (b"w", b"m"):
-    if sysrq >= 0:
-        try:
-            os.write(sysrq, key)
-        except OSError as e:
-            note("sysrq", key, "failed:", e)
-    time.sleep(5)
+# The VM dies ~8-12s after the log freezes — fire SysRq-W NOW, post NOW.
+if sysrq >= 0:
+    try:
+        os.write(sysrq, b"w")
+    except OSError as e:
+        note("sysrq w failed:", e)
+time.sleep(3)
 drain_kmsg()
 kernel = "".join(kmsg_ring)
 
