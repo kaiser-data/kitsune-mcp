@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  issues: write        # hang watcher posts forensics as a PR comment
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -58,69 +63,67 @@ jobs:
             tail -5 import.log
           else
             echo "IMPORT-HANG" >> hang.flag
-            bash .github/scripts/hang-forensics.sh import.log import.pid
+            tail -30 import.log 2>/dev/null || true
           fi
         env:
           SMITHERY_API_KEY: ""
 
-      - name: Run tests with coverage (detached + watchdog)
-        # This step NEVER opens /proc and never owns the pytest process: the
-        # detached wrapper runs the watchdog AND the forensics; probes on the
-        # wedged pid each run in their own throwaway session (any of them can
-        # block forever — v1/v2 learned that the hard way). The step only
-        # polls plain files, so it always finishes and keeps its log.
-        timeout-minutes: 12
+      # The wedge poisons process creation machine-wide: once pytest hangs, ANY
+      # fork on the runner blocks uninterruptibly (this is why pgrep, sleep
+      # loops, probe launches and the runner's own teardown all wedged in every
+      # earlier capture attempt). So everything is PRE-ARMED before pytest
+      # starts, and the post-wedge path is 100% fork-free:
+      #   - a root watcher holds pre-opened fds to /dev/kmsg + /proc/sysrq-trigger
+      #   - on hang it fires SysRq-W (kernel stacks of all D-state tasks) and
+      #     POSTS test.log tail + stacks to the PR via HTTPS — immune to job
+      #     cancellation and log retention.
+      - name: Enable kernel diagnostics
+        run: sudo sysctl -w kernel.sysrq=1 kernel.hung_task_timeout_secs=60
+
+      - name: Launch watcher + tests (returns immediately)
         run: |
           if [ -f hang.flag ]; then
             echo "skipping — bare import already hangs (see previous step)"; exit 0
           fi
-          # CRITICAL: >file, not the step's pipe — the wedged pytest holds every
-          # inherited fd open forever, and the runner only ends a step on pipe EOF.
-          setsid bash .github/scripts/run-tests-watchdog.sh < /dev/null > watchdog.log 2>&1 &
-          # wrapper: 300s watchdog + ~60s forensics grace; poll up to 480s
-          for i in $(seq 1 480); do
-            if [ -f pytest.exit ] || [ -f forensics.done ]; then break; fi
-            sleep 1
-          done
+          sudo -E setsid python3 .github/scripts/ci-hang-watcher.py \
+            test.log pytest.exit "$GITHUB_REPOSITORY" "$PR_NUMBER" "py${{ matrix.python-version }}" \
+            < /dev/null > watcher.log 2>&1 &
+          setsid bash -c 'PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -X importtime -m pytest tests/ -v --tb=short --cov=kitsune_mcp --cov-report=xml > test.log 2>&1 & P=$!; echo $P > pytest.pid; wait $P; echo $? > pytest.exit' \
+            < /dev/null > wrapper.log 2>&1 &
+          echo "watcher + pytest launched detached; this step exits before any wedge can start"
+        env:
+          SMITHERY_API_KEY: ""
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: Report results (may wedge on a poisoned runner — evidence already safe)
+        timeout-minutes: 8
+        run: |
+          [ -f hang.flag ] && exit 1
+          for i in $(seq 1 300); do [ -f pytest.exit ] && break; sleep 1; done
           if [ -f pytest.exit ]; then
             code=$(cat pytest.exit)
             echo "pytest exited $code"
             tail -60 test.log
             exit "$code"
           fi
-          echo "TEST-HANG" >> hang.flag
-          if [ -f forensics.done ]; then
-            cat hang-forensics.txt
-          else
-            echo "wrapper never finished forensics; dumping whatever probes returned:"
-            tail -150 test.log 2>/dev/null || true
-            for f in forensic-probes/*.txt; do echo "--- $f"; cat "$f" 2>/dev/null; done || true
-          fi
-        env:
-          # No real API keys needed — tests use mocks
-          SMITHERY_API_KEY: ""
+          echo "::error::suite hang — forensics were posted to the PR by the watcher"
+          tail -40 watcher.log 2>/dev/null || true
+          exit 1
 
-      - name: Upload hang forensics
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hang-forensics-py${{ matrix.python-version }}
           path: |
-            hang-forensics.txt
-            forensic-probes/
+            hang-report-*.md
             test.log
             import.log
-            watchdog.log
+            watcher.log
+            wrapper.log
             hang.flag
           if-no-files-found: ignore
-
-      - name: Fail if hang was detected (after evidence is safe)
-        if: always()
-        run: |
-          if [ -f hang.flag ]; then
-            echo "::error::suite hang detected: $(cat hang.flag) — see hang-forensics artifact"
-            exit 1
-          fi
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
