@@ -95,15 +95,15 @@ jobs:
           # healthy 4s prior) matches a runaway allocation burst. Capping address
           # space at 6GB converts the VM-killer into a MemoryError traceback that
           # names the exact line. -u caps a fork storm into BlockingIOError.
-          # BISECTION: notifications alone (no cov) survived; full suite (+cov)
-          # dies at notifications. Each matrix job now tests one accomplice:
-          #   3.12 → all files up to+incl notifications, NO coverage
-          #   3.13 → notifications alone, WITH coverage
-          # A-dies/B-lives ⇒ earlier-file state; A-lives/B-dies ⇒ pytest-cov.
+          # BISECTION round 2: prefix/no-cov green, notifications+cov green.
+          # Remaining factors from the known-deadly config (full suite + cov):
+          #   3.12 → prefix files WITH coverage (is cov×many-files the pair?)
+          #   3.13 → FULL suite WITHOUT coverage (do post-notifications
+          #          collection imports / more files matter, sans cov?)
           if [ "${{ matrix.python-version }}" = "3.12" ]; then
-            PYARGS="tests/test_adapters.py tests/test_audit_fixes.py tests/test_auto_args.py tests/test_gateway.py tests/test_issue_10_tokens_sent.py tests/test_issue_34_capability_filter.py tests/test_issues_12_13_14_15.py tests/test_notifications.py"
+            PYARGS="tests/test_adapters.py tests/test_audit_fixes.py tests/test_auto_args.py tests/test_gateway.py tests/test_issue_10_tokens_sent.py tests/test_issue_34_capability_filter.py tests/test_issues_12_13_14_15.py tests/test_notifications.py --cov=kitsune_mcp --cov-report=xml"
           else
-            PYARGS="tests/test_notifications.py --cov=kitsune_mcp --cov-report=xml"
+            PYARGS="tests/"
           fi
           setsid bash -c "ulimit -v 6291456; ulimit -u 2048; PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -m pytest $PYARGS -v --tb=long > test.log 2>&1 & P=\$!; echo \$P > pytest.pid; wait \$P; echo \$? > pytest.exit" \
             < /dev/null > wrapper.log 2>&1 &
