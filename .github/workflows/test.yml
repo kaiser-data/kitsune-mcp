@@ -20,19 +20,40 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      # BISECTION round 6: four killer files found (persistent, transports,
-      # tools, ux_changes — each dies solo within seconds, before output).
-      # Halve each file's test classes to localize the killer test(s).
+      # BISECTION round 7: single class per job across the five dead
+      # halves (tra-1 AND tra-2 died: >=2 killers in transports alone),
+      # plus a kitsune-free raw-asyncio-subprocess control.
       matrix:
         include:
-          - { python-version: "3.12", variant: per-1, files: "tests/test_persistent.py::TestPoolEntry tests/test_persistent.py::TestPersistentTransportReusesProcess tests/test_persistent.py::TestReleaseKillsProcess tests/test_persistent.py::TestConnect tests/test_persistent.py::TestListResources" }
-          - { python-version: "3.12", variant: per-2, files: "tests/test_persistent.py::TestReadResource tests/test_persistent.py::TestInheritStderr tests/test_persistent.py::TestPoolEviction tests/test_persistent.py::TestMidCallReconnect tests/test_persistent.py::TestDotenvRevisionInvariant" }
-          - { python-version: "3.12", variant: tra-1, files: "tests/test_transports.py::TestStdioTransportFileNotFound tests/test_transports.py::TestStdioTransportParseSSE tests/test_transports.py::TestHTTPSSETransport tests/test_transports.py::TestWebSocketTransport" }
-          - { python-version: "3.12", variant: tra-2, files: "tests/test_transports.py::TestDockerTransport tests/test_transports.py::TestValidateInstallCmd tests/test_transports.py::TestHTTPSSETransportDirectOAuth tests/test_transports.py::TestGetTransportURLEscapeHatch tests/test_transports.py::TestStdioBufferLimit" }
-          - { python-version: "3.13", variant: too-1, files: "tests/test_tools.py::TestTruncate tests/test_tools.py::TestCleanResponse tests/test_tools.py::TestEstimateTokens tests/test_tools.py::TestCredentialsGuide tests/test_tools.py::TestExtractContent" }
-          - { python-version: "3.13", variant: too-2, files: "tests/test_tools.py::TestSkillPersistence tests/test_tools.py::TestConnectServerIdResolution tests/test_tools.py::TestCraftTool tests/test_tools.py::TestLeanMorph tests/test_tools.py::TestMorphCredentialWarning" }
-          - { python-version: "3.13", variant: ux-1, files: "tests/test_ux_changes.py::TestCredentialsReady tests/test_ux_changes.py::TestInferInstallCmd tests/test_ux_changes.py::TestLocalUninstallCmd tests/test_ux_changes.py::TestStatusOnboarding tests/test_ux_changes.py::TestShapeshiftLocalGate tests/test_ux_changes.py::TestShapeshiftCredBugFix tests/test_ux_changes.py::TestShapeshiftLeanHint tests/test_ux_changes.py::TestShapeshiftCallExample tests/test_ux_changes.py::TestThinSchemaRefetch tests/test_ux_changes.py::TestKitsuneTrustGate" }
-          - { python-version: "3.13", variant: ux-2, files: "tests/test_ux_changes.py::TestShiftbackUninstall tests/test_ux_changes.py::TestRegistryErrors tests/test_ux_changes.py::TestSearchRegistryWarning tests/test_ux_changes.py::TestInspectProbeFailure tests/test_ux_changes.py::TestInspectProbeTrustGate tests/test_ux_changes.py::TestProbeEnvSanitization tests/test_ux_changes.py::TestProbeEnvHeuristicPassthrough tests/test_ux_changes.py::TestCompareTool tests/test_ux_changes.py::TestComparePolish" }
+          - { python-version: "3.12", variant: raw-control, files: RAW }
+          - { python-version: "3.12", variant: per-readresource, files: "tests/test_persistent.py::TestReadResource" }
+          - { python-version: "3.12", variant: per-inheritstderr, files: "tests/test_persistent.py::TestInheritStderr" }
+          - { python-version: "3.12", variant: per-pooleviction, files: "tests/test_persistent.py::TestPoolEviction" }
+          - { python-version: "3.12", variant: per-midcallreconne, files: "tests/test_persistent.py::TestMidCallReconnect" }
+          - { python-version: "3.12", variant: per-dotenvrevision, files: "tests/test_persistent.py::TestDotenvRevisionInvariant" }
+          - { python-version: "3.12", variant: tra-filenotfound, files: "tests/test_transports.py::TestStdioTransportFileNotFound" }
+          - { python-version: "3.12", variant: tra-parsesse, files: "tests/test_transports.py::TestStdioTransportParseSSE" }
+          - { python-version: "3.12", variant: tra-httpssetranspo, files: "tests/test_transports.py::TestHTTPSSETransport" }
+          - { python-version: "3.12", variant: tra-websockettrans, files: "tests/test_transports.py::TestWebSocketTransport" }
+          - { python-version: "3.12", variant: tra-dockertranspor, files: "tests/test_transports.py::TestDockerTransport" }
+          - { python-version: "3.12", variant: tra-validateinstal, files: "tests/test_transports.py::TestValidateInstallCmd" }
+          - { python-version: "3.12", variant: tra-directoauth, files: "tests/test_transports.py::TestHTTPSSETransportDirectOAuth" }
+          - { python-version: "3.12", variant: tra-gettransportur, files: "tests/test_transports.py::TestGetTransportURLEscapeHatch" }
+          - { python-version: "3.12", variant: tra-stdiobufferlim, files: "tests/test_transports.py::TestStdioBufferLimit" }
+          - { python-version: "3.13", variant: too-skillpersisten, files: "tests/test_tools.py::TestSkillPersistence" }
+          - { python-version: "3.13", variant: too-connectserveri, files: "tests/test_tools.py::TestConnectServerIdResolution" }
+          - { python-version: "3.13", variant: too-crafttool, files: "tests/test_tools.py::TestCraftTool" }
+          - { python-version: "3.13", variant: too-leanmorph, files: "tests/test_tools.py::TestLeanMorph" }
+          - { python-version: "3.13", variant: too-morphcredentia, files: "tests/test_tools.py::TestMorphCredentialWarning" }
+          - { python-version: "3.13", variant: ux-shiftbackunins, files: "tests/test_ux_changes.py::TestShiftbackUninstall" }
+          - { python-version: "3.13", variant: ux-registryerrors, files: "tests/test_ux_changes.py::TestRegistryErrors" }
+          - { python-version: "3.13", variant: ux-searchregistry, files: "tests/test_ux_changes.py::TestSearchRegistryWarning" }
+          - { python-version: "3.13", variant: ux-inspectprobefa, files: "tests/test_ux_changes.py::TestInspectProbeFailure" }
+          - { python-version: "3.13", variant: ux-inspectprobetr, files: "tests/test_ux_changes.py::TestInspectProbeTrustGate" }
+          - { python-version: "3.13", variant: ux-probeenvsaniti, files: "tests/test_ux_changes.py::TestProbeEnvSanitization" }
+          - { python-version: "3.13", variant: ux-probeenvheuris, files: "tests/test_ux_changes.py::TestProbeEnvHeuristicPassthrough" }
+          - { python-version: "3.13", variant: ux-comparetool, files: "tests/test_ux_changes.py::TestCompareTool" }
+          - { python-version: "3.13", variant: ux-comparepolish, files: "tests/test_ux_changes.py::TestComparePolish" }
 
     steps:
       - uses: actions/checkout@v6
@@ -108,7 +129,12 @@ jobs:
           # space at 6GB converts the VM-killer into a MemoryError traceback that
           # names the exact line. -u caps a fork storm into BlockingIOError.
           PYARGS="${{ matrix.files }}"
-          setsid bash -c "ulimit -v 6291456; ulimit -u 2048; PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 python -m pytest $PYARGS -v --tb=long > test.log 2>&1 & P=\$!; echo \$P > pytest.pid; wait \$P; echo \$? > pytest.exit" \
+          if [ "$PYARGS" = "RAW" ]; then
+            CMD="python .github/scripts/raw-spawn-repro.py"
+          else
+            CMD="python -m pytest $PYARGS -v --tb=long"
+          fi
+          setsid bash -c "ulimit -v 6291456; ulimit -u 2048; PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 $CMD > test.log 2>&1 & P=\$!; echo \$P > pytest.pid; wait \$P; echo \$? > pytest.exit" \
             < /dev/null > wrapper.log 2>&1 &
           echo "watcher + pytest launched detached; this step exits before any wedge can start"
         env:
