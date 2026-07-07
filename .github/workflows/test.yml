@@ -20,20 +20,19 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      # BISECTION round 5 (endgame): quarters A1 + B2 died, A2 + B1 green.
-      # One job per suspect file — the dying jobs name the killers exactly.
+      # BISECTION round 6: four killer files found (persistent, transports,
+      # tools, ux_changes — each dies solo within seconds, before output).
+      # Halve each file's test classes to localize the killer test(s).
       matrix:
         include:
-          - { python-version: "3.12", variant: oauth,        files: tests/test_oauth.py }
-          - { python-version: "3.12", variant: onboard,      files: tests/test_onboard.py }
-          - { python-version: "3.12", variant: param-alias,  files: tests/test_param_aliases.py }
-          - { python-version: "3.12", variant: persistent,   files: tests/test_persistent.py }
-          - { python-version: "3.12", variant: probe,        files: tests/test_probe.py }
-          - { python-version: "3.13", variant: tools,        files: tests/test_tools.py }
-          - { python-version: "3.13", variant: transport-cov, files: tests/test_transport_coverage.py }
-          - { python-version: "3.13", variant: transports,   files: tests/test_transports.py }
-          - { python-version: "3.13", variant: ux-changes,   files: tests/test_ux_changes.py }
-          - { python-version: "3.13", variant: v014,         files: tests/test_v014_fixes.py }
+          - { python-version: "3.12", variant: per-1, files: "tests/test_persistent.py::TestPoolEntry tests/test_persistent.py::TestPersistentTransportReusesProcess tests/test_persistent.py::TestReleaseKillsProcess tests/test_persistent.py::TestConnect tests/test_persistent.py::TestListResources" }
+          - { python-version: "3.12", variant: per-2, files: "tests/test_persistent.py::TestReadResource tests/test_persistent.py::TestInheritStderr tests/test_persistent.py::TestPoolEviction tests/test_persistent.py::TestMidCallReconnect tests/test_persistent.py::TestDotenvRevisionInvariant" }
+          - { python-version: "3.12", variant: tra-1, files: "tests/test_transports.py::TestStdioTransportFileNotFound tests/test_transports.py::TestStdioTransportParseSSE tests/test_transports.py::TestHTTPSSETransport tests/test_transports.py::TestWebSocketTransport" }
+          - { python-version: "3.12", variant: tra-2, files: "tests/test_transports.py::TestDockerTransport tests/test_transports.py::TestValidateInstallCmd tests/test_transports.py::TestHTTPSSETransportDirectOAuth tests/test_transports.py::TestGetTransportURLEscapeHatch tests/test_transports.py::TestStdioBufferLimit" }
+          - { python-version: "3.13", variant: too-1, files: "tests/test_tools.py::TestTruncate tests/test_tools.py::TestCleanResponse tests/test_tools.py::TestEstimateTokens tests/test_tools.py::TestCredentialsGuide tests/test_tools.py::TestExtractContent" }
+          - { python-version: "3.13", variant: too-2, files: "tests/test_tools.py::TestSkillPersistence tests/test_tools.py::TestConnectServerIdResolution tests/test_tools.py::TestCraftTool tests/test_tools.py::TestLeanMorph tests/test_tools.py::TestMorphCredentialWarning" }
+          - { python-version: "3.13", variant: ux-1, files: "tests/test_ux_changes.py::TestCredentialsReady tests/test_ux_changes.py::TestInferInstallCmd tests/test_ux_changes.py::TestLocalUninstallCmd tests/test_ux_changes.py::TestStatusOnboarding tests/test_ux_changes.py::TestShapeshiftLocalGate tests/test_ux_changes.py::TestShapeshiftCredBugFix tests/test_ux_changes.py::TestShapeshiftLeanHint tests/test_ux_changes.py::TestShapeshiftCallExample tests/test_ux_changes.py::TestThinSchemaRefetch tests/test_ux_changes.py::TestKitsuneTrustGate" }
+          - { python-version: "3.13", variant: ux-2, files: "tests/test_ux_changes.py::TestShiftbackUninstall tests/test_ux_changes.py::TestRegistryErrors tests/test_ux_changes.py::TestSearchRegistryWarning tests/test_ux_changes.py::TestInspectProbeFailure tests/test_ux_changes.py::TestInspectProbeTrustGate tests/test_ux_changes.py::TestProbeEnvSanitization tests/test_ux_changes.py::TestProbeEnvHeuristicPassthrough tests/test_ux_changes.py::TestCompareTool tests/test_ux_changes.py::TestComparePolish" }
 
     steps:
       - uses: actions/checkout@v6
