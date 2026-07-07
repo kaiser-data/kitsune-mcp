@@ -20,23 +20,20 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      # BISECTION round 4: both disjoint halves killed the VM within ~4s of
-      # launch (during collection imports) → ≥2 independent triggers. Quarter
-      # the file sets; python version is irrelevant (both died identically).
+      # BISECTION round 5 (endgame): quarters A1 + B2 died, A2 + B1 green.
+      # One job per suspect file — the dying jobs name the killers exactly.
       matrix:
         include:
-          - python-version: "3.12"
-            variant: A1
-            files: tests/test_oauth.py tests/test_onboard.py tests/test_param_aliases.py tests/test_persistent.py tests/test_probe.py
-          - python-version: "3.12"
-            variant: A2
-            files: tests/test_registry_lock.py tests/test_registry.py tests/test_release_smoke.py tests/test_resolve.py tests/test_session_persistence.py
-          - python-version: "3.13"
-            variant: B1
-            files: tests/test_shapeshift.py tests/test_smithery_gate.py tests/test_ssrf.py tests/test_tool_surface.py
-          - python-version: "3.13"
-            variant: B2
-            files: tests/test_tools.py tests/test_transport_coverage.py tests/test_transports.py tests/test_ux_changes.py tests/test_v014_fixes.py
+          - { python-version: "3.12", variant: oauth,        files: tests/test_oauth.py }
+          - { python-version: "3.12", variant: onboard,      files: tests/test_onboard.py }
+          - { python-version: "3.12", variant: param-alias,  files: tests/test_param_aliases.py }
+          - { python-version: "3.12", variant: persistent,   files: tests/test_persistent.py }
+          - { python-version: "3.12", variant: probe,        files: tests/test_probe.py }
+          - { python-version: "3.13", variant: tools,        files: tests/test_tools.py }
+          - { python-version: "3.13", variant: transport-cov, files: tests/test_transport_coverage.py }
+          - { python-version: "3.13", variant: transports,   files: tests/test_transports.py }
+          - { python-version: "3.13", variant: ux-changes,   files: tests/test_ux_changes.py }
+          - { python-version: "3.13", variant: v014,         files: tests/test_v014_fixes.py }
 
     steps:
       - uses: actions/checkout@v6
