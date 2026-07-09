@@ -116,3 +116,68 @@ def test_lean_tools_documented_count():
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# _active_tool_names() — shared profile resolution
+# ---------------------------------------------------------------------------
+
+def test_active_tool_names_default_is_lean(monkeypatch):
+    from kitsune_mcp.tools._state import _LEAN_TOOL_NAMES, _active_tool_names
+    monkeypatch.delenv("KITSUNE_TOOLS", raising=False)
+    assert _active_tool_names() == _LEAN_TOOL_NAMES
+
+
+def test_active_tool_names_all_is_full_surface(monkeypatch):
+    from kitsune_mcp.tools._state import _BASE_TOOL_NAMES, _active_tool_names
+    monkeypatch.setenv("KITSUNE_TOOLS", "all")
+    assert _active_tool_names() == _BASE_TOOL_NAMES
+
+
+def test_active_tool_names_custom_subset_intersects_base(monkeypatch):
+    from kitsune_mcp.tools._state import _active_tool_names
+    monkeypatch.setenv("KITSUNE_TOOLS", "shapeshift, call, not-a-real-tool")
+    assert _active_tool_names() == {"shapeshift", "call"}
+
+
+# ---------------------------------------------------------------------------
+# GATEWAY bloat hint — must only recommend tools in the active profile
+# ---------------------------------------------------------------------------
+
+def _fake_client_config():
+    from pathlib import Path
+
+    from kitsune_mcp.gateway import AbsorbedServer, ClientConfig
+    return ClientConfig(
+        client="test-client",
+        path=Path("/dev/null"),
+        servers=[AbsorbedServer(id="github", command="npx", client="test-client")],
+    )
+
+
+async def _status_with_competing_server():
+    from unittest import mock
+
+    from kitsune_mcp.tools import status
+    with (
+        mock.patch("kitsune_mcp.gateway._find_mcp_configs", return_value=[_fake_client_config()]),
+        mock.patch("kitsune_mcp.gateway._load_absorbed_servers", return_value=[]),
+    ):
+        return await status()
+
+
+async def test_gateway_hint_lean_profile_does_not_recommend_setup(monkeypatch):
+    """Lean profile has no setup() — the hint must point to KITSUNE_TOOLS=all instead."""
+    monkeypatch.delenv("KITSUNE_TOOLS", raising=False)
+    result = await _status_with_competing_server()
+    assert "GATEWAY" in result
+    assert "Run setup()" not in result
+    assert "KITSUNE_TOOLS=all" in result
+
+
+async def test_gateway_hint_forge_profile_recommends_setup(monkeypatch):
+    """With the full surface active, setup() exists and the hint may name it directly."""
+    monkeypatch.setenv("KITSUNE_TOOLS", "all")
+    result = await _status_with_competing_server()
+    assert "GATEWAY" in result
+    assert "Run setup()" in result

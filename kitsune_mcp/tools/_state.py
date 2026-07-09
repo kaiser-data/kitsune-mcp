@@ -60,6 +60,24 @@ _BASE_TOOL_NAMES = {
     "connect", "release", "test", "bench", "setup", "compare", "onboard",
 }
 
+# Default (lean) profile — server.py prunes to this set when KITSUNE_TOOLS is unset.
+_LEAN_TOOL_NAMES = {"status", "search", "auth", "shapeshift", "call", "auto"}
+
+
+def _active_tool_names() -> set[str]:
+    """Resolve the active tool profile from KITSUNE_TOOLS.
+
+    Single source of truth for profile resolution: server.py uses it to prune
+    tools at import time, and user-facing messages (e.g. the GATEWAY hint in
+    status()) use it to avoid recommending tools outside the active profile.
+    """
+    env = os.getenv("KITSUNE_TOOLS", "")
+    if env.lower() == "all":
+        return set(_BASE_TOOL_NAMES)
+    if env:
+        return {t.strip() for t in env.split(",")} & _BASE_TOOL_NAMES
+    return set(_LEAN_TOOL_NAMES)
+
 # Used by compare() to estimate token cost when a probe is gated/failed but
 # the registry knows the tool count. Calibrated from measured probes:
 # stdio MCP tool descriptions average ~600 tokens each (very rough).

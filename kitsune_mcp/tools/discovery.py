@@ -472,7 +472,13 @@ async def status() -> str:
                     f"  ⚠  {len(competing)} other server(s) active in {cfg.client} "
                     f"(~{tool_est} extra tools in context)"
                 )
-                gw_lines.append("     Run setup() to harvest their credentials and reduce bloat")
+                if "setup" in _state._active_tool_names():
+                    gw_lines.append("     Run setup() to harvest their credentials and reduce bloat")
+                else:
+                    gw_lines.append(
+                        "     Restart with KITSUNE_TOOLS=all to unlock setup() and harvest"
+                        " their credentials"
+                    )
         absorbed = _load_absorbed_servers()
         if absorbed:
             gw_lines.append(
