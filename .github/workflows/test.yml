@@ -128,7 +128,7 @@ jobs:
 
       - name: Upload logs (never test.log — reading it blocks on a wedged writer)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hang-forensics-py${{ matrix.python-version }}
           path: |
