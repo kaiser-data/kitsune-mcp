@@ -7,13 +7,12 @@ All logic lives in the kitsune_mcp package. This file:
   4. Re-exports public names so existing tests (from server import ...) continue to work.
 
 KITSUNE_TOOLS env var controls which tools are registered:
-  (not set)  — lean profile: status, search, auth, shapeshift, call, auto  (~420 tokens overhead)
-  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~1700 tokens)
+  (not set)  — lean profile: status, search, auth, shapeshift, call, auto  (~1,321 tokens overhead)
+  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~3,033 tokens)
   KITSUNE_TOOLS=shapeshift,call — exactly those tools
 """
 
 import contextlib
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -100,6 +99,7 @@ from kitsune_mcp.shapeshift import (  # noqa: E402, F401
 )
 from kitsune_mcp.tools import (  # noqa: E402, F401
     _BASE_TOOL_NAMES,
+    _state,
     auth,
     auto,
     bench,
@@ -148,15 +148,9 @@ from kitsune_mcp.utils import (  # noqa: E402, F401
 # ── Tool profile selection ────────────────────────────────────────────────────
 # All tools registered above via @mcp.tool(). Prune to the requested profile.
 
-_LEAN_TOOLS = {"status", "search", "auth", "shapeshift", "call", "auto"}
-_KITSUNE_TOOLS_ENV = os.getenv("KITSUNE_TOOLS", "")
+_LEAN_TOOLS = _state._LEAN_TOOL_NAMES
 
-if _KITSUNE_TOOLS_ENV.lower() == "all":
-    _active_tools = _BASE_TOOL_NAMES
-elif _KITSUNE_TOOLS_ENV:
-    _active_tools = {t.strip() for t in _KITSUNE_TOOLS_ENV.split(",")} & _BASE_TOOL_NAMES
-else:
-    _active_tools = _LEAN_TOOLS
+_active_tools = _state._active_tool_names()
 
 for _t in _BASE_TOOL_NAMES - _active_tools:
     with contextlib.suppress(Exception):
