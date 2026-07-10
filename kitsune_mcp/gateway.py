@@ -30,6 +30,7 @@ def _client_config_paths() -> dict[str, Path]:
             "linux":  home / ".config/Claude/claude_desktop_config.json",
         },
         "claude-code": {"all": home / ".claude/mcp.json"},
+        "claude-code-user": {"all": home / ".claude.json"},
         "cursor":      {"all": home / ".cursor/mcp.json"},
         "windsurf":    {"all": home / ".codeium/windsurf/mcp_config.json"},
     }
@@ -79,17 +80,49 @@ def _parse_mcp_servers(config: dict, client: str) -> list[AbsorbedServer]:
     return servers
 
 
+def _claude_code_user_servers(data: dict) -> dict:
+    """Merge mcpServers from ~/.claude.json: top-level + current project (project wins)."""
+    servers = dict(data.get("mcpServers") or {})
+    projects = data.get("projects")
+    if isinstance(projects, dict):
+        project = projects.get(str(Path.cwd()))
+        if isinstance(project, dict):
+            servers.update(project.get("mcpServers") or {})
+    return servers
+
+
 def _find_mcp_configs() -> list[ClientConfig]:
-    """Discover MCP client configs present on this machine. Read-only."""
+    """Discover MCP client configs present on this machine. Read-only.
+
+    Precedence: ~/.claude.json (claude-code-user, the modern Claude Code
+    location) wins over the legacy ~/.claude/mcp.json (claude-code) when
+    both define the same server id.
+    """
     result: list[ClientConfig] = []
     for client, path in _client_config_paths().items():
         try:
             data = json.loads(path.read_text())
         except Exception:
             continue
+        if client == "claude-code-user":
+            data = {"mcpServers": _claude_code_user_servers(data)}
         servers = _parse_mcp_servers(data, client)
         if servers:
             result.append(ClientConfig(client=client, path=path, servers=servers))
+
+    modern = next((c for c in result if c.client == "claude-code-user"), None)
+    legacy = next((c for c in result if c.client == "claude-code"), None)
+    if modern and legacy:
+        modern_ids = {s.id for s in modern.servers}
+        remaining = [s for s in legacy.servers if s.id not in modern_ids]
+        if remaining:
+            result = [
+                ClientConfig(client=c.client, path=c.path, servers=remaining)
+                if c is legacy else c
+                for c in result
+            ]
+        else:
+            result = [c for c in result if c is not legacy]
     return result
 
 
