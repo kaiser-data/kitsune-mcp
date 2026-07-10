@@ -104,6 +104,137 @@ class TestFindMcpConfigs:
         assert result == []
 
 
+class TestClaudeCodeUserConfig:
+    """~/.claude.json (claude-code-user) discovery — issue #40."""
+
+    def _write_claude_json(self, tmp_path, data):
+        cfg_file = tmp_path / ".claude.json"
+        cfg_file.write_text(json.dumps(data))
+        return cfg_file
+
+    def test_client_config_paths_includes_claude_json(self, tmp_path):
+        from kitsune_mcp.gateway import _client_config_paths
+        self._write_claude_json(tmp_path, {"mcpServers": {}})
+        with patch("kitsune_mcp.gateway.Path.home", return_value=tmp_path):
+            result = _client_config_paths()
+        assert result.get("claude-code-user") == tmp_path / ".claude.json"
+
+    def test_top_level_mcpservers_discovered(self, tmp_path):
+        cfg_file = self._write_claude_json(
+            tmp_path,
+            {"mcpServers": {"notion": {"command": "npx", "args": ["-y", "notion-mcp"]}}},
+        )
+        from kitsune_mcp.gateway import _find_mcp_configs
+        with patch(
+            "kitsune_mcp.gateway._client_config_paths",
+            return_value={"claude-code-user": cfg_file},
+        ):
+            result = _find_mcp_configs()
+        assert len(result) == 1
+        assert result[0].client == "claude-code-user"
+        assert {s.id for s in result[0].servers} == {"notion"}
+
+    def test_project_scoped_servers_merged_for_cwd(self, tmp_path):
+        import pathlib
+        cfg_file = self._write_claude_json(
+            tmp_path,
+            {
+                "mcpServers": {"notion": {"command": "npx"}},
+                "projects": {
+                    str(pathlib.Path.cwd()): {
+                        "mcpServers": {"github": {"command": "npx"}}
+                    },
+                    "/some/other/project": {
+                        "mcpServers": {"unrelated": {"command": "npx"}}
+                    },
+                },
+            },
+        )
+        from kitsune_mcp.gateway import _find_mcp_configs
+        with patch(
+            "kitsune_mcp.gateway._client_config_paths",
+            return_value={"claude-code-user": cfg_file},
+        ):
+            result = _find_mcp_configs()
+        ids = {s.id for s in result[0].servers}
+        assert ids == {"notion", "github"}
+        assert "unrelated" not in ids
+
+    def test_project_entry_wins_over_top_level(self, tmp_path):
+        import pathlib
+        cfg_file = self._write_claude_json(
+            tmp_path,
+            {
+                "mcpServers": {"github": {"command": "old-cmd"}},
+                "projects": {
+                    str(pathlib.Path.cwd()): {
+                        "mcpServers": {"github": {"command": "new-cmd"}}
+                    }
+                },
+            },
+        )
+        from kitsune_mcp.gateway import _find_mcp_configs
+        with patch(
+            "kitsune_mcp.gateway._client_config_paths",
+            return_value={"claude-code-user": cfg_file},
+        ):
+            result = _find_mcp_configs()
+        assert len(result[0].servers) == 1
+        assert result[0].servers[0].command == "new-cmd"
+
+    def test_claude_json_wins_over_legacy_mcp_json(self, tmp_path):
+        legacy_file = tmp_path / "mcp.json"
+        legacy_file.write_text(json.dumps(
+            {"mcpServers": {
+                "github": {"command": "legacy-cmd"},
+                "only-legacy": {"command": "npx"},
+            }}
+        ))
+        cfg_file = self._write_claude_json(
+            tmp_path, {"mcpServers": {"github": {"command": "modern-cmd"}}}
+        )
+        from kitsune_mcp.gateway import _find_mcp_configs
+        with patch(
+            "kitsune_mcp.gateway._client_config_paths",
+            return_value={"claude-code": legacy_file, "claude-code-user": cfg_file},
+        ):
+            result = _find_mcp_configs()
+        all_servers = [s for cfg in result for s in cfg.servers]
+        github = [s for s in all_servers if s.id == "github"]
+        assert len(github) == 1, "duplicate server id must not be double-counted"
+        assert github[0].command == "modern-cmd"
+        assert {s.id for s in all_servers} == {"github", "only-legacy"}
+
+    def test_legacy_config_dropped_when_fully_shadowed(self, tmp_path):
+        legacy_file = tmp_path / "mcp.json"
+        legacy_file.write_text(json.dumps(
+            {"mcpServers": {"github": {"command": "legacy-cmd"}}}
+        ))
+        cfg_file = self._write_claude_json(
+            tmp_path, {"mcpServers": {"github": {"command": "modern-cmd"}}}
+        )
+        from kitsune_mcp.gateway import _find_mcp_configs
+        with patch(
+            "kitsune_mcp.gateway._client_config_paths",
+            return_value={"claude-code": legacy_file, "claude-code-user": cfg_file},
+        ):
+            result = _find_mcp_configs()
+        assert [cfg.client for cfg in result] == ["claude-code-user"]
+
+    def test_malformed_projects_block_ignored(self, tmp_path):
+        cfg_file = self._write_claude_json(
+            tmp_path,
+            {"mcpServers": {"notion": {"command": "npx"}}, "projects": "not-a-dict"},
+        )
+        from kitsune_mcp.gateway import _find_mcp_configs
+        with patch(
+            "kitsune_mcp.gateway._client_config_paths",
+            return_value={"claude-code-user": cfg_file},
+        ):
+            result = _find_mcp_configs()
+        assert {s.id for s in result[0].servers} == {"notion"}
+
+
 class TestHarvestCredentials:
     def test_extracts_credential_keys(self):
         from kitsune_mcp.gateway import AbsorbedServer, _harvest_credentials
