@@ -1,6 +1,27 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-07. Running MCP confirmed on v0.20.7._
+_Last updated: 2026-07-10. Running MCP confirmed on v0.20.7._
+
+## RESOLVED + MERGED 2026-07-10 — Lean-profile setup() dead-end + stale benchmark docs (PR #52)
+
+**Status:** ✅ Merged to `main` (`785ee24`); main CI green on 3.12 + 3.13.
+
+External review (Grok, reports kept locally untracked) confirmed two issues:
+- The GATEWAY hint in `status()` unconditionally recommended `setup()`, which
+  doesn't exist under the default lean profile. Now profile-aware: lean users
+  get "Restart with `KITSUNE_TOOLS=all` to unlock setup()", forge users keep
+  the direct hint. Profile resolution centralized into `_LEAN_TOOL_NAMES` /
+  `_active_tool_names()` in `kitsune_mcp/tools/_state.py` (single source of
+  truth; `server._LEAN_TOOLS` kept as alias).
+- Stale token numbers: `server.py` docstring (lean ~1,321 / forge ~3,033) and
+  `docs/benchmarks.md` regenerated from actual v0.20.8 output; break-even
+  corrected to 3+ servers (lean) / 5+ (forge).
+- 5 regression tests added (691 total passing).
+
+**Open follow-ups from that review:** issues #40 (`_find_mcp_configs()`
+misses `~/.claude.json`) and #39 (`KITSUNE_HOME` only honored in session.py)
+are the next code tasks; bigger v1.0-track items (demo video, Dockerfile/GHCR,
+client compat matrix, benchmark-in-CI) are catalogued in the readiness report.
 
 ## RESOLVED + MERGED 2026-07-07 — CI Linux VM-kill (PR #49, #50)
 
