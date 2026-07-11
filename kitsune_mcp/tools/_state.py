@@ -57,7 +57,7 @@ _DUMMY_VALUES = {"string": "test", "integer": 0, "boolean": False, "number": 0.0
 _BASE_TOOL_NAMES = {
     "auth", "search", "inspect", "call", "run", "fetch",
     "skill", "key", "login", "auto", "status", "shapeshift", "shiftback", "craft",
-    "connect", "release", "test", "bench", "setup", "compare", "onboard",
+    "connect", "release", "test", "bench", "setup", "compare", "onboard", "prewarm",
 }
 
 # Default (lean) profile — server.py prunes to this set when KITSUNE_TOOLS is unset.

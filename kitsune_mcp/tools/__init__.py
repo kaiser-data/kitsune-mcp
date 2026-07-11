@@ -3,7 +3,7 @@
 Implementation is split into themed submodules:
     discovery   — search, inspect, compare, status
     exec        — call, run, fetch, test, bench
-    shapeshift  — shapeshift, shiftback, craft, connect, release
+    shapeshift  — shapeshift, shiftback, craft, connect, release, prewarm
     onboarding  — skill, key, auth, auto, setup
     _state      — shared helpers and mock-patchable cross-cutting state
 
@@ -62,6 +62,7 @@ from kitsune_mcp.tools.onboarding import auth, auto, key, onboard, setup, skill 
 from kitsune_mcp.tools.shapeshift import (  # noqa: F401
     connect,
     craft,
+    prewarm,
     release,
     shapeshift,
     shiftback,

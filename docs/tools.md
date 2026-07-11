@@ -147,6 +147,25 @@ release("voice")
 # → Released: voice (PID 12345) | uptime: 142s | calls: 7
 ```
 
+### `prewarm(server_id, confirm=False, server_args=None)`
+
+Start a registry server's subprocess in the pool **without** mounting its
+tools — the later `shapeshift(server_id)` reuses the warm process and skips
+the npx/uvx cold-install latency. For benchmark harnesses and
+latency-sensitive sessions.
+
+```python
+prewarm("mcp-server-time")
+# → 🔥 Prewarmed 'mcp-server-time' — PID 12345, 4 tools ready (6.2s).
+shapeshift("mcp-server-time")   # instant — no install delay
+```
+
+Nothing appears in `tools/list` between `prewarm()` and `shapeshift()`.
+Prewarmed entries show under PERSISTENT CONNECTIONS in `status()`; discard an
+unused one with `release(server_id)`. Community sources need `confirm=True`
+(same trust gate as `shapeshift()`). HTTP-hosted servers have no local process
+— nothing to prewarm.
+
 ---
 
 ## Quality Tools
