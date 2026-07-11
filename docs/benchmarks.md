@@ -37,9 +37,9 @@ The comparison shows kitsune's total overhead **including one active mounted ser
 - **Kitsune forge** = 20 full tools + 1 mounted server
 - **Always-on baseline** = N × 8 tools × 97 tokens permanently in context
 
-Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2 servers it costs more). Forge becomes cost-effective at 5+ servers.
+Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2 servers it costs more). Forge becomes cost-effective at 6+ servers.
 
-## Reference output (v0.20.8)
+## Reference output (v0.20.8 + prewarm)
 
 ```
 ==============================================================
@@ -48,22 +48,22 @@ Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2
 
 === Profile sizes (actual registered schemas) ===
   lean  ( 6 tools / default):   1321 tokens
-  forge (20 tools / full):     3033 tokens
+  forge (21 tools / full):     3216 tokens
 
 === Savings: kitsune vs always-on N servers ===
   Baseline: 8 tools/server × 97 tokens/tool (representative avg)
 
   2 servers — always-on baseline:  1552 tokens
     kitsune lean:      2097 tokens  (costs 35% more)
-    kitsune forge:     3809 tokens  (costs 145% more)
+    kitsune forge:     3992 tokens  (costs 157% more)
 
   5 servers — always-on baseline:  3880 tokens
     kitsune lean:      2097 tokens  (saves 45%)
-    kitsune forge:     3809 tokens  (saves 1%)
+    kitsune forge:     3992 tokens  (costs 2% more)
 
   10 servers — always-on baseline:  7760 tokens
     kitsune lean:      2097 tokens  (saves 72%)
-    kitsune forge:     3809 tokens  (saves 50%)
+    kitsune forge:     3992 tokens  (saves 48%)
 
 === Per-tool breakdown ===
   Tool                         Tokens  Profile
@@ -73,6 +73,7 @@ Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2
   setup                           294  forge only
   shapeshift                      252  lean + forge
   auto                            194  lean + forge
+  prewarm                         182  forge only
   craft                           181  forge only
   auth                            151  lean + forge
   compare                         137  forge only

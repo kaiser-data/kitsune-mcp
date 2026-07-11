@@ -711,3 +711,80 @@ async def release(name: str) -> str:
     session["connections"].pop(found_key, None)
 
     return f"Released: {label} (PID {pid}) | uptime: {uptime}s | calls: {calls}"
+
+
+@mcp.tool()
+async def prewarm(server_id: str, confirm: bool = False, server_args: list[str] | None = None) -> str:
+    """Start a server's subprocess in the pool WITHOUT mounting its tools.
+
+    prewarm('mcp-server-time')      # spawn + pool, no tools in session
+    shapeshift('mcp-server-time')   # reuses the warm process — no npx/uvx delay
+
+    For benchmarks and latency-sensitive sessions. confirm=True for community sources.
+    """
+    srv = await _state._registry.get_server(server_id)
+    if srv is None:
+        resolved_id, candidates = await _state._resolve_server_id(server_id)
+        if resolved_id and resolved_id != server_id:
+            resolved_srv = await _state._registry.get_server(resolved_id)
+            if resolved_srv is not None:
+                server_id, srv = resolved_id, resolved_srv
+        if srv is None:
+            if candidates:
+                suggestions = "\n".join(f"  - {c}" for c in candidates)
+                return (
+                    f"❌ prewarm failed: server '{server_id}' not found.\n"
+                    f"Did you mean one of these?\n{suggestions}"
+                )
+            return f"❌ prewarm failed: server '{server_id}' not found in any registry."
+
+    if srv.transport != "stdio" and not srv.install_cmd:
+        return (
+            f"Nothing to prewarm: '{server_id}' is HTTP-hosted — no local process,\n"
+            f"no cold-install latency. Just shapeshift(\"{server_id}\") directly."
+        )
+
+    # Same trust gate as shapeshift() — prewarm downloads and executes the package.
+    trust_level = (os.getenv("KITSUNE_TRUST") or "").lower()
+    _trust_override = trust_level in ("community", "all", "low")
+    if srv.source in TRUST_LOW and not confirm and not _trust_override:
+        return (
+            f"⚠️  '{server_id}' is from {srv.source} (community — not verified by the official MCP registry).\n"
+            f"prewarm downloads and runs its package locally.\n"
+            f"To proceed: prewarm('{server_id}', confirm=True)"
+        )
+
+    resolved_config, missing = _state._resolve_config(srv.credentials, {})
+    if missing:
+        creds_msg = _credentials_guide(server_id, srv.credentials, resolved_config)
+        return f"❌ prewarm failed: missing credentials for '{server_id}':\n\n{creds_msg}"
+
+    # Identical cmd construction to shapeshift()'s stdio path — the pool key
+    # must match so the later shapeshift() reuses this exact process.
+    cmd = (srv.install_cmd or ["npx", "-y", server_id]) + (server_args or [])
+    pool_key = json.dumps(cmd, sort_keys=True)
+    entry = _process_pool.get(pool_key)
+    if entry is not None and entry.is_alive():
+        return (
+            f"Already warm: '{server_id}' (PID {entry.pid()}, uptime {int(entry.uptime_seconds())}s).\n"
+            f"shapeshift(\"{server_id}\") will reuse it."
+        )
+
+    started = time.monotonic()
+    transport = _state.PersistentStdioTransport(cmd)
+    try:
+        live_tools = await transport.list_tools()
+    except Exception as e:
+        return f"❌ prewarm failed: could not start '{server_id}': {e}"
+
+    entry = _process_pool.get(pool_key)
+    if entry is None:
+        return f"❌ prewarm failed: '{server_id}' process did not stay in the pool (exited during handshake?)."
+    entry.name = server_id
+    elapsed = time.monotonic() - started
+
+    return (
+        f"🔥 Prewarmed '{server_id}' — PID {entry.pid()}, {len(live_tools or [])} tools ready ({elapsed:.1f}s).\n"
+        f"No tools mounted. shapeshift(\"{server_id}\") reuses this warm process.\n"
+        f"Discard without mounting: release(\"{server_id}\")."
+    )
