@@ -1,6 +1,35 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-10. Running MCP confirmed on v0.20.7._
+_Last updated: 2026-07-11. Running MCP confirmed on v0.20.7._
+
+## RESOLVED + MERGED 2026-07-11 — Absorbed-server ranking + URL-server absorption (PR #55)
+
+**Status:** ✅ Squash-merged to `main` (`9fe2a47`); post-merge CI green on 3.12 + 3.13
+(run 29150842784, 709 passed). Found via knowledge-graph trace of the
+`AbsorbedServer → ServerInfo` boundary after the #40 follow-up review:
+
+- **URL-based remote servers** (`{"url": ..., "type": "http"|"sse"}` entries,
+  common in `~/.claude.json` — the surface #40 added) were absorbed as
+  `command=""` and converted with hardcoded `transport="stdio"`,
+  `install_cmd=[]`; shapeshift's stdio fallback then "repaired" them into
+  executing `npx -y <server-id>` — an arbitrary same-named npm package.
+  `AbsorbedServer` now carries `url`/`transport` (defaulted — legacy
+  `absorbed_servers.json` loads unchanged), parse maps ws://→websocket else
+  http and skips unlaunchable stubs, `_to_server_info()` passes both through
+  to the existing `_get_transport()` HTTP path.
+- **Ranking inversion:** `source="absorbed"` was missing from `_SOURCE_TIER`
+  (→ 99, behind every registry), `_WORKS_NOW_TIER` (→ 0.0, below anonymous
+  npm), and `TRUST_HIGH` (→ "community — not verified" label). Now tier 0 /
+  0.35 (above official) / high-trust — auto() prefers the user's own working
+  config instead of routing away from it.
+- 11 regression tests added (709 total passing).
+
+**Note for v1.0 hardening (from the same trace):** `ServerInfo.source` is
+stringly-typed and now documents 10 live values — `Literal` types would turn
+silent `.get(..., default)` fall-throughs (the root cause here) into type
+errors. `ServerInfo`'s frozen dataclass has mutable `list`/`dict` fields
+(`tools` is lazily mutated post-construction) — aliasing hazard via the TTL
+cache.
 
 ## RESOLVED + MERGED 2026-07-10 — Lean-profile setup() dead-end + stale benchmark docs (PR #52)
 
