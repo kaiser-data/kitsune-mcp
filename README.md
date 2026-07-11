@@ -318,6 +318,20 @@ Expose only specific tools via `KITSUNE_TOOLS`:
 }
 ```
 
+### Custom state directory
+
+All persistent state — credentials (`.env`), absorbed servers, OAuth tokens,
+session state, skills — lives under `~/.kitsune/` by default. Set
+`KITSUNE_HOME` to relocate the whole directory, e.g. for benchmarks, CI, or
+multi-tenant isolation:
+
+```bash
+KITSUNE_HOME=/tmp/kitsune-iso kitsune-mcp
+```
+
+Everything Kitsune writes then stays under `/tmp/kitsune-iso/` — nothing
+touches `~/.kitsune/`.
+
 ### Smithery
 
 ```json

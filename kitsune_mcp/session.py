@@ -1,11 +1,10 @@
 import contextlib
 import json
-import os
-from pathlib import Path
 
-SKILLS_PATH = Path.home() / ".kitsune" / "skills.json"
+from kitsune_mcp.paths import kitsune_home
 
-_KITSUNE_HOME = Path(os.getenv("KITSUNE_HOME", str(Path.home() / ".kitsune")))
+_KITSUNE_HOME = kitsune_home()
+SKILLS_PATH = _KITSUNE_HOME / "skills.json"
 _STATE_PATH = _KITSUNE_HOME / "state.json"
 
 _session: dict = {
