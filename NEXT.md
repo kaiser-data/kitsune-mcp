@@ -1,6 +1,31 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-11. Running MCP confirmed on v0.20.7._
+_Last updated: 2026-07-11 (evening). Running MCP confirmed on v0.20.7._
+
+## RESOLVED + MERGED 2026-07-11 — KITSUNE_HOME everywhere (#39 → PR #57) and prewarm() (#41 → PR #58)
+
+Both remaining code-backlog items closed the same day, TDD, CI green on 3.12 + 3.13:
+
+- **PR #57** (`ad9c14e`) — new `kitsune_mcp/paths.py::kitsune_home()` is the single
+  source of truth; all six hardcoded `~/.kitsune` sites (issue audit listed 4 —
+  `SKILLS_PATH` and `server.py`'s dotenv load were also hardcoded) now derive from
+  it. Constant names preserved → all existing test patches untouched. README
+  gained a "Custom state directory" section. Issue #39 auto-closed.
+- **PR #58** (`c1e767f`) — `prewarm(server_id)` starts a registry server's
+  subprocess in the pool WITHOUT mounting tools; later `shapeshift()` reuses the
+  warm process (identical cmd → same pool key). Same trust/credential gates as
+  shapeshift. Pool entry named `server_id` → `status()` lists it, `release(id)`
+  discards it. Forge-only (lean stays 6 tools). Forge is now **21 tools /
+  ~3,216 tokens; break-even 6+ servers** — benchmarks.md, tools.md, and the
+  server.py docstring were regenerated in the same PR (no doc drift). Issue #41
+  auto-closed.
+- Dependabot **PR #54** (upload-artifact 4→7) also merged. Suite: **723 passing**.
+
+**Remaining backlog:** v1.0-track items only — demo video (script verified, needs
+a human), Dockerfile/GHCR, client compat matrix, benchmark-in-CI — plus the
+manual close of external PR #33 (SafeSkill badge). v1.0 hardening notes from the
+graph trace (Literal types for `ServerInfo.source`, mutable fields in the frozen
+dataclass) still stand below.
 
 ## RESOLVED + MERGED 2026-07-11 — Absorbed-server ranking + URL-server absorption (PR #55)
 
