@@ -53,6 +53,8 @@ class AbsorbedServer:
     client: str = ""
     absorbed_at: str = ""
     estimated_tools: int = 8
+    url: str = ""              # remote servers ({"url": ...} config entries)
+    transport: str = "stdio"   # "stdio" | "http" | "websocket"
 
 
 @dataclass
@@ -65,17 +67,33 @@ class ClientConfig:
 # ─── Config discovery (Phase 1 — read-only) ───────────────────────────────────
 
 def _parse_mcp_servers(config: dict, client: str) -> list[AbsorbedServer]:
-    """Extract server stubs from an MCP client config dict."""
+    """Extract server stubs from an MCP client config dict.
+
+    Handles both launch styles: local ({"command": ..., "args": [...]}) and
+    remote ({"url": ..., "type": "http"|"sse"}). Entries with neither are
+    skipped — absorbing an unlaunchable stub would make shapeshift fall back
+    to `npx -y <id>`, executing an arbitrary same-named npm package.
+    """
     servers: list[AbsorbedServer] = []
     for name, cfg in (config.get("mcpServers") or {}).items():
         if not isinstance(cfg, dict):
             continue
+        command = cfg.get("command", "")
+        url = cfg.get("url") or ""
+        if command:
+            transport = "stdio"
+        elif url:
+            transport = "websocket" if url.startswith(("ws://", "wss://")) else "http"
+        else:
+            continue
         servers.append(AbsorbedServer(
             id=name,
-            command=cfg.get("command", ""),
+            command=command,
             args=cfg.get("args") or [],
             env=cfg.get("env") or {},
             client=client,
+            url=url,
+            transport=transport,
         ))
     return servers
 
@@ -185,7 +203,8 @@ def _to_server_info(a: AbsorbedServer):
         name=a.id,
         description=f"Absorbed from {a.client}",
         source="absorbed",
-        transport="stdio",
+        transport=a.transport or "stdio",
+        url=a.url,
         install_cmd=install_cmd,
         credentials=creds,
     )

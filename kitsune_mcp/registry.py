@@ -113,7 +113,7 @@ class ServerInfo:
     id: str
     name: str
     description: str
-    source: str           # "official" | "mcpregistry" | "glama" | "smithery" | "npm" | "pypi" | "github"
+    source: str           # "official" | "mcpregistry" | "glama" | "smithery" | "npm" | "pypi" | "github" | "absorbed" | "direct" | "local"
     transport: str        # "http" | "stdio" | "websocket"
     url: str = ""
     install_cmd: list = field(default_factory=list)
@@ -571,6 +571,7 @@ class MultiRegistry(BaseRegistry):
 
 
 _SOURCE_TIER: dict[str, int] = {
+    "absorbed": 0,   # the user's own config — never outranked by a registry
     "official": 0,
     "mcpregistry": 1,
     "smithery": 2,
@@ -631,6 +632,7 @@ def _relevance_score(srv: ServerInfo, query: str) -> float:
 
 
 _WORKS_NOW_TIER: dict[str, float] = {
+    "absorbed": 0.35,  # already ran in the user's own client — strongest works-now signal
     "official": 0.3,
     "mcpregistry": 0.2,
     "glama": 0.2,

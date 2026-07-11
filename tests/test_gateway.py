@@ -66,6 +66,53 @@ class TestParseMcpServers:
         servers = _parse_mcp_servers({"mcpServers": {"bad": "string"}}, "x")
         assert servers == []
 
+    def test_url_server_captured_as_http(self):
+        # Remote servers ({"url": ..., "type": "http"}) live in ~/.claude.json —
+        # they must keep their URL, not degrade to an empty stdio command.
+        from kitsune_mcp.gateway import _parse_mcp_servers
+        servers = _parse_mcp_servers(
+            {"mcpServers": {"acme-internal": {
+                "url": "https://mcp.acme.example/mcp", "type": "http",
+            }}},
+            "claude-code-user",
+        )
+        assert len(servers) == 1
+        assert servers[0].url == "https://mcp.acme.example/mcp"
+        assert servers[0].transport == "http"
+        assert servers[0].command == ""
+
+    def test_sse_type_url_server_maps_to_http(self):
+        from kitsune_mcp.gateway import _parse_mcp_servers
+        servers = _parse_mcp_servers(
+            {"mcpServers": {"s": {"url": "https://mcp.example.com/sse", "type": "sse"}}},
+            "claude-code-user",
+        )
+        assert servers[0].transport == "http"
+
+    def test_ws_url_server_maps_to_websocket(self):
+        from kitsune_mcp.gateway import _parse_mcp_servers
+        servers = _parse_mcp_servers(
+            {"mcpServers": {"s": {"url": "wss://mcp.example.com/ws"}}},
+            "claude-code-user",
+        )
+        assert servers[0].transport == "websocket"
+
+    def test_command_server_defaults_to_stdio(self):
+        from kitsune_mcp.gateway import _parse_mcp_servers
+        servers = _parse_mcp_servers(
+            {"mcpServers": {"s": {"command": "npx", "args": ["-y", "pkg"]}}}, "x"
+        )
+        assert servers[0].transport == "stdio"
+
+    def test_entry_with_neither_command_nor_url_skipped(self):
+        # An unlaunchable stub must not be absorbed — shapeshift would fall back
+        # to executing `npx -y <id>`, running an arbitrary same-named npm package.
+        from kitsune_mcp.gateway import _parse_mcp_servers
+        servers = _parse_mcp_servers(
+            {"mcpServers": {"broken": {"env": {"X_API_KEY": "v"}}}}, "x"
+        )
+        assert servers == []
+
 
 class TestFindMcpConfigs:
     def test_returns_list(self):
@@ -297,6 +344,46 @@ class TestAbsorbedServerPersistence:
         with patch("kitsune_mcp.gateway._ABSORBED_PATH", tmp_path / "nonexistent.json"):
             assert _load_absorbed_servers() == []
 
+    def test_url_fields_roundtrip(self, tmp_path):
+        from kitsune_mcp.gateway import (
+            AbsorbedServer,
+            _load_absorbed_servers,
+            _save_absorbed_servers,
+        )
+        servers = [
+            AbsorbedServer(
+                id="remote", command="", args=[], env={}, client="claude-code-user",
+                url="https://mcp.example.com/mcp", transport="http",
+            )
+        ]
+        absorbed_path = tmp_path / "absorbed_servers.json"
+        with (
+            patch("kitsune_mcp.gateway._KITSUNE_HOME", tmp_path),
+            patch("kitsune_mcp.gateway._ABSORBED_PATH", absorbed_path),
+        ):
+            _save_absorbed_servers(servers)
+            loaded = _load_absorbed_servers()
+
+        assert loaded[0].url == "https://mcp.example.com/mcp"
+        assert loaded[0].transport == "http"
+
+    def test_legacy_json_without_url_fields_loads(self, tmp_path):
+        # absorbed_servers.json written before url/transport existed must still load.
+        import json as _json
+
+        from kitsune_mcp.gateway import _load_absorbed_servers
+        absorbed_path = tmp_path / "absorbed_servers.json"
+        absorbed_path.write_text(_json.dumps([{
+            "id": "old", "command": "npx", "args": ["-y", "pkg"],
+            "env": {}, "client": "claude-desktop",
+            "absorbed_at": "2026-01-01T00:00:00", "estimated_tools": 8,
+        }]))
+        with patch("kitsune_mcp.gateway._ABSORBED_PATH", absorbed_path):
+            loaded = _load_absorbed_servers()
+        assert loaded[0].id == "old"
+        assert loaded[0].url == ""
+        assert loaded[0].transport == "stdio"
+
 
 class TestToServerInfo:
     def test_basic_conversion(self):
@@ -326,6 +413,41 @@ class TestToServerInfo:
         a = AbsorbedServer(id="s", command="npx", args=["-y", "pkg"], env={}, client="c")
         srv = _to_server_info(a)
         assert srv.install_cmd == ["npx", "-y", "pkg"]
+
+    def test_url_server_preserves_transport_and_url(self):
+        # A remote absorbed server must come back as http+url, not an
+        # unlaunchable stdio stub with an empty install_cmd.
+        from kitsune_mcp.gateway import AbsorbedServer, _to_server_info
+        a = AbsorbedServer(
+            id="remote", command="", args=[], env={}, client="claude-code-user",
+            url="https://mcp.example.com/mcp", transport="http",
+        )
+        srv = _to_server_info(a)
+        assert srv.transport == "http"
+        assert srv.url == "https://mcp.example.com/mcp"
+        assert srv.install_cmd == []
+
+
+class TestAbsorbedTrustAndRanking:
+    """Absorbed servers are the user's own working config — rank them first."""
+
+    def test_absorbed_is_high_trust(self):
+        from kitsune_mcp.constants import TRUST_HIGH
+        assert "absorbed" in TRUST_HIGH
+
+    def test_absorbed_in_source_tier_top(self):
+        from kitsune_mcp.registry import _SOURCE_TIER
+        assert _SOURCE_TIER["absorbed"] == 0
+
+    def test_absorbed_works_now_beats_official(self):
+        from kitsune_mcp.registry import ServerInfo, _works_now_score
+        absorbed = ServerInfo(
+            id="s", name="s", description="", source="absorbed", transport="stdio",
+        )
+        official = ServerInfo(
+            id="s", name="s", description="", source="official", transport="stdio",
+        )
+        assert _works_now_score(absorbed) > _works_now_score(official)
 
 
 class TestAbsorbedRegistry:
