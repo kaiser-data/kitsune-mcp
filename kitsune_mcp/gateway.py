@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kitsune_mcp.constants import CRED_SUFFIXES
+from kitsune_mcp.paths import kitsune_home
 
-_KITSUNE_HOME = Path.home() / ".kitsune"
+_KITSUNE_HOME = kitsune_home()
 _ABSORBED_PATH = _KITSUNE_HOME / "absorbed_servers.json"
 _BACKUP_DIR = _KITSUNE_HOME / "backup"
 

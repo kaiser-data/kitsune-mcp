@@ -5,12 +5,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from kitsune_mcp.constants import CRED_SUFFIXES, TRUST_LOW, TRUST_MEDIUM
+from kitsune_mcp.paths import kitsune_home
 
 # Canonical persistent key store — used regardless of CWD. When the server is
 # launched as a system daemon (Claude Desktop, no cwd set), CWD can be ~ or /
-# and a project-local .env won't be found. Writing to ~/.kitsune/.env ensures
-# keys survive restarts no matter where the process starts.
-_KITSUNE_HOME = Path.home() / ".kitsune"
+# and a project-local .env won't be found. Writing to $KITSUNE_HOME/.env
+# (default ~/.kitsune/.env) ensures keys survive restarts no matter where
+# the process starts.
+_KITSUNE_HOME = kitsune_home()
 ENV_PATH = str(_KITSUNE_HOME / ".env")
 
 # .env search order — ~/.kitsune/.env wins (loaded last with override=True)

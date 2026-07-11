@@ -13,15 +13,16 @@ KITSUNE_TOOLS env var controls which tools are registered:
 """
 
 import contextlib
-from pathlib import Path
 
 from dotenv import load_dotenv
 
 # Must run before kitsune_mcp.credentials reads SMITHERY_API_KEY at module level.
-# Load order: project-local .env first (lower priority), then ~/.kitsune/.env
+# Load order: project-local .env first (lower priority), then $KITSUNE_HOME/.env
 # (higher priority — wins regardless of CWD so daemon launches work correctly).
-load_dotenv()                                               # CWD .env (project-local)
-load_dotenv(Path.home() / ".kitsune" / ".env", override=True)  # canonical store wins
+from kitsune_mcp.paths import kitsune_home  # noqa: E402
+
+load_dotenv()                                           # CWD .env (project-local)
+load_dotenv(kitsune_home() / ".env", override=True)     # canonical store wins
 
 from kitsune_mcp.app import mcp  # noqa: E402, F401
 from kitsune_mcp.constants import *  # noqa: E402, F401, F403

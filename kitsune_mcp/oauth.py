@@ -27,9 +27,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from kitsune_mcp.constants import TIMEOUT_FETCH_URL
+from kitsune_mcp.paths import kitsune_home
 from kitsune_mcp.utils import _get_http_client
 
-_KITSUNE_DIR = Path.home() / ".kitsune" / "oauth"
+_KITSUNE_DIR = kitsune_home() / "oauth"
 _CLIENT_NAME = "Kitsune MCP"
 _OAUTH_LISTENER_TIMEOUT = 300.0  # 5 minutes
 _REFRESH_LEAD_SECONDS = 60
