@@ -15,6 +15,7 @@
 [![Smithery](https://smithery.ai/badge/@kaiser-data/kitsune-mcp)](https://smithery.ai/server/@kaiser-data/kitsune-mcp)
 [![Glama](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp/badges/score.svg)](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/EYgcf7EX)
+[![SafeSkill 95/100](https://img.shields.io/badge/SafeSkill-95%2F100_Verified%20Safe-brightgreen)](https://safeskill.dev/scan/kaiser-data-kitsune-mcp)
 
 ---
 
