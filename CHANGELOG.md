@@ -6,6 +6,24 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added — trust-on-first-use (TOFU) version pinning
+
+Resolution-time pinning (`pkg@1.2.3`) makes one session reproducible but
+"latest" still drifts across sessions, so the same `shapeshift()` could
+silently execute a newer — possibly hijacked — release later. TOFU closes that:
+
+- The first mount of an npm/PyPI server records its exact version in
+  `~/.kitsune/pins.json` (atomic, `0600`). Later mounts reuse the pinned
+  version and, on drift, launch the pinned version while surfacing
+  `⚠️ pinned to X, registry now offers Y` in the shapeshift output.
+- `KITSUNE_REPIN=1` adopts the newer version and updates the pin.
+- Applied before `server_args` and before the Docker sandbox wrap, so the
+  pinned version is what actually launches on host or in the container.
+- Honest limits (documented): pins a version, not a content digest;
+  `github:` targets and hand-written `connect()` commands carry no version and
+  pass through unpinned. New module `kitsune_mcp/pins.py`; no tool-schema
+  change (policy via env, like `KITSUNE_TRUST`/`KITSUNE_SANDBOX`).
+
 ### Added — Docker sandbox for local npm/PyPI servers (`sandbox=True`)
 
 The hardened Docker profile was previously reachable only via explicit

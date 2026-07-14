@@ -22,6 +22,9 @@ from kitsune_mcp.credentials import (
     _smithery_available,  # noqa: F401  (accessed as _state._smithery_available in shapeshift + tests)
     _to_env_var,
 )
+from kitsune_mcp.pins import (
+    reconcile as reconcile_pin,  # noqa: F401  (accessed as _state.reconcile_pin in shapeshift + tests)
+)
 from kitsune_mcp.probe import (
     _doc_uri_priority,
     _probe_requirements,  # noqa: F401  (accessed as _state._probe_requirements in shapeshift + tests)

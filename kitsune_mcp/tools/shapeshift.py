@@ -418,8 +418,14 @@ async def shapeshift(
                 # nothing lands on the host, so there is nothing to uninstall.
                 session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
 
+        pin_note = ""
         if srv.transport == "stdio":
-            cmd = (srv.install_cmd or ["npx", "-y", server_id]) + (server_args or [])
+            base_cmd = srv.install_cmd or ["npx", "-y", server_id]
+            # TOFU pin: reuse the version trusted on first mount; warn on drift.
+            # Applied before server_args and before the sandbox wrap so the
+            # pinned version is what actually launches (host or container).
+            base_cmd, pin_note = _state.reconcile_pin(server_id, base_cmd, srv_source)
+            cmd = base_cmd + (server_args or [])
             if sandboxing:
                 cmd = _state.sandbox_wrap_cmd(cmd, env_names=_state._sandbox_env_names(srv))
             # PersistentStdioTransport keeps the process alive for subsequent tool calls
@@ -463,6 +469,8 @@ async def shapeshift(
             trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry){timing}"
         if auto_resolved_from is not None:
             trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
+        if pin_note:
+            trust_note = trust_note + "\n" + pin_note
 
         return await _commit_shapeshift(
             server_id, transport, tool_schemas, resolved_config, tools, ctx,
