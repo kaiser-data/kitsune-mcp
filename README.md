@@ -33,6 +33,21 @@ This is where the name earns itself: you *shift* into an unfamiliar server's sha
 
 **Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,321 tokens** in every turn. Against a client with native deferral, that floor is *additive* — so don't install Kitsune to save tokens. Install it for reach: one config entry that puts the entire MCP ecosystem one call away, with no restart. The token math below still applies when you compare against servers kept fully mounted (always-on, or clients without native Tool Search).
 
+---
+
+## What this actually solves
+
+Native Tool Search already handles the token problem for servers in your config. These four problems it does **not** touch — they are what Kitsune is for:
+
+| Problem | Without Kitsune | With Kitsune |
+|---|---|---|
+| **Adding a server is a restart.** A new MCP server means editing client JSON and restarting the session — you lose your context to gain a tool. | Edit config → restart → re-establish context | `shapeshift("server", confirm=True)` → tools live, same session |
+| **Iterating on your own server is a restart *per change*.** Every edit to a tool's schema or behaviour needs a client reboot to take effect. | Edit code → restart client → re-test → repeat | Edit code → `release()` → `connect()` → `call()` — an [MCP REPL](docs/demo-realtime.md#act-1) |
+| **The long tail can't be pre-installed.** 130,000+ servers across Glama, Smithery, npm, PyPI. You will never keep them configured. | Not available — or install-and-restart for a one-off | `search()` → `shapeshift()` → `call()` on demand, then drop it |
+| **Unknown server code is a supply-chain risk.** Running a community server means executing arbitrary code with your credentials. | You run it raw, or you don't run it | Trust-tier gate + subprocess/Docker sandbox + SSRF & injection guards ([Safety & sandboxing](#safety--sandboxing)) |
+
+The through-line: **reach and execution, at runtime, without giving up your session** — and a safety layer because "run any of 130,000 servers on demand" is only usable if running an unknown one is contained.
+
 ### Why not just shell out to a CLI?
 
 Shelling out to `aws`, `gcloud`, `kubectl`, or `gh` from a Bash tool *also* costs ~0 tokens at rest. So why MCP at all?
@@ -82,9 +97,11 @@ Fewer tools in context also means more reliable answers. Research consistently s
 
 ## Contents
 
+- [What this actually solves](#what-this-actually-solves)
 - [Why not just shell out to a CLI?](#why-not-just-shell-out-to-a-cli)
 - [Installation](#installation)
 - [Quick start](#quick-start)
+- [Developing an MCP server live](#developing-an-mcp-server-live)
 - [How it works](#how-it-works)
 - [Tool reference](#tool-reference)
 - [Server sources](#server-sources)
@@ -92,7 +109,7 @@ Fewer tools in context also means more reliable answers. Research consistently s
 - [Performance](#performance)
 - [Configuration](#configuration)
 - [Agent profiles](#agent-profiles)
-- [Security](#security)
+- [Safety & sandboxing](#safety--sandboxing)
 - [For MCP developers](#for-mcp-developers)
 - [Contributing](#contributing)
 
@@ -141,7 +158,7 @@ search("web scraping")
 # Mount specific tools, use them, release
 shapeshift("notion-hosted", tools=["notion-search"])
 call("notion-search", arguments={"query": "roadmap"})
-shapeshift()                          # context returns to ~1,321 tokens
+shapeshift()                          # disconnect; context back to baseline
 
 # One-shot via auto() — use server_hint for reliable routing
 auto("current time in Tokyo", server_hint="mcp-server-time")
@@ -152,6 +169,67 @@ shapeshift("brave", tools=["brave_web_search"])
 call("brave_web_search", arguments={"query": "MCP protocol 2025"})
 shapeshift()
 ```
+
+**Run a long-tail server from Glama or Smithery — none of it pre-installed:**
+
+```python
+search("pdf", registry="glama")        # search a specific registry
+# Community sources (glama/npm/pypi) need one explicit confirm:
+shapeshift("mcp-pdf-tools", confirm=True)     # spawns via npx/uvx, sandboxed subprocess
+call("extract_text", arguments={"path": "report.pdf"})
+shapeshift()                                  # process released
+
+# Smithery-hosted (HTTP) — needs a free SMITHERY_API_KEY
+search("exa", registry="smithery")
+shapeshift("exa")                             # hosted, no local install
+call("web_search_exa", arguments={"query": "MCP registry growth 2026"})
+shapeshift()
+```
+
+See [Developing an MCP server live](#developing-an-mcp-server-live) for the edit → reload → test loop, and the full [real-time demo script](docs/demo-realtime.md).
+
+---
+
+## Developing an MCP server live
+
+Building your own MCP server normally means a restart on every change: edit a tool, reboot the client so it re-reads the schema, re-establish your session, test, repeat. Kitsune turns that into an **edit → reload → test loop in one session** — an MCP REPL for your work-in-progress server.
+
+The loop uses `connect()` (start a local command as a pooled process) and `release()` (kill it so the next `connect()` picks up your new code). These are dev tools, **not** in the default lean profile — enable them:
+
+```json
+{
+  "mcpServers": {
+    "kitsune": {
+      "command": "kitsune-mcp",
+      "env": { "KITSUNE_TOOLS": "all" }
+    }
+  }
+}
+```
+
+Then, without ever restarting your client:
+
+```python
+# 1. Start your work-in-progress server
+connect("uvx --from . my-mcp-server", name="dev")
+#   → Connected: dev (PID 40213) | Tools (3): search, fetch, summarize
+
+# 2. Call a tool, see it work (or fail)
+call("summarize", arguments={"url": "https://example.com"})
+
+# 3. Edit the tool's code in your editor …
+
+# 4. Reload: drop the old process, start the new code
+release("dev")
+connect("uvx --from . my-mcp-server", name="dev")     # now running your edit
+
+# 5. Re-test immediately
+call("summarize", arguments={"url": "https://example.com"})
+```
+
+> **The footgun this removes:** `connect()` pools processes, so calling it again after an edit without `release()` first hands you the *old* process running the *old* code. Kitsune detects this and tells you: *"Changed the code? release('dev') first — this process predates your edit."* Always `release()` before reconnecting.
+
+Local `connect()` targets are treated as untrusted (`confirm=True` / `KITSUNE_TRUST` applies) and run as isolated subprocesses — see [Safety & sandboxing](#safety--sandboxing). Full walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md#act-1).
 
 ---
 
@@ -394,32 +472,35 @@ shapeshift("@modelcontextprotocol/server-memory",
 
 ---
 
-## Security
+## Safety & sandboxing
 
-### Trust tiers
+"Run any of 130,000+ servers on demand" is only usable if running an *unknown* one is contained. Every server Kitsune mounts is untrusted code executed with your credentials, so containment is a first-class feature, not an afterthought. Four layers:
 
-| Tier | Sources | Label |
+**1. Trust-tier gate — you consent before arbitrary code runs.**
+
+| Tier | Sources | On mount |
 |---|---|---|
-| High | `official` (modelcontextprotocol/servers) | `✓ Source: official` |
-| Medium | `mcpregistry`, `glama`, `smithery` | `✓ Source: smithery` |
-| Community | `npm`, `pypi`, `github` | `⚠ Source: npm (community — not verified)` |
+| High | `official` (modelcontextprotocol/servers) | runs directly |
+| Medium | `mcpregistry`, `glama`, `smithery` | runs directly |
+| Community | `npm`, `pypi`, `github`, local `connect()` | **requires `confirm=True`** |
 
-Community servers require `confirm=True` on `shapeshift()` — an explicit acknowledgement before running arbitrary code. Set `KITSUNE_TRUST=community` (via `auth("KITSUNE_TRUST", "community")` or `.env`) to skip the gate globally for servers you already trust.
+Community and local sources refuse to run until you pass `confirm=True` on `shapeshift()`/`connect()` — an explicit acknowledgement that you're about to execute unverified code. `KITSUNE_TRUST=community` (via `auth("KITSUNE_TRUST", "community")`) waives the gate for sources you already trust; `status()` warns when that override is active.
 
-### Credential handling
+**2. Process isolation — the server never shares Kitsune's memory.**
+- stdio servers run as isolated OS subprocesses — separate address space, no shared state with the gateway
+- Docker servers run `docker run --rm -i --memory 512m` — ephemeral (auto-removed on exit) and RAM-capped (override per call)
+- Process pool is hard-capped at **10 concurrent** servers; idle processes are evicted after **1 hour**
 
-- Credentials stored at `~/.kitsune/.env` and `~/.kitsune/oauth/` with mode `0600`
+**3. Input guards — before a subprocess is ever spawned.**
+- Install commands are validated against shell-metacharacter (`& ; | $ \` \n`) and path-traversal (`../`) patterns — a malicious `server_id` can't inject a shell command
+- `fetch()` and every registry call are HTTPS-only and SSRF-guarded: requests to private, loopback, or non-global IPs are blocked, and **every redirect hop is re-validated** (opt out only with `KITSUNE_ALLOW_LOCAL_FETCH=1`)
+
+**4. Credential handling — least exposure.**
+- Credentials at `~/.kitsune/.env` and `~/.kitsune/oauth/` are written with mode `0600`
 - OAuth 2.1 with PKCE S256 and Dynamic Client Registration (RFC 7591) for hosted servers
-- `shapeshift()` warns on missing credentials before any tool call
-- `auth("server-id", "logout")` clears cached OAuth tokens
+- `shapeshift()` warns on missing credentials *before* any tool call; `auth("server-id", "logout")` clears cached tokens
 
-### Process isolation
-
-- stdio servers run as isolated OS subprocesses — no shared memory with Kitsune
-- Docker servers run with `--rm -i --memory 512m`
-- `fetch()` blocks private IPs, loopback, and non-HTTPS URLs
-- Process pool capped at 10 concurrent servers; idle processes evicted after 1 hour
-- Install commands validated against shell metacharacter and path-traversal patterns before execution
+See the sandbox in action in [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
 
 ---
 
