@@ -627,7 +627,9 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
         label = existing.name or friendly
         return (
             f"Already connected: {label} (PID {existing.pid()}) | "
-            f"uptime: {uptime}s | calls: {calls}"
+            f"uptime: {uptime}s | calls: {calls}\n"
+            f"Changed the code? release('{label}') first — this process "
+            f"predates your edit and is running the old code."
         )
 
     transport = _state.PersistentStdioTransport(install_cmd, inherit_stderr=inherit_stderr)

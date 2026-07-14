@@ -108,6 +108,24 @@ def _simple_search(servers: list["ServerInfo"], query: str, limit: int) -> list[
     return [s for s in servers if _hits(s)][:limit]
 
 
+def _pin_npm_spec(name: str, version: str) -> str:
+    """Pin an npm package spec to an exact version for reproducible runs.
+
+    Scoped packages keep their leading '@' and take the version after a second
+    '@' (e.g. '@scope/pkg@1.2.3'). Returns the bare name when version is falsy.
+    """
+    if not version:
+        return name
+    return f"{name}@{version}"
+
+
+def _pin_pypi_spec(name: str, version: str) -> str:
+    """Pin a PyPI requirement to an exact version (PEP 508 '=='). Bare on empty."""
+    if not version:
+        return name
+    return f"{name}=={version}"
+
+
 @dataclass(frozen=True, slots=True)
 class ServerInfo:
     id: str
@@ -289,7 +307,7 @@ class NpmRegistry(BaseRegistry):
             source="npm",
             transport="stdio",
             url="",
-            install_cmd=["npx", "-y", id],
+            install_cmd=["npx", "-y", _pin_npm_spec(id, latest)],
             credentials={},
             tools=[],
             token_cost=0,
@@ -368,7 +386,7 @@ class PyPIRegistry(BaseRegistry):
             source="pypi",
             transport="stdio",
             url="",
-            install_cmd=["uvx", id],
+            install_cmd=["uvx", _pin_pypi_spec(id, info.get("version", ""))],
             credentials={},
             tools=[],
             token_cost=0,

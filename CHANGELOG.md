@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Security — hardened Docker profile + default version pinning
+
+Responds to an external review noting that "an isolated OS subprocess is not a
+sandbox" and that execution was unpinned.
+
+- **DockerTransport is hardened by default.** Every `docker run` now adds
+  `--pids-limit 512`, `--security-opt no-new-privileges`, `--cap-drop ALL`, and
+  `--read-only` with a writable `--tmpfs /tmp`. Per-call opt-outs: `writable`,
+  `cap_add`, `network`, `pids_limit`, `memory`.
+- **npm/PyPI versions are pinned at resolution.** `NpmRegistry.get_server` and
+  `PyPIRegistry.get_server` now emit `npx -y pkg@<version>` / `uvx pkg==<version>`
+  using the exact version the registry reports, so a later run can't silently
+  pick up a newer release. Falls back to the bare name when no version is known.
+- **Docs:** README "Safety & sandboxing" → "Safety model", split into what it
+  does and does not protect against; `confirm=True` documented as a
+  model-settable signal, not a human-approval boundary. New `docs/demo-realtime.md`.
+
+---
+
 ## [0.20.8] — 2026-05-24
 
 ### Fixed — #44 completed for Smithery servers (thin registry schemas)

@@ -200,6 +200,56 @@ class TestDockerTransport:
         label_idx = cmd.index("--label")
         assert cmd[label_idx + 1] == "kitsune-mcp=1"
 
+    # --- Hardening profile -------------------------------------------------
+
+    def test_build_cmd_hardened_by_default(self):
+        """Untrusted images get a locked-down profile with no extra config."""
+        t = DockerTransport("mcp/image")
+        cmd = t._build_cmd({})
+        joined = " ".join(cmd)
+        # No new privileges
+        assert "--security-opt" in cmd
+        assert "no-new-privileges" in joined
+        # Drop all Linux capabilities
+        assert "--cap-drop" in cmd
+        assert "ALL" in cmd
+        # Read-only root fs with a writable tmpfs so servers can still scratch
+        assert "--read-only" in cmd
+        assert "--tmpfs" in cmd
+        # PID cap to blunt fork bombs
+        assert "--pids-limit" in cmd
+
+    def test_build_cmd_pids_limit_default(self):
+        t = DockerTransport("mcp/image")
+        cmd = t._build_cmd({})
+        idx = cmd.index("--pids-limit")
+        assert cmd[idx + 1] == "512"
+
+    def test_build_cmd_writable_opt_out(self):
+        """config['writable']=True drops --read-only for servers that need to write."""
+        t = DockerTransport("mcp/image")
+        cmd = t._build_cmd({"writable": True})
+        assert "--read-only" not in cmd
+
+    def test_build_cmd_network_none(self):
+        """config['network'] pins --network for network-isolated servers."""
+        t = DockerTransport("mcp/image")
+        cmd = t._build_cmd({"network": "none"})
+        idx = cmd.index("--network")
+        assert cmd[idx + 1] == "none"
+
+    def test_build_cmd_no_network_flag_by_default(self):
+        """Default keeps bridge networking (most MCP servers need egress)."""
+        t = DockerTransport("mcp/image")
+        cmd = t._build_cmd({})
+        assert "--network" not in cmd
+
+    def test_build_cmd_custom_pids_limit(self):
+        t = DockerTransport("mcp/image")
+        cmd = t._build_cmd({"pids_limit": 128})
+        idx = cmd.index("--pids-limit")
+        assert cmd[idx + 1] == "128"
+
     async def test_missing_docker_returns_friendly_message(self):
         t = DockerTransport("mcp/nonexistent-image:latest")
         with patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError("docker")):
