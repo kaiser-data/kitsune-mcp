@@ -199,8 +199,10 @@ note: stdio isolation is *not* a security sandbox — the process runs as your u
 ```
 • stdio servers  → separate OS subprocess (isolated from Kitsune's memory,
                    but runs with YOUR permissions — files, network, env)
-• docker servers → docker run --rm -i --memory 512m  (ephemeral, RAM-capped;
-                   not yet hardened — no cap-drop / ro-rootfs / net limits)
+• docker servers → docker run --rm -i --memory 512m --pids-limit 512
+                   --cap-drop ALL --security-opt no-new-privileges
+                   --read-only --tmpfs /tmp   (hardened by default)
+• versions       → npm/pypi pinned at resolution (npx pkg@1.2.3 / uvx pkg==1.2.3)
 • pool           → max 10 processes, idle ones evicted after 1h
 • credentials    → ~/.kitsune/.env at mode 0600, warned-on before use
 ```

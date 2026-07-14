@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 import kitsune_mcp.credentials as _creds
 from kitsune_mcp import oauth
 from kitsune_mcp.constants import (
+    DOCKER_DEFAULT_MEMORY,
+    DOCKER_DEFAULT_PIDS,
     MCP_CLIENT_INFO,
     MCP_PROTOCOL_VERSION,
     POOL_MAX_IDLE_SECONDS,
@@ -1042,28 +1044,59 @@ class WebSocketTransport(BaseTransport):
 
 
 class DockerTransport(BaseTransport):
-    """Run an MCP server inside a Docker container via stdio.
+    """Run an MCP server inside a Docker container via stdio, hardened by default.
 
-    Uses `docker run --rm -i --memory <limit>` so the container is:
-    - ephemeral (--rm auto-removes it on exit)
-    - RAM-capped (default 512m, override via config["memory"])
+    Every container runs with a locked-down profile so an untrusted image is
+    contained even if it turns hostile:
+    - ephemeral        (--rm auto-removes it on exit)
+    - RAM-capped       (--memory, default 512m)
+    - PID-capped       (--pids-limit, default 512 — blunts fork bombs)
+    - no privilege esc (--security-opt no-new-privileges)
+    - no capabilities  (--cap-drop ALL)
+    - read-only rootfs (--read-only + --tmpfs /tmp for scratch space)
     - pooled through PersistentStdioTransport — shares the 10-process hard cap
+
+    Networking stays on by default (most MCP servers need egress); pass
+    config["network"]="none" to cut it. This is stronger than a bare `docker
+    run`, but Docker is not a security boundary against a kernel exploit —
+    treat it as defence-in-depth, not a guarantee.
+
+    Config overrides (all optional):
+        memory:     RAM limit                (default "512m")
+        pids_limit: max processes            (default 512)
+        writable:   True → drop --read-only  (for servers that write to disk)
+        network:    docker --network value   (e.g. "none")
+        cap_add:    list of caps to re-add   (for servers that truly need one)
+        env:        {name: value} passed as -e
 
     Usage:
         call("docker:mcp/my-image:latest", "tool_name", {...})
-        call("docker:my-image", "tool_name", {...}, config={"memory": "256m"})
+        call("docker:my-image", "tool_name", {...}, config={"network": "none"})
     """
 
     def __init__(self, image: str):
         self.image = image
 
     def _build_cmd(self, config: dict) -> list[str]:
-        memory = str(config.get("memory") or "512m")
+        memory = str(config.get("memory") or DOCKER_DEFAULT_MEMORY)
+        pids_limit = str(config.get("pids_limit") or DOCKER_DEFAULT_PIDS)
         cmd = [
             "docker", "run", "--rm", "-i",
             "--label", "kitsune-mcp=1",
             "--memory", memory,
+            "--pids-limit", pids_limit,
+            "--security-opt", "no-new-privileges",
+            "--cap-drop", "ALL",
         ]
+        for cap in (config.get("cap_add") or []):
+            cmd += ["--cap-add", str(cap)]
+        # Read-only root filesystem unless the server explicitly needs to write.
+        # Always give it a small writable tmpfs so well-behaved servers can scratch.
+        if not config.get("writable"):
+            cmd += ["--read-only", "--tmpfs", "/tmp"]
+        network = config.get("network")
+        if network:
+            cmd += ["--network", str(network)]
         for k, v in (config.get("env") or {}).items():
             cmd += ["-e", f"{k}={v}"]
         cmd.append(self.image)

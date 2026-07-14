@@ -39,6 +39,11 @@ MAX_RESOURCE_DOCS = 4
 POOL_MAX_IDLE_SECONDS = 3600   # evict processes idle for longer than 1 hour
 POOL_MAX_PROCESSES    = 10     # hard cap on concurrent pool entries
 
+# Docker hardening defaults — applied to every `docker run` unless overridden
+# per call via config. Untrusted MCP images run with a locked-down profile.
+DOCKER_DEFAULT_MEMORY = "512m"
+DOCKER_DEFAULT_PIDS   = 512    # cap process count to blunt fork bombs
+
 OFFICIAL_REGISTRY_URL       = "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/servers.json"
 OFFICIAL_REGISTRY_CACHE_TTL = 86400  # 24 hours — list rarely changes
 
