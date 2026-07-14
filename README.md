@@ -44,7 +44,7 @@ Native Tool Search already handles the token problem for servers in your config.
 | **Adding a server is a restart.** A new MCP server means editing client JSON and restarting the session — you lose your context to gain a tool. | Edit config → restart → re-establish context | `shapeshift("server", confirm=True)` → tools live, same session |
 | **Iterating on your own server is a restart *per change*.** Every edit to a tool's schema or behaviour needs a client reboot to take effect. | Edit code → restart client → re-test → repeat | Edit code → `release()` → `connect()` → `call()` — an [MCP REPL](docs/demo-realtime.md#act-1) |
 | **The long tail can't be pre-installed.** 130,000+ servers across Glama, Smithery, npm, PyPI. You will never keep them configured. | Not available — or install-and-restart for a one-off | `search()` → `shapeshift()` → `call()` on demand, then drop it |
-| **Unknown server code is a supply-chain risk.** Running a community server means executing arbitrary code with your credentials. | You run it raw, or you don't run it | Trust-tier gate + subprocess/Docker sandbox + SSRF & injection guards ([Safety & sandboxing](#safety--sandboxing)) |
+| **Unknown server code is a supply-chain risk.** Running a community server means executing arbitrary code with your credentials. | You run it raw, or you don't run it | Trust-tier consent gate + process/Docker isolation + SSRF & injection guards — with [honest limits](#safety-model) |
 
 The through-line: **reach and execution, at runtime, without giving up your session** — and a safety layer because "run any of 130,000 servers on demand" is only usable if running an unknown one is contained.
 
@@ -109,7 +109,7 @@ Fewer tools in context also means more reliable answers. Research consistently s
 - [Performance](#performance)
 - [Configuration](#configuration)
 - [Agent profiles](#agent-profiles)
-- [Safety & sandboxing](#safety--sandboxing)
+- [Safety model](#safety-model)
 - [For MCP developers](#for-mcp-developers)
 - [Contributing](#contributing)
 
@@ -175,7 +175,7 @@ shapeshift()
 ```python
 search("pdf", registry="glama")        # search a specific registry
 # Community sources (glama/npm/pypi) need one explicit confirm:
-shapeshift("mcp-pdf-tools", confirm=True)     # spawns via npx/uvx, sandboxed subprocess
+shapeshift("mcp-pdf-tools", confirm=True)     # spawns via npx/uvx, isolated subprocess
 call("extract_text", arguments={"path": "report.pdf"})
 shapeshift()                                  # process released
 
@@ -229,7 +229,7 @@ call("summarize", arguments={"url": "https://example.com"})
 
 > **The footgun this removes:** `connect()` pools processes, so calling it again after an edit without `release()` first hands you the *old* process running the *old* code. Kitsune detects this and tells you: *"Changed the code? release('dev') first — this process predates your edit."* Always `release()` before reconnecting.
 
-Local `connect()` targets are treated as untrusted (`confirm=True` / `KITSUNE_TRUST` applies) and run as isolated subprocesses — see [Safety & sandboxing](#safety--sandboxing). Full walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md#act-1).
+Local `connect()` targets are treated as untrusted (`confirm=True` / `KITSUNE_TRUST` applies) and run as isolated subprocesses — but note that isolation is not a security sandbox; see [Safety model](#safety-model). Full walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md#act-1).
 
 ---
 
@@ -472,11 +472,13 @@ shapeshift("@modelcontextprotocol/server-memory",
 
 ---
 
-## Safety & sandboxing
+## Safety model
 
-"Run any of 130,000+ servers on demand" is only usable if running an *unknown* one is contained. Every server Kitsune mounts is untrusted code executed with your credentials, so containment is a first-class feature, not an afterthought. Four layers:
+Kitsune executes third-party code — npm, PyPI, GitHub, and local packages — with your permissions. That makes it a **supply-chain execution surface**, not just a router. Be clear-eyed about what it contains and what it does not.
 
-**1. Trust-tier gate — you consent before arbitrary code runs.**
+### What it protects against
+
+**1. Unverified code running without consent.**
 
 | Tier | Sources | On mount |
 |---|---|---|
@@ -484,23 +486,26 @@ shapeshift("@modelcontextprotocol/server-memory",
 | Medium | `mcpregistry`, `glama`, `smithery` | runs directly |
 | Community | `npm`, `pypi`, `github`, local `connect()` | **requires `confirm=True`** |
 
-Community and local sources refuse to run until you pass `confirm=True` on `shapeshift()`/`connect()` — an explicit acknowledgement that you're about to execute unverified code. `KITSUNE_TRUST=community` (via `auth("KITSUNE_TRUST", "community")`) waives the gate for sources you already trust; `status()` warns when that override is active.
+Community and local sources refuse to run until you pass `confirm=True` on `shapeshift()`/`connect()`. `KITSUNE_TRUST=community` waives the gate for sources you already trust; `status()` warns when that override is active.
 
-**2. Process isolation — the server never shares Kitsune's memory.**
-- stdio servers run as isolated OS subprocesses — separate address space, no shared state with the gateway
-- Docker servers run `docker run --rm -i --memory 512m` — ephemeral (auto-removed on exit) and RAM-capped (override per call)
-- Process pool is hard-capped at **10 concurrent** servers; idle processes are evicted after **1 hour**
+> **Caveat — `confirm=True` is not a human-approval boundary.** It is a tool argument the model can set on its own. It's a consent *signal* and defence-in-depth; the real user-facing approval must come from your host client's tool-approval UI (per the MCP spec's guidance that apps provide real confirmation). Don't rely on `confirm` alone to keep an autonomous agent from executing a server.
 
-**3. Input guards — before a subprocess is ever spawned.**
-- Install commands are validated against shell-metacharacter (`& ; | $ \` \n`) and path-traversal (`../`) patterns — a malicious `server_id` can't inject a shell command
-- `fetch()` and every registry call are HTTPS-only and SSRF-guarded: requests to private, loopback, or non-global IPs are blocked, and **every redirect hop is re-validated** (opt out only with `KITSUNE_ALLOW_LOCAL_FETCH=1`)
+**2. Shell injection at spawn time.** Install commands are validated against shell-metacharacter (`& ; | $ \` \n`) and path-traversal (`../`) patterns and are launched via `create_subprocess_exec` — no shell is involved. A malicious `server_id` can't inject a shell command. *This vets the launch command, not what the package does once it runs.*
 
-**4. Credential handling — least exposure.**
-- Credentials at `~/.kitsune/.env` and `~/.kitsune/oauth/` are written with mode `0600`
-- OAuth 2.1 with PKCE S256 and Dynamic Client Registration (RFC 7591) for hosted servers
-- `shapeshift()` warns on missing credentials *before* any tool call; `auth("server-id", "logout")` clears cached tokens
+**3. SSRF.** `fetch()` and every registry call are HTTPS-only; private, loopback, and non-global hosts are blocked, and **every redirect hop is re-validated** (opt out only with `KITSUNE_ALLOW_LOCAL_FETCH=1`).
 
-See the sandbox in action in [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
+**4. Credential exposure.** `~/.kitsune/.env` and `~/.kitsune/oauth/` are written at mode `0600`; OAuth 2.1 with PKCE S256 and Dynamic Client Registration (RFC 7591); missing-credential warnings *before* any call; `auth("server-id", "logout")` clears cached tokens.
+
+### What it does NOT do — read before trusting it with real credentials
+
+- **A local stdio server is isolated from Kitsune's memory, but it is not sandboxed.** It runs as your user and inherits your permissions: it can read and write your files, reach the network, spawn processes, and read inherited environment variables. Process isolation is not a security boundary.
+- **Docker mode is stronger, but not hardened.** `docker run --rm -i --memory 512m` gives you ephemerality and a RAM cap — nothing more. It does **not** yet add a read-only root filesystem, dropped Linux capabilities, `--no-new-privileges`, a non-root user, PID limits, or network restrictions. Prefer Docker for untrusted servers, but don't mistake it for strong containment.
+- **Versions are not pinned by default.** `npx -y <pkg>` / `uvx <pkg>` run whatever the registry currently resolves unless the registry entry pins a version. For untrusted servers, pin explicitly (`pkg@1.2.3`) or vendor them.
+- **Not every MCP capability is proxied identically.** Native tools are first-class; resource/prompt proxying is narrower (URI templates are skipped; HTTP transports don't proxy resources/prompts through the same path). "Any server" refers to tool execution, not every MCP capability.
+
+**Bottom line:** strong fit for supervised developer and personal workflows. **Do not run it unattended with production admin, billing, or security credentials in the default local-execution mode.** For that: enforce approval at the client, restrict credentials and filesystem access, pin versions, and run untrusted servers under Docker with a hardened profile. Hardened-sandbox profiles and default version pinning are on the roadmap, not yet shipped.
+
+See these guards in action in [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
 
 ---
 

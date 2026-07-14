@@ -5,7 +5,7 @@ needs code executed at runtime, not just tool schemas deferred:
 
 1. [**Developing an MCP server live**](#act-1) — edit → reload → test, no restart
 2. [**Executing a long-tail server**](#act-2) — Glama / Smithery, nothing pre-installed
-3. [**The sandbox holding**](#act-3) — running unknown code, contained
+3. [**The guardrails holding**](#act-3) — running unknown code, with honest limits
 
 Every block is a real tool call. Outputs are representative — abbreviated for the
 screen, and the exact trust/error strings match Kitsune's real messages. Times
@@ -147,10 +147,11 @@ Neither was in your config. Neither needed a restart.*
 
 ## Act 3
 
-### The sandbox holding — running unknown code, contained (≈ 40 s)
+### The guardrails holding — running unknown code, with limits (≈ 40 s)
 
-**The point:** "run anything on demand" is only safe because running an *unknown*
-thing is contained. This act shows the guardrails refusing the unsafe path.
+**The point:** "run anything on demand" raises the obvious question — what stops a
+malicious server? This act shows the guardrails refusing the unsafe path, and is
+honest about where they stop: they reduce risk, they are not a full sandbox.
 
 **[SCREEN — agent session]**
 
@@ -192,16 +193,24 @@ Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow.
 ```
 **CAPTION:** *No cloud-metadata theft, no localhost pivots — even via redirect.*
 
-**Guard 4 — isolation + caps.** When a server *does* run, it's contained:
+**Guard 4 — isolation + caps.** When a server *does* run, it's constrained (but
+note: stdio isolation is *not* a security sandbox — the process runs as your user):
 
 ```
-• stdio servers  → isolated OS subprocess, separate memory
-• docker servers → docker run --rm -i --memory 512m  (ephemeral, RAM-capped)
+• stdio servers  → separate OS subprocess (isolated from Kitsune's memory,
+                   but runs with YOUR permissions — files, network, env)
+• docker servers → docker run --rm -i --memory 512m  (ephemeral, RAM-capped;
+                   not yet hardened — no cap-drop / ro-rootfs / net limits)
 • pool           → max 10 processes, idle ones evicted after 1h
 • credentials    → ~/.kitsune/.env at mode 0600, warned-on before use
 ```
 
-**TITLE CARD:** *Reach the whole ecosystem — without trusting it blindly.*
+**TITLE CARD:** *Reach the whole ecosystem — with eyes open about the limits.*
+
+> **For a demo, say the honest line:** these guards stop the classic attacks
+> (injection, SSRF, silent execution), but a local server still runs with your
+> permissions. For untrusted servers, use Docker and restrict credentials. Don't
+> run this unattended against production admin credentials.
 
 ---
 
@@ -212,8 +221,8 @@ pip install kitsune-mcp
 ```
 
 **VOICEOVER:** *"Tool Search made your configured servers cheap. Kitsune makes
-every server you *didn't* configure reachable — built live, run on demand, and
-sandboxed. One config entry. No restarts."*
+every server you *didn't* configure reachable — built live and run on demand,
+with guardrails you understand. One config entry. No restarts."*
 
 ---
 
