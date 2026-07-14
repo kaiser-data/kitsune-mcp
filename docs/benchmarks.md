@@ -39,7 +39,7 @@ The comparison shows kitsune's total overhead **including one active mounted ser
 
 Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2 servers it costs more). Forge becomes cost-effective at 6+ servers.
 
-## Reference output (v0.20.8 + prewarm)
+## Reference output (v0.20.8 + prewarm + sandbox)
 
 ```
 ==============================================================
@@ -47,23 +47,23 @@ Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2
 ==============================================================
 
 === Profile sizes (actual registered schemas) ===
-  lean  ( 6 tools / default):   1321 tokens
-  forge (21 tools / full):     3216 tokens
+  lean  ( 6 tools / default):   1358 tokens
+  forge (21 tools / full):     3253 tokens
 
 === Savings: kitsune vs always-on N servers ===
   Baseline: 8 tools/server × 97 tokens/tool (representative avg)
 
   2 servers — always-on baseline:  1552 tokens
-    kitsune lean:      2097 tokens  (costs 35% more)
-    kitsune forge:     3992 tokens  (costs 157% more)
+    kitsune lean:      2134 tokens  (costs 37% more)
+    kitsune forge:     4029 tokens  (costs 159% more)
 
   5 servers — always-on baseline:  3880 tokens
-    kitsune lean:      2097 tokens  (saves 45%)
-    kitsune forge:     3992 tokens  (costs 2% more)
+    kitsune lean:      2134 tokens  (saves 45%)
+    kitsune forge:     4029 tokens  (costs 3% more)
 
   10 servers — always-on baseline:  7760 tokens
-    kitsune lean:      2097 tokens  (saves 72%)
-    kitsune forge:     3992 tokens  (saves 48%)
+    kitsune lean:      2134 tokens  (saves 72%)
+    kitsune forge:     4029 tokens  (saves 48%)
 
 === Per-tool breakdown ===
   Tool                         Tokens  Profile
@@ -71,7 +71,7 @@ Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2
   call                            345  lean + forge
   search                          328  lean + forge
   setup                           294  forge only
-  shapeshift                      252  lean + forge
+  shapeshift                      290  lean + forge
   auto                            194  lean + forge
   prewarm                         182  forge only
   craft                           181  forge only
@@ -89,4 +89,7 @@ Lean mode becomes more cost-effective than always-on at 3+ typical servers (at 2
   fetch                            78  forge only
   release                          55  forge only
   status                           49  lean + forge
+
+Methodology: token_count = len(json.dumps(schema)) // 4
+See docs/benchmarks.md for interpretation and caveats.
 ```

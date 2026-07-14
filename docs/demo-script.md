@@ -93,11 +93,11 @@ status()
 
 ```
 ACTIVE:  none
-RESTING: ~1,321 tokens   (Kitsune's own 6 tools — the fixed floor)
+RESTING: ~1,358 tokens   (Kitsune's own 6 tools — the fixed floor)
 GATEWAY: 2 other server(s) in claude-desktop (~24 tools)
 ```
 
-**VO**: "Kitsune isn't free at rest — its own six tools cost about 1,321 tokens.
+**VO**: "Kitsune isn't free at rest — its own six tools cost about 1,358 tokens.
 That's the floor. The point is it stays flat no matter how many servers sit behind it.
 The GATEWAY shows what I'm paying for in other clients.
 Now let's mount GitHub — but only one tool, not all 26."
@@ -120,7 +120,7 @@ call("search_repositories", {"query": "MCP servers productivity"})
 shapeshift()
 ```
 ```
-✓ Released. Back to ~1,321 tokens.
+✓ Released. Back to ~1,358 tokens.
 ```
 
 **VO**: "One tool, real data. With the floor included that's about 1,621 tokens against
@@ -259,30 +259,30 @@ status()
 
 ## Token scorecard (for on-screen graphics)
 
-**Every Kitsune figure below includes the fixed ~1,321-token floor — it is never
-subtracted out or hidden.** Saved = 1 − (1,321 floor + surgical mount) / always-on.
+**Every Kitsune figure below includes the fixed ~1,358-token floor — it is never
+subtracted out or hidden.** Saved = 1 − (1,358 floor + surgical mount) / always-on.
 These match the README Performance table; keep them in sync.
 
 ### Per-server savings (floor included)
-| Server | Always-on | 1,321 floor + surgical | Saved |
+| Server | Always-on | 1,358 floor + surgical | Saved |
 |---|---:|---:|---:|
-| mcp-server-time (2 tools) | 261 | ~1,582 | — ¹ |
-| mcp-server-git (12) | 1,242 | ~1,631 | — ¹ |
-| server-memory (9) | 2,615 | ~1,901 | 27% |
-| server-filesystem (14) | 3,207 | ~2,011 | 37% |
-| brave (8) | 3,612 | ~1,771 | 51% |
-| server-github (26) | 4,229 | ~1,621 | **62%** |
-| notion-hosted (14) | 13,707 | ~3,271 | 76% |
+| mcp-server-time (2 tools) | 261 | ~1,619 | — ¹ |
+| mcp-server-git (12) | 1,242 | ~1,668 | — ¹ |
+| server-memory (9) | 2,615 | ~1,938 | 26% |
+| server-filesystem (14) | 3,207 | ~2,048 | 36% |
+| brave (8) | 3,612 | ~1,808 | 50% |
+| server-github (26) | 4,229 | ~1,658 | **61%** |
+| notion-hosted (14) | 13,707 | ~3,308 | 76% |
 
-¹ For a **single** server smaller than the 1,321 floor (time, git), always-on is
+¹ For a **single** server smaller than the 1,358 floor (time, git), always-on is
 cheaper — Kitsune only pays off past one medium server, or two-plus small ones.
 
 ### Multi-server compounding (floor stays flat; always-on stacks)
 | Servers always-on | Always-on/turn | Kitsune/turn | Saved |
 |---|---:|---:|---:|
-| GitHub | 4,229 | ~1,621 | 62% |
-| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | 77–81% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
+| GitHub | 4,229 | ~1,658 | 61% |
+| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | 76–81% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
 
 ### Headline for thumbnail
 > "One server. Up to ~90% fewer tokens. Smarter tool selection."

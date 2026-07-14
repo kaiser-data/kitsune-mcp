@@ -31,7 +31,7 @@ This is where the name earns itself: you *shift* into an unfamiliar server's sha
 
 **What about native deferred loading?** Since Claude Code v2.1.7 (Jan 2026), clients defer the tool schemas of *configured* servers until the model searches for them (Tool Search), so the old "keep tools out of context" benefit is now built into the client for servers you've already set up. Kitsune's edge is the servers you *haven't* set up — the long tail, one-offs, and anything you'd otherwise add-and-restart for. Standard servers you always keep on (Supabase, Google Drive, GitHub) are likely already configured and deferred natively; Kitsune isn't trying to replace those. It covers everything else, on demand.
 
-**Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,321 tokens** in every turn. Against a client with native deferral, that floor is *additive* — so don't install Kitsune to save tokens. Install it for reach: one config entry that puts the entire MCP ecosystem one call away, with no restart. The token math below still applies when you compare against servers kept fully mounted (always-on, or clients without native Tool Search).
+**Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,358 tokens** in every turn. Against a client with native deferral, that floor is *additive* — so don't install Kitsune to save tokens. Install it for reach: one config entry that puts the entire MCP ecosystem one call away, with no restart. The token math below still applies when you compare against servers kept fully mounted (always-on, or clients without native Tool Search).
 
 ---
 
@@ -60,25 +60,25 @@ MCP gives you structured tool schemas the model can read and validate against:
 |---|---|---|---|
 | CLI fallback | ~30–50% on rare subcommands | Hallucinated flags, silent wrong calls | ~0 |
 | Always-on MCP | ~95% across the whole surface | Schema bloat in every turn | ~10–15K per server |
-| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~1,321 tokens** |
+| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~1,358 tokens** |
 
 That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accurate when it matters**. For one-off ops on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost (production AWS changes, billing operations, security flows), Kitsune gives you schema-validated execution without the always-on tax. See [`examples/scenarios/`](./examples/scenarios/) for seven worked use cases.
 
 ### Token savings vs always-on (secondary benefit)
 
-> **Honest note — this was the original idea, and Tool Search has largely overtaken it.** Cutting always-on token overhead was Kitsune's founding motivation. But at roughly the same time it was being built, the client layer solved the same problem natively: since Claude Code v2.1.7 (Jan 2026), configured servers' tool schemas are deferred until the model searches for them (Tool Search). Against such a client the numbers and graph below no longer describe a unique win — Kitsune's ~1,321-token floor is even *additive* rather than a saving. Treat this section as historical / edge-case: it still holds for servers kept **fully mounted always-on** or for clients without native deferral, but it is **not** the reason to run Kitsune today. That reason is runtime reach and live development without a restart (above).
+> **Honest note — this was the original idea, and Tool Search has largely overtaken it.** Cutting always-on token overhead was Kitsune's founding motivation. But at roughly the same time it was being built, the client layer solved the same problem natively: since Claude Code v2.1.7 (Jan 2026), configured servers' tool schemas are deferred until the model searches for them (Tool Search). Against such a client the numbers and graph below no longer describe a unique win — Kitsune's ~1,358-token floor is even *additive* rather than a saving. Treat this section as historical / edge-case: it still holds for servers kept **fully mounted always-on** or for clients without native deferral, but it is **not** the reason to run Kitsune today. That reason is runtime reach and live development without a restart (above).
 
-Kitsune carries a **fixed ~1,321-token floor** (measured: 6 lean-profile tools — run `python examples/benchmark.py` to reproduce). Every comparison below already includes that floor; it is never subtracted out or hidden. Savings come from the floor staying *flat* while always-on servers stack linearly:
+Kitsune carries a **fixed ~1,358-token floor** (measured: 6 lean-profile tools — run `python examples/benchmark.py` to reproduce). Every comparison below already includes that floor; it is never subtracted out or hidden. Savings come from the floor staying *flat* while always-on servers stack linearly:
 
-Saving formula: `1 − (Kitsune base 1,321 + surgical mount) / always-on total`
+Saving formula: `1 − (Kitsune base 1,358 + surgical mount) / always-on total`
 
 | Always-on servers | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | ~1,621 (1,321 + ~300) | **62%** |
-| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | **77–81%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
+| GitHub (26 tools) | 4,229 | ~1,658 (1,358 + ~300) | **61%** |
+| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | **76–81%** |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
 
-**Break-even:** if you only ever run **one small server** (e.g. `mcp-server-time` at ~261 tokens), always-on is *cheaper* than Kitsune — you'd pay 261 tokens instead of Kitsune's 1,321 floor. Kitsune wins when the always-on alternative exceeds ~1,321 tokens, which happens as soon as you'd keep one medium server (GitHub-sized) or two-plus small ones loaded. The bigger and more numerous your servers, the bigger the win.
+**Break-even:** if you only ever run **one small server** (e.g. `mcp-server-time` at ~261 tokens), always-on is *cheaper* than Kitsune — you'd pay 261 tokens instead of Kitsune's 1,358 floor. Kitsune wins when the always-on alternative exceeds ~1,358 tokens, which happens as soon as you'd keep one medium server (GitHub-sized) or two-plus small ones loaded. The bigger and more numerous your servers, the bigger the win.
 
 <div align="center">
   <picture>
@@ -237,7 +237,7 @@ Local `connect()` targets are treated as untrusted (`confirm=True` / `KITSUNE_TR
 
 Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target server via the appropriate transport (stdio subprocess, HTTP, WebSocket), fetches its `tools/list`, and registers each tool as a native FastMCP tool with the exact schema from the server. The AI client receives a `notifications/tools/list_changed` event and sees the new tools as first-class — no wrapper, no indirection.
 
-`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~1,321-token baseline.
+`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~1,358-token baseline.
 
 <div align="center">
   <picture>
@@ -282,7 +282,7 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
 | `auth()` | `server_or_var, value?` | Check or set env vars; trigger OAuth 2.1 browser flow for hosted servers |
 | `auto()` | `task, server_hint=, arguments=` | One-shot: search → mount → call → return result |
 
-Context overhead at rest: **~1,321 tokens** for all 6 lean-profile tools (measured via `examples/benchmark.py`).
+Context overhead at rest: **~1,358 tokens** for all 6 lean-profile tools (measured via `examples/benchmark.py`).
 
 > **`auto()` note:** `auto(task, server_hint="server-id")` gives reliable results. Without `server_hint`, routing is best-effort via semantic search and can misfire on ambiguous queries — use `search()` first when unsure.
 
@@ -336,33 +336,33 @@ Kitsune never modifies existing configs without explicit confirmation.
 
 > The same caveat as above applies to this whole section: these savings are real **only** versus fully-mounted always-on servers. On a client with native Tool Search (Claude Code 2.1.7+), configured servers are already deferred, so most of these numbers no longer represent a Kitsune-specific advantage. Kept here for transparency and for clients/servers without native deferral.
 
-Full-mount figures measured live via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. Every Kitsune figure **includes the fixed ~1,321-token floor** — it is never omitted. To measure Kitsune's own profile size: `python examples/benchmark.py`.
+Full-mount figures measured live via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. Every Kitsune figure **includes the fixed ~1,358-token floor** — it is never omitted. To measure Kitsune's own profile size: `python examples/benchmark.py`.
 
-Saved = 1 − (1,321 floor + surgical) / always-on. A negative result means always-on is cheaper for that single server.
+Saved = 1 − (1,358 floor + surgical) / always-on. A negative result means always-on is cheaper for that single server.
 
-| Server | Tools | Always-on | Surgical example | 1,321 + surgical | Saved |
+| Server | Tools | Always-on | Surgical example | 1,358 + surgical | Saved |
 |---|---:|---:|---|---:|---:|
-| `mcp-server-time` | 2 | 261 | (all tools) | ~1,582 | — ¹ |
-| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~1,631 | — ¹ |
-| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~1,901 | 27% |
-| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~2,011 | 37% |
-| `brave` | 8 | 3,612 | brave_web_search | ~1,771 | 51% |
-| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~1,621 | 62% |
-| `notion-hosted` | 14 | 13,707 | search / fetch | ~3,271 | 76% |
+| `mcp-server-time` | 2 | 261 | (all tools) | ~1,619 | — ¹ |
+| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~1,668 | — ¹ |
+| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~1,938 | 26% |
+| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~2,048 | 36% |
+| `brave` | 8 | 3,612 | brave_web_search | ~1,808 | 50% |
+| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~1,658 | 61% |
+| `notion-hosted` | 14 | 13,707 | search / fetch | ~3,308 | 76% |
 
-¹ For a **single** server smaller than Kitsune's ~1,321-token floor (time, git), running it always-on is cheaper than Kitsune. Kitsune only pays off once the always-on alternative exceeds the floor — i.e. one medium server, or two-plus small ones sharing the single baseline.
+¹ For a **single** server smaller than Kitsune's ~1,358-token floor (time, git), running it always-on is cheaper than Kitsune. Kitsune only pays off once the always-on alternative exceeds the floor — i.e. one medium server, or two-plus small ones sharing the single baseline.
 
 ### Multi-server compounding
 
-Kitsune's resting cost (~1,321 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added — that linear stack is where Kitsune wins.
+Kitsune's resting cost (~1,358 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added — that linear stack is where Kitsune wins.
 
-All figures include the 1,321 floor + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
+All figures include the 1,358 floor + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
 
 | Servers always-on | Always-on/turn | Kitsune per active call | Saved |
 |---|---:|---|---:|
-| GitHub only | 4,229 | ~1,621 | 62% |
-| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | 77–81% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
+| GitHub only | 4,229 | ~1,658 | 61% |
+| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | 76–81% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
 
 ### Tool-selection reliability
 
@@ -446,7 +446,7 @@ shapeshift("brave", tools=["brave_web_search"])                              # ~
 shapeshift("mcp-server-fetch")                                               # ~289 tokens
 shapeshift("@modelcontextprotocol/server-memory",
            tools=["read_graph", "search_nodes"])                             # ~580 tokens
-# Mounts: ~1,300 tokens; total with ~1,321 floor: ~2,600 vs 6,516 always-on  →  60% reduction
+# Mounts: ~1,300 tokens; total with ~1,358 floor: ~2,650 vs 6,516 always-on  →  59% reduction
 ```
 
 ### Code agent — filesystem + git
@@ -457,7 +457,7 @@ shapeshift("@modelcontextprotocol/server-filesystem",
            server_args=["/path/to/project"])                                 # ~690 tokens
 shapeshift("mcp-server-git",
            tools=["git_status", "git_diff", "git_log"])                     # ~310 tokens
-# Mounts: ~1,000 tokens; total with ~1,321 floor: ~2,300 vs 4,449 always-on  →  48% reduction
+# Mounts: ~1,000 tokens; total with ~1,358 floor: ~2,350 vs 4,449 always-on  →  47% reduction
 ```
 
 ### Notes / PM agent — Notion + memory
@@ -467,7 +467,7 @@ shapeshift("notion-hosted",
            tools=["notion-search", "notion-append-block-children"])         # ~1,950 tokens
 shapeshift("@modelcontextprotocol/server-memory",
            tools=["add_memory", "search_nodes"])                            # ~580 tokens
-# Mounts: ~2,500 tokens; total with ~1,321 floor: ~3,850 vs 16,322 always-on  →  76% reduction
+# Mounts: ~2,500 tokens; total with ~1,358 floor: ~3,850 vs 16,322 always-on  →  76% reduction
 ```
 
 ---
@@ -496,14 +496,16 @@ Community and local sources refuse to run until you pass `confirm=True` on `shap
 
 **4. Credential exposure.** `~/.kitsune/.env` and `~/.kitsune/oauth/` are written at mode `0600`; OAuth 2.1 with PKCE S256 and Dynamic Client Registration (RFC 7591); missing-credential warnings *before* any call; `auth("server-id", "logout")` clears cached tokens.
 
+**5. Untrusted local servers — opt-in Docker sandbox.** `shapeshift("pkg", sandbox=True)` runs an npm/PyPI server inside the hardened Docker profile instead of as a host subprocess: no host filesystem, `--cap-drop ALL`, read-only rootfs, RAM/PID caps. Only credential env vars relevant to that server are forwarded — by *name* (`docker -e KEY`), never by value, so secrets stay out of the argv, the process list, and the pool key. Set `KITSUNE_SANDBOX=community` to sandbox every community-source mount automatically, or `KITSUNE_SANDBOX=all` for every local mount. Requires Docker; the first sandboxed mount pulls the base image (`node:22-slim` / `uv:python3.13-bookworm-slim`). Filesystem-style servers need host paths and are the one category that doesn't fit a sandbox.
+
 ### What it does NOT do — read before trusting it with real credentials
 
-- **A local stdio server is isolated from Kitsune's memory, but it is not sandboxed.** It runs as your user and inherits your permissions: it can read and write your files, reach the network, spawn processes, and read inherited environment variables. Process isolation is not a security boundary.
+- **A local stdio server is isolated from Kitsune's memory, but it is not sandboxed unless you opt in.** Without `sandbox=True` / `KITSUNE_SANDBOX`, it runs as your user and inherits your permissions: it can read and write your files, reach the network, spawn processes, and read inherited environment variables. Process isolation is not a security boundary.
 - **Docker mode is hardened, but Docker is still not a kernel boundary.** Every container runs `--cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp --pids-limit 512 --memory 512m` by default (opt out per call: `writable`, `cap_add`, `network`, `pids_limit`, `memory`). That blunts privilege escalation, fork bombs, and filesystem tampering — but it is defence-in-depth, **not** a guarantee against a container-escape kernel exploit. It also does not yet default to a non-root user or `--network none` (most MCP servers need egress).
 - **Version pinning is best-effort, not guaranteed.** When Kitsune resolves an npm or PyPI server it pins the exact version it found (`npx -y pkg@1.2.3`, `uvx pkg==1.2.3`), so a later run can't silently pick up a newer release. But it pins whatever the registry reports *at resolution time* — it does not verify a digest, and GitHub/`--from git+…` targets and hand-written `connect()` commands are not auto-pinned. For high-assurance use, pin by digest or vendor the package.
 - **Not every MCP capability is proxied identically.** Native tools are first-class; resource/prompt proxying is narrower (URI templates are skipped; HTTP transports don't proxy resources/prompts through the same path). "Any server" refers to tool execution, not every MCP capability.
 
-**Bottom line:** strong fit for supervised developer and personal workflows. **Do not run it unattended with production admin, billing, or security credentials in the default local-execution mode** — a local (non-Docker) server still runs with your full user permissions. For higher assurance: enforce approval at the client, restrict credentials and filesystem access, and run untrusted servers under Docker (hardened by default here) rather than local `npx`/`uvx`.
+**Bottom line:** strong fit for supervised developer and personal workflows. **Do not run it unattended with production admin, billing, or security credentials in the default local-execution mode** — a local (non-Docker) server still runs with your full user permissions. For higher assurance: enforce approval at the client, restrict credentials and filesystem access, and run untrusted servers sandboxed — `shapeshift(id, sandbox=True)` or `KITSUNE_SANDBOX=community` — rather than as raw local `npx`/`uvx` processes.
 
 See these guards in action in [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
 

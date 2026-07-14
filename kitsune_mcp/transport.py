@@ -21,6 +21,8 @@ from kitsune_mcp.constants import (
     MCP_PROTOCOL_VERSION,
     POOL_MAX_IDLE_SECONDS,
     POOL_MAX_PROCESSES,
+    SANDBOX_NPM_IMAGE,
+    SANDBOX_PYPI_IMAGE,
     STDIO_BUFFER_LIMIT,
     TIMEOUT_HTTP_TOOL,
     TIMEOUT_PROMPT_LIST,
@@ -1043,6 +1045,73 @@ class WebSocketTransport(BaseTransport):
         return _truncate(_clean_response(raw_text))
 
 
+def _hardened_docker_flags(config: dict) -> list[str]:
+    """Locked-down `docker run` flags shared by DockerTransport and sandbox_wrap_cmd().
+
+    See DockerTransport's docstring for the profile rationale and the meaning
+    of each config override (memory, pids_limit, writable, network, cap_add).
+    """
+    memory = str(config.get("memory") or DOCKER_DEFAULT_MEMORY)
+    pids_limit = str(config.get("pids_limit") or DOCKER_DEFAULT_PIDS)
+    flags = [
+        "--label", "kitsune-mcp=1",
+        "--memory", memory,
+        "--pids-limit", pids_limit,
+        "--security-opt", "no-new-privileges",
+        "--cap-drop", "ALL",
+    ]
+    for cap in (config.get("cap_add") or []):
+        flags += ["--cap-add", str(cap)]
+    # Read-only root filesystem unless the server explicitly needs to write.
+    # Always give it a small writable tmpfs so well-behaved servers can scratch.
+    if not config.get("writable"):
+        flags += ["--read-only", "--tmpfs", "/tmp"]
+    network = config.get("network")
+    if network:
+        flags += ["--network", str(network)]
+    return flags
+
+
+# launcher → (base image, cache env forced onto the tmpfs so the read-only
+# rootfs doesn't break package download on first run)
+_SANDBOX_LAUNCHERS = {
+    "npx": (SANDBOX_NPM_IMAGE, {"HOME": "/tmp", "npm_config_cache": "/tmp/.npm"}),
+    "uvx": (SANDBOX_PYPI_IMAGE, {"HOME": "/tmp", "UV_CACHE_DIR": "/tmp/.uv-cache"}),
+}
+
+
+def sandbox_wrap_cmd(cmd: list[str], env_names: list[str] | None = None, config: dict | None = None) -> list[str]:
+    """Wrap a local `npx`/`uvx` launch in the hardened `docker run` profile.
+
+    The container gets no host filesystem, no capabilities, a read-only rootfs,
+    and RAM/PID caps — the same profile DockerTransport applies to `docker:`
+    images. Credential env vars are forwarded by NAME only (`-e KEY`): docker
+    copies each value from its own (inherited) environment, so secrets never
+    appear in the argv, `ps` output, or the process-pool key.
+
+    Raises ValueError for launchers other than npx/uvx — arbitrary local
+    commands have no known base image to run in.
+    """
+    if not cmd:
+        raise ValueError("sandbox: empty command")
+    launcher = cmd[0]
+    if launcher not in _SANDBOX_LAUNCHERS:
+        raise ValueError(
+            f"sandbox supports npx/uvx commands only, got {launcher!r} — "
+            f"run it unsandboxed or provide a docker: image instead"
+        )
+    image, cache_env = _SANDBOX_LAUNCHERS[launcher]
+    config = config or {}
+    wrapped = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config)]
+    for k, v in cache_env.items():
+        wrapped += ["-e", f"{k}={v}"]
+    for name in env_names or []:
+        wrapped += ["-e", name]
+    wrapped.append(str(config.get("image") or image))
+    wrapped += cmd
+    return wrapped
+
+
 class DockerTransport(BaseTransport):
     """Run an MCP server inside a Docker container via stdio, hardened by default.
 
@@ -1078,25 +1147,7 @@ class DockerTransport(BaseTransport):
         self.image = image
 
     def _build_cmd(self, config: dict) -> list[str]:
-        memory = str(config.get("memory") or DOCKER_DEFAULT_MEMORY)
-        pids_limit = str(config.get("pids_limit") or DOCKER_DEFAULT_PIDS)
-        cmd = [
-            "docker", "run", "--rm", "-i",
-            "--label", "kitsune-mcp=1",
-            "--memory", memory,
-            "--pids-limit", pids_limit,
-            "--security-opt", "no-new-privileges",
-            "--cap-drop", "ALL",
-        ]
-        for cap in (config.get("cap_add") or []):
-            cmd += ["--cap-add", str(cap)]
-        # Read-only root filesystem unless the server explicitly needs to write.
-        # Always give it a small writable tmpfs so well-behaved servers can scratch.
-        if not config.get("writable"):
-            cmd += ["--read-only", "--tmpfs", "/tmp"]
-        network = config.get("network")
-        if network:
-            cmd += ["--network", str(network)]
+        cmd = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config)]
         for k, v in (config.get("env") or {}).items():
             cmd += ["-e", f"{k}={v}"]
         cmd.append(self.image)

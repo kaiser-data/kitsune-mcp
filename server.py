@@ -7,8 +7,8 @@ All logic lives in the kitsune_mcp package. This file:
   4. Re-exports public names so existing tests (from server import ...) continue to work.
 
 KITSUNE_TOOLS env var controls which tools are registered:
-  (not set)  — lean profile: status, search, auth, shapeshift, call, auto  (~1,321 tokens overhead)
-  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~3,216 tokens)
+  (not set)  — lean profile: status, search, auth, shapeshift, call, auto  (~1,358 tokens overhead)
+  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~3,253 tokens)
   KITSUNE_TOOLS=shapeshift,call — exactly those tools
 """
 

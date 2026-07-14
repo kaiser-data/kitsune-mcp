@@ -46,6 +46,7 @@ from kitsune_mcp.transport import (
     HTTPSSETransport,
     PersistentStdioTransport,
     WebSocketTransport,
+    sandbox_wrap_cmd,  # noqa: F401  (accessed as _state.sandbox_wrap_cmd in shapeshift + tests)
 )
 
 # JSON-schema type → example value, for the `call(...)` hint shown to users.
@@ -225,6 +226,49 @@ def _probe_trust_ok(srv) -> tuple[bool, str]:
     if srv.source in TRUST_LOW:
         return False, f"community source ({srv.source})"
     return True, ""
+
+
+def _sandbox_active(explicit: bool, source: str) -> bool:
+    """Should this mount run inside the Docker sandbox?
+
+    explicit=True (the shapeshift(sandbox=True) flag) always wins. Otherwise
+    KITSUNE_SANDBOX sets a session policy: "1"/"true"/"all"/"docker" sandboxes
+    every local stdio mount; "community" sandboxes only low-trust sources.
+    """
+    if explicit:
+        return True
+    mode = (os.getenv("KITSUNE_SANDBOX") or "").lower()
+    if mode in ("1", "true", "all", "docker"):
+        return True
+    if mode == "community":
+        return source in TRUST_LOW
+    return False
+
+
+def _sandbox_env_names(srv) -> list[str]:
+    """Env var NAMES a sandboxed server needs — values are never inlined.
+
+    An unsandboxed stdio subprocess inherits the whole host environment; a
+    sandboxed one starts empty, so we forward (by name only, via value-less
+    `docker -e KEY`) the vars the server plausibly needs:
+      1. Every credential declared in `srv.credentials`.
+      2. The same heuristic _probe_env uses — host vars with a cred-shaped
+         suffix sharing a name token with the server's id/name (npm/pypi
+         listings declare no credentials, so this is the common path).
+    Everything else (AWS_*, unrelated API keys) stays on the host.
+    """
+    names = [_to_env_var(c) for c in (srv.credentials or {})]
+    haystack = {
+        tok for tok in re.findall(r"[a-z0-9]{4,}", (srv.id + " " + srv.name).lower())
+    }
+    if haystack:
+        for var in os.environ:
+            if var in names or not var.endswith(_PROBE_CRED_SUFFIXES):
+                continue
+            var_lower = var.lower()
+            if any(tok in var_lower for tok in haystack):
+                names.append(var)
+    return names
 
 
 def _probe_env(srv) -> dict:

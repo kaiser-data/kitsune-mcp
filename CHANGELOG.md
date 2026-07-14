@@ -6,6 +6,31 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added — Docker sandbox for local npm/PyPI servers (`sandbox=True`)
+
+The hardened Docker profile was previously reachable only via explicit
+`docker:` image IDs — npm/PyPI servers still ran as raw host subprocesses.
+Now the profile applies to them too:
+
+- **`shapeshift(server_id, sandbox=True)`** wraps the local `npx`/`uvx` launch
+  in the locked-down `docker run` profile (`--cap-drop ALL`, read-only rootfs,
+  `--pids-limit`, `--memory`, no host filesystem). `npx`/`uvx` caches are
+  redirected to the container tmpfs so the read-only rootfs doesn't break
+  first-run package download.
+- **Secrets never enter the argv.** Credential env vars are forwarded by NAME
+  only (`docker -e KEY`) — declared credentials plus the same host-var
+  heuristic `inspect()` probes use. Values stay out of `ps` output and the
+  process-pool key.
+- **`KITSUNE_SANDBOX` session policy:** `community` sandboxes every low-trust
+  (npm/pypi/github) mount automatically; `all`/`1` sandboxes every local mount.
+- **The community trust gate now teaches the safer path** — it offers
+  `confirm=True, sandbox=True` alongside plain `confirm=True`.
+- Pre-flight checks fail fast (before the current form is shed) when Docker is
+  missing, the server is HTTP-hosted, or the launcher isn't npx/uvx.
+- New constants `SANDBOX_NPM_IMAGE` (node:22-slim) / `SANDBOX_PYPI_IMAGE`
+  (astral-sh/uv python3.13); `DockerTransport` and the sandbox share one
+  `_hardened_docker_flags()` profile builder.
+
 ### Security — hardened Docker profile + default version pinning
 
 Responds to an external review noting that "an isolated OS subprocess is not a
