@@ -51,7 +51,7 @@ That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accur
 
 ### Token savings vs always-on (secondary benefit)
 
-> **Read this against modern clients.** If your client defers configured servers' tool schemas natively (Claude Code 2.1.7+, Jan 2026), it already gets most of this benefit for servers in your config — and Kitsune's ~1,321-token floor is *additive*, not a saving. The comparison below applies to servers you would otherwise keep **fully mounted always-on**, or to clients without native Tool Search. It is a nice-to-have, not the reason to run Kitsune — the reason is runtime reach without a restart (above).
+> **Honest note — this was the original idea, and Tool Search has largely overtaken it.** Cutting always-on token overhead was Kitsune's founding motivation. But at roughly the same time it was being built, the client layer solved the same problem natively: since Claude Code v2.1.7 (Jan 2026), configured servers' tool schemas are deferred until the model searches for them (Tool Search). Against such a client the numbers and graph below no longer describe a unique win — Kitsune's ~1,321-token floor is even *additive* rather than a saving. Treat this section as historical / edge-case: it still holds for servers kept **fully mounted always-on** or for clients without native deferral, but it is **not** the reason to run Kitsune today. That reason is runtime reach and live development without a restart (above).
 
 Kitsune carries a **fixed ~1,321-token floor** (measured: 6 lean-profile tools — run `python examples/benchmark.py` to reproduce). Every comparison below already includes that floor; it is never subtracted out or hidden. Savings come from the floor staying *flat* while always-on servers stack linearly:
 
@@ -74,7 +74,9 @@ Saving formula: `1 − (Kitsune base 1,321 + surgical mount) / always-on total`
   </picture>
 </div>
 
-Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — Kitsune keeps the model focused on exactly what the current task needs.
+*This graph compares Kitsune against **fully-mounted always-on** servers. A client with native Tool Search already flattens most of this curve on its own, so read the chart as "what deferral buys you" — not as something unique to Kitsune.*
+
+Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — though on a modern client, native Tool Search delivers much of that focus too.
 
 ---
 
@@ -253,6 +255,8 @@ Kitsune never modifies existing configs without explicit confirmation.
 ## Performance
 
 ### Token overhead: surgical mount vs full mount
+
+> The same caveat as above applies to this whole section: these savings are real **only** versus fully-mounted always-on servers. On a client with native Tool Search (Claude Code 2.1.7+), configured servers are already deferred, so most of these numbers no longer represent a Kitsune-specific advantage. Kept here for transparency and for clients/servers without native deferral.
 
 Full-mount figures measured live via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. Every Kitsune figure **includes the fixed ~1,321-token floor** — it is never omitted. To measure Kitsune's own profile size: `python examples/benchmark.py`.
 
