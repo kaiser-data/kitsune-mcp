@@ -2,7 +2,7 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One config entry. 130,000+ servers on demand. Up to 93% less MCP token overhead.</strong></p>
+  <p><strong>One config entry. Discover, connect to, and run any of 130,000+ MCP servers at runtime — no restart, no per-server setup.</strong></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -18,9 +18,20 @@
 
 ---
 
-Kitsune is a gateway MCP server that discovers, installs, and dynamically loads any of 130,000+ MCP servers at runtime (134,945 indexed on Glama alone as of May 2026). Instead of keeping every server's tools in context permanently, Kitsune mounts tools on demand via `shapeshift()` and releases them when done. Thousands available on request. No restarts.
+Kitsune is a **runtime MCP proxy**. It discovers, connects to, and runs any of 130,000+ MCP servers *live, mid-session* — no config edit, no client restart (134,945 indexed on Glama alone as of May 2026). `shapeshift(server_id)` connects to a target server and makes its tools callable in the current turn; `shapeshift()` with no args disconnects and drops them again.
 
-**Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,321 tokens** in every turn, whether you use them or not. That is its fixed floor — it never drops to zero. The win is that this floor stays *flat* no matter how many servers sit behind it, whereas always-on servers stack linearly. So Kitsune only pays for itself once you'd otherwise be loading **more than one** non-trivial server (see the break-even note below).
+**The core advantage is the runtime, not the token count.** Adding a normal MCP server means editing your client config and restarting the session. Kitsune removes both steps: the model can reach — and execute — a server it has never seen, without you touching config or restarting. That is the durable win: access and execution on demand.
+
+**Two use cases where nothing else fits:**
+
+1. **Developing your own MCP server, live.** Edit a tool's code, `shapeshift()` back into it, and call it again in the *same* session — an edit → reload → test loop (an MCP REPL) instead of restarting your client on every change.
+2. **Shifting into an unknown MCP on demand.** Hit a task that needs a server you've never set up? `shapeshift()` into it — discover, connect, run — then drop it. No config edit, no restart, no leaving the session to go install anything.
+
+This is where the name earns itself: you *shift* into an unfamiliar server's shape, use its tools, and shift back.
+
+**What about native deferred loading?** Since Claude Code v2.1.7 (Jan 2026), clients defer the tool schemas of *configured* servers until the model searches for them (Tool Search), so the old "keep tools out of context" benefit is now built into the client for servers you've already set up. Kitsune's edge is the servers you *haven't* set up — the long tail, one-offs, and anything you'd otherwise add-and-restart for. Standard servers you always keep on (Supabase, Google Drive, GitHub) are likely already configured and deferred natively; Kitsune isn't trying to replace those. It covers everything else, on demand.
+
+**Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,321 tokens** in every turn. Against a client with native deferral, that floor is *additive* — so don't install Kitsune to save tokens. Install it for reach: one config entry that puts the entire MCP ecosystem one call away, with no restart. The token math below still applies when you compare against servers kept fully mounted (always-on, or clients without native Tool Search).
 
 ### Why not just shell out to a CLI?
 
@@ -38,7 +49,9 @@ MCP gives you structured tool schemas the model can read and validate against:
 
 That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accurate when it matters**. For one-off ops on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost (production AWS changes, billing operations, security flows), Kitsune gives you schema-validated execution without the always-on tax. See [`examples/scenarios/`](./examples/scenarios/) for seven worked use cases.
 
-### Token savings vs always-on
+### Token savings vs always-on (secondary benefit)
+
+> **Read this against modern clients.** If your client defers configured servers' tool schemas natively (Claude Code 2.1.7+, Jan 2026), it already gets most of this benefit for servers in your config — and Kitsune's ~1,321-token floor is *additive*, not a saving. The comparison below applies to servers you would otherwise keep **fully mounted always-on**, or to clients without native Tool Search. It is a nice-to-have, not the reason to run Kitsune — the reason is runtime reach without a restart (above).
 
 Kitsune carries a **fixed ~1,321-token floor** (measured: 6 lean-profile tools — run `python examples/benchmark.py` to reproduce). Every comparison below already includes that floor; it is never subtracted out or hidden. Savings come from the floor staying *flat* while always-on servers stack linearly:
 
@@ -184,7 +197,7 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
 |---|---|---|
 | `status()` | — | Provider auth state, GATEWAY bloat detection, session performance stats |
 | `search()` | `query, registry?, compare?` | Search for servers across 7 registries; `compare=True` shows side-by-side token costs |
-| `shapeshift()` | `server_id?, tools=[], server_args=[]` | Mount a server's tools (with ID) or unmount current form (no args). `tools=[...]` for surgical load |
+| `shapeshift()` | `server_id?, tools=[], server_args=[]` | Shift into a server: connect and make its tools callable (with ID), or shift back / disconnect (no args). A runtime connect + execute — not a transform of Kitsune itself. `tools=[...]` for surgical load |
 | `call()` | `tool_name, arguments` | Invoke a tool; `server_id` inferred when shapeshifted |
 | `auth()` | `server_or_var, value?` | Check or set env vars; trigger OAuth 2.1 browser flow for hosted servers |
 | `auto()` | `task, server_hint=, arguments=` | One-shot: search → mount → call → return result |
@@ -438,6 +451,8 @@ One fox. Infinite forms. Every power available. Nothing carried that isn't neede
 `shapeshift()` — it returns to its true shape. Context drops back to baseline. Ready for the next form.
 
 Each server mounted is a new tail. Each capability borrowed cleanly and released when done. One entry in your config. Every server in the MCP ecosystem, on demand — summoned, used, and let go.
+
+Concretely, `shapeshift()` **connects to a server at runtime and makes its tools callable** — you shift into an unfamiliar server's shape, use it, and shift back. It's an on-demand connect-and-execute, not a transformation of Kitsune itself. The value is that it happens live, mid-session, without editing config or restarting the client.
 
 > *I am not Japanese, and I use this name with the highest respect for the mythology and culture it comes from. The parallel felt too precise to ignore — a spirit that shapeshifts between forms, gains new powers, and releases them at will. That is exactly what this tool does.*
 
