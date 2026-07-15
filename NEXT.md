@@ -1,6 +1,72 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-11 (evening). Running MCP confirmed on v0.20.7._
+_Last updated: 2026-07-15 (early AM). Two security features + a companion skill; branch pushed, not yet PR'd._
+
+## SESSION 2026-07-15 — supply-chain hardening of the local-execution path (branch `feat/docker-sandbox-local-servers`, pushed, NOT merged)
+
+Two features built TDD-first on top of the shipped hardening commit (`3da2cc5`),
+plus a strategic reframe and a companion skill. **787 tests pass (+55), ruff
+clean.** Branch pushed to origin; no PR opened yet.
+
+### 1. Docker sandbox for local npm/PyPI servers — `8ca8adb`
+The hardened docker profile (`3da2cc5`) was only reachable via explicit
+`docker:` image IDs; npm/PyPI servers still ran as raw host subprocesses (the
+code literally called real isolation "the deferred Docker-sandbox follow-up").
+Now delivered:
+- `shapeshift(server_id, sandbox=True)` wraps the local `npx`/`uvx` launch in the
+  locked-down profile (`--cap-drop ALL`, read-only rootfs, `--pids-limit`,
+  `--memory`, no host FS). npm/uv caches redirect to the container tmpfs.
+- **Secrets never enter the argv** — credential env vars forwarded by NAME only
+  (`docker -e KEY`); nothing in `ps` or the pool key.
+- `KITSUNE_SANDBOX` session policy: `community` sandboxes low-trust mounts,
+  `all`/`1` sandboxes every local mount. Community trust gate now offers the
+  caged path. Pre-flights fail fast (Docker missing / HTTP-hosted / non-npx-uvx)
+  before the current form is shed.
+- `DockerTransport._build_cmd` + new `sandbox_wrap_cmd()` share one
+  `_hardened_docker_flags()`. New constants `SANDBOX_NPM_IMAGE` (node:22-slim) /
+  `SANDBOX_PYPI_IMAGE` (astral uv). `tests/test_sandbox.py` (+28).
+- Adds `sandbox` param → +37 schema tokens; lean floor **1,321 → 1,358**, forge
+  3,216 → 3,253. Every derived figure regenerated (README tables, benchmarks.md,
+  demo-script, article, token-cost SVGs, server.py docstring).
+
+### 2. Trust-on-first-use (TOFU) version pinning — `c4b0a69`
+Resolution-time pinning re-pins to "latest" every run, so it drifts across
+sessions. New `kitsune_mcp/pins.py`:
+- First mount records the exact version in `~/.kitsune/pins.json` (atomic,
+  0600); later mounts reuse it. On drift, launches the PINNED version and warns
+  `⚠️ pinned to X, registry now offers Y`. `KITSUNE_REPIN=1` adopts newer + updates.
+- Applied before `server_args` and before the sandbox wrap (regression-tested:
+  pinned spec flows through `sandbox_wrap_cmd`). **No tool-schema change** (env
+  policy). `tests/test_pins.py` (+27). Corrected the README caveat that
+  previously overclaimed cross-session immutability.
+
+### 3. Strategic reframe (discussion, not yet in docs)
+Agreed: the token-savings pitch is dead (native Tool Search / deferred loading
+handles context bloat, and even Kitsune's own mounted schemas get deferred by a
+modern client). Kitsune's durable value = **agent harness**: runtime reach into
+the 130k long tail with no config/restart, live MCP dev, and supply-chain
+safety (which the two commits above harden). Always-on is a strawman baseline.
+
+### 4. `kitsune-improve` skill (shipped in marty-skills repo, pushed `6a50294`)
+Decision: ship the "improve MCPs" capability as a **skill, not a Kitsune tool**,
+to keep the gateway slim. Lives at
+`martys-claude-tools/marty-skills/skills/kitsune-improve/`, symlinked into
+`~/.claude/skills`, indexed in that repo's README. Drives existing tools
+(`test`, `inspect`, lean `shapeshift`, `craft`) in a diagnose → improve → apply
+loop; the agent is the improvement engine (no LLM inside Kitsune).
+
+### OPEN FOLLOW-UPS
+- [ ] **Open the PR** for `feat/docker-sandbox-local-servers` → main (branch pushed, tests green).
+- [ ] **Container E2E** — sandbox/pin logic is unit-tested but mocked; a real
+  `shapeshift("mcp-server-time", sandbox=True)` with a running Docker daemon is
+  unverified. This machine has no working Docker (`/usr/local/bin/docker` is a
+  dangling OrbStack symlink; `shutil.which` correctly rejects it → the pre-flight
+  fired, so that path IS proven).
+- [ ] Optional pillars from the reframe, if pursued: sandbox-by-default for
+  `auto()`/community `call()`; README repositioned around the agent-harness loop.
+- [ ] marty-skills has unrelated local WIP (`docs/index.html` dashboard,
+  `jetson-bench-remote/SKILL.md`) — NOT touched by this session; regenerate the
+  skills dashboard to list `kitsune-improve` when convenient.
 
 ## RESOLVED + MERGED 2026-07-11 — KITSUNE_HOME everywhere (#39 → PR #57) and prewarm() (#41 → PR #58)
 
