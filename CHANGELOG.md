@@ -87,6 +87,21 @@ sandbox" and that execution was unpinned.
   does and does not protect against; `confirm=True` documented as a
   model-settable signal, not a human-approval boundary. New `docs/demo-realtime.md`.
 
+### Tests/CI — Docker-independent suite + real-container E2E job
+
+Sandbox-by-default made three tests silently depend on whether the HOST has
+docker on PATH (green on a docker-less dev machine, red on CI runners, which
+ship Docker). Fixed and made structural:
+
+- Autouse conftest fixture forces `shutil.which("docker")` → `None` suite-wide;
+  tests that fake Docker present still patch within their own scope, and tests
+  that need the real daemon opt out via the new `real_docker` marker.
+- New `docker-e2e` CI job runs `tests/test_docker_e2e.py` against the runner's
+  real daemon (gated by `KITSUNE_E2E_DOCKER=1`): a sandboxed
+  `uvx mcp-server-time` serves a real tool call through the hardened wrap, and
+  `transport_for_exec` cages a low-trust npm server end-to-end — closing the
+  "container E2E deferred" gap from the sandbox PRs.
+
 ---
 
 ## [0.20.8] — 2026-05-24

@@ -146,3 +146,33 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           fail_ci_if_error: false
+
+  # Real-daemon container E2E for the Docker sandbox. The main matrix mocks
+  # the docker boundary (and forces docker "absent" via a conftest fixture);
+  # ubuntu runners ship a live daemon, so this job proves the hardened
+  # `docker run` wrap actually boots MCP servers and serves tool calls.
+  docker-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Pre-pull sandbox base images (read from constants — no drift)
+        run: |
+          python -c "from kitsune_mcp.constants import SANDBOX_NPM_IMAGE, SANDBOX_PYPI_IMAGE; print(SANDBOX_NPM_IMAGE); print(SANDBOX_PYPI_IMAGE)" \
+            | xargs -n1 docker pull
+
+      - name: Run container E2E
+        run: pytest tests/test_docker_e2e.py -v --tb=short
+        env:
+          KITSUNE_E2E_DOCKER: "1"
+          SMITHERY_API_KEY: ""
