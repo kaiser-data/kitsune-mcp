@@ -1,6 +1,6 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-15 (early AM). Two security features + a companion skill; branch pushed, not yet PR'd._
+_Last updated: 2026-07-16. Sandbox-by-default on exec paths shipped; PR #61 open. README reposition still pending._
 
 ## SESSION 2026-07-15 — supply-chain hardening of the local-execution path (branch `feat/docker-sandbox-local-servers`, pushed, NOT merged)
 
@@ -56,17 +56,55 @@ to keep the gateway slim. Lives at
 loop; the agent is the improvement engine (no LLM inside Kitsune).
 
 ### OPEN FOLLOW-UPS
-- [ ] **Open the PR** for `feat/docker-sandbox-local-servers` → main (branch pushed, tests green).
+- [x] ~~**Open the PR**~~ — done 2026-07-16: **PR #61** (`feat/docker-sandbox-local-servers` → main).
 - [ ] **Container E2E** — sandbox/pin logic is unit-tested but mocked; a real
   `shapeshift("mcp-server-time", sandbox=True)` with a running Docker daemon is
   unverified. This machine has no working Docker (`/usr/local/bin/docker` is a
   dangling OrbStack symlink; `shutil.which` correctly rejects it → the pre-flight
-  fired, so that path IS proven).
-- [ ] Optional pillars from the reframe, if pursued: sandbox-by-default for
-  `auto()`/community `call()`; README repositioned around the agent-harness loop.
-- [ ] marty-skills has unrelated local WIP (`docs/index.html` dashboard,
-  `jetson-bench-remote/SKILL.md`) — NOT touched by this session; regenerate the
-  skills dashboard to list `kitsune-improve` when convenient.
+  fired, so that path IS proven). **Now also covers the exec-path default**
+  (`auto()`/`call()`/`run()` → real `docker run`).
+- [x] ~~sandbox-by-default for `auto()`/community `call()`~~ — done 2026-07-16 (`b30a6e0`, in PR #61).
+- [ ] **README reposition around the agent-harness loop** — the *other* half of the
+  reframe pillar, NOT started. Deferred at ~90% context; needs a fresh window to
+  read the current ~400-line README and restructure it (agent-harness value, not
+  token-savings; sandbox-by-default as a headline safety property).
+- [x] ~~regenerate the skills dashboard to list `kitsune-improve`~~ — done 2026-07-16
+  (marty-skills `970d8b4`). marty-skills still has unrelated local WIP
+  (`jetson-bench-remote/SKILL.md`) — NOT touched.
+
+## SESSION 2026-07-16 — sandbox-by-default on the exec paths + housekeeping (PR #61, pushed, NOT merged)
+
+Continuation of the 2026-07-15 branch. **801 tests pass (+14), ruff clean.**
+
+### Done
+- **Removed** two stale root reports (`GROK_BENCHMARK_REPORT.md`,
+  `GROK_PRODUCTION_READINESS.md`, Jul-9 / v0.20.8) — deleted at user request.
+- **Opened PR #61** — https://github.com/kaiser-data/kitsune-mcp/pull/61
+  (9 commits, base `main`, summary + test plan; container-E2E box left open).
+- **Regenerated the marty-skills dashboard** — `kitsune-improve` now listed
+  (`docs/index.html`, commit `970d8b4`, only that file staged).
+- **Sandbox-by-default on `auto()` / `call()` (ad-hoc) / `run()`** — `b30a6e0`:
+  - New `_state` helpers: `_sandbox_default_for_exec(explicit, source)` (community
+    /`npm`/`pypi`/`github` + unknown-source default on; medium/high-trust exempt;
+    explicit `KITSUNE_SANDBOX` still layers on top), `sandboxed_stdio_transport`
+    (run()'s ad-hoc path), `transport_for_exec` (auto()/call() routing).
+  - **Best-effort** (user-chosen): Docker present → hardened `docker run` wrap
+    (creds forwarded by name, same as `sandbox=True`); Docker absent → runs
+    uncaged + one-line nudge note (`_UNCAGED_NOTE`), never hard-fails.
+  - Key design seam: the **non-wrap path delegates to `_get_transport`** so all
+    existing mocks (which patch `_state._get_transport`) still intercept — only
+    the actual Docker-wrap bypasses it. Pooled `shapeshift` forms reused by
+    `call()` are left as-is (shapeshift already applied policy).
+  - `_sandbox_env_names(None)` now guarded (run()/unknown-package pass `srv=None`).
+  - Fixed 2 pre-existing `run()` tests (`test_audit_fixes`) that asserted the old
+    exact result — now force Docker absent + `startswith`. `tests/test_sandbox_default.py` (+14).
+  - CHANGELOG `[Unreleased]` entry added.
+
+### NOT done / next
+- **README reposition** (see follow-up above) — the remaining half of pillar #3.
+- Session ended at ~90% context / cost-critical; recommend `/compact` before the
+  README rewrite. Everything above is committed + pushed — nothing uncommitted in
+  KitsuneMCP.
 
 ## RESOLVED + MERGED 2026-07-11 — KITSUNE_HOME everywhere (#39 → PR #57) and prewarm() (#41 → PR #58)
 
