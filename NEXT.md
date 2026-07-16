@@ -1,6 +1,63 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-16. Sandbox-by-default on exec paths shipped; PR #61 open. README reposition still pending._
+_Last updated: 2026-07-16 evening. **PR #61 MERGED** (squash `e91d9df`). v0.21.0
+release NOT done — bump/tag/publish are the next actions. README reposition still pending._
+
+## SESSION 2026-07-16 (evening) — CI red → green, container E2E in CI, real sandbox bug found+fixed, PR #61 merged
+
+Started from "read handoff, analyze, path to next version". Found **PR #61's CI
+was red** (the morning handoff's "801 pass" was local-only). All fixed, E2E added,
+PR squash-merged to main (`e91d9df`). **803 tests + 2 gated E2E, all CI green.**
+
+### The bug class: tests sensitive to host Docker
+`transport_for_exec` branches on `shutil.which("docker")` — CI runners SHIP
+Docker, this Mac doesn't (dangling OrbStack symlink). So sandbox-by-default made
+`test_auto_falls_back_to_next_provider_on_auth_failure` take the real
+Docker-wrap path on CI only, bypassing its mocked `_get_transport` (green local,
+red CI; 3rd instance of this class). Fixes, in order:
+- `fd28be2` — that test now forces Docker absent (same pattern as test_audit_fixes).
+- `7068766` — **structural**: autouse conftest fixture forces
+  `shutil.which("docker")` → None suite-wide (pass-through for other binaries);
+  opt-out marker `real_docker` (registered in pyproject). Verified 801-green
+  both with and without a docker on PATH.
+
+### Container E2E now runs in CI (the deferred follow-up — CLOSED)
+Key realization: ubuntu runners HAVE a live daemon — E2E was never blocked on
+this machine. `9a2870b`:
+- `tests/test_docker_e2e.py` (gated `KITSUNE_E2E_DOCKER=1` + `real_docker`):
+  sandboxed `uvx mcp-server-time` answers a real `get_current_time` call through
+  the hardened wrap; `transport_for_exec` cages a real npm server
+  (`@modelcontextprotocol/server-everything`) end-to-end.
+- New `docker-e2e` CI job; pre-pulls base images **from kitsune_mcp.constants**
+  (no workflow/code drift). Tests skip cleanly everywhere else.
+
+### E2E's first run caught a REAL product bug (`2707ce2`)
+Docker's default `--tmpfs` options include **noexec**, and the sandbox wrap
+points HOME + npm/uv caches at /tmp — so npx/uvx downloaded the server, then
+`Permission denied (os error 13)` on spawn. **Every real sandboxed launch was
+broken; all mocked tests passed.** Fix: sandbox wrap mounts
+`/tmp:rw,exec,nosuid,size=512m` (tmpfs pages count against `--memory`);
+DockerTransport's scratch tmpfs keeps the stricter noexec default (server ships
+in the image). TDD'd (2 regression tests in test_sandbox.py); CHANGELOG updated.
+
+### Publish dispatch (user-run) was a no-op — expected
+`publish.yml -f publish_npm=true -f publish_registry=true` ran against main
+@0.20.8: npm "cannot publish over 0.20.8", MCP Registry "duplicate version",
+PyPI skip-existing no-op. Harmless; nothing changed anywhere.
+
+### NEXT ACTIONS — finish the v0.21.0 release (merge is done, rest is NOT)
+1. Bump **all three**: `pyproject.toml` (v7), `package.json` (v3),
+   `server.json` (3 occurrences) → `0.21.0`.
+2. CHANGELOG: `## [Unreleased]` → `## [0.21.0] — 2026-07-16`.
+3. Commit to main, tag `v0.21.0`, push commit + tag → PyPI auto-publishes.
+4. `gh workflow run publish.yml -f publish_npm=true -f publish_registry=true`
+   → npm + MCP Registry at 0.21.0.
+5. Verify: PyPI `info.version`, `npm dist-tags`, registry `isLatest`.
+- Note: permission classifier blocks agent-run `gh pr merge`/some pushes —
+  user ran the merge via `! gh pr merge 61 --squash --delete-branch`.
+- **Judgment call flagged**: releasing 0.21.0 ships the README with the OLD
+  token-savings pitch (reposition still pending, see below). User chose to
+  proceed with release first.
 
 ## SESSION 2026-07-15 — supply-chain hardening of the local-execution path (branch `feat/docker-sandbox-local-servers`, pushed, NOT merged)
 
@@ -57,12 +114,10 @@ loop; the agent is the improvement engine (no LLM inside Kitsune).
 
 ### OPEN FOLLOW-UPS
 - [x] ~~**Open the PR**~~ — done 2026-07-16: **PR #61** (`feat/docker-sandbox-local-servers` → main).
-- [ ] **Container E2E** — sandbox/pin logic is unit-tested but mocked; a real
-  `shapeshift("mcp-server-time", sandbox=True)` with a running Docker daemon is
-  unverified. This machine has no working Docker (`/usr/local/bin/docker` is a
-  dangling OrbStack symlink; `shutil.which` correctly rejects it → the pre-flight
-  fired, so that path IS proven). **Now also covers the exec-path default**
-  (`auto()`/`call()`/`run()` → real `docker run`).
+- [x] ~~**Container E2E**~~ — done 2026-07-16 evening: `docker-e2e` CI job runs
+  real-daemon E2E on every push (`tests/test_docker_e2e.py`). Its FIRST run
+  caught the noexec-tmpfs bug that had silently broken every real sandboxed
+  launch (see evening session above).
 - [x] ~~sandbox-by-default for `auto()`/community `call()`~~ — done 2026-07-16 (`b30a6e0`, in PR #61).
 - [ ] **README reposition around the agent-harness loop** — the *other* half of the
   reframe pillar, NOT started. Deferred at ~90% context; needs a fresh window to
