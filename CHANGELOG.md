@@ -101,6 +101,12 @@ ship Docker). Fixed and made structural:
   `uvx mcp-server-time` serves a real tool call through the hardened wrap, and
   `transport_for_exec` cages a low-trust npm server end-to-end — closing the
   "container E2E deferred" gap from the sandbox PRs.
+- The job's first run caught a real bug the mocked tests couldn't: Docker's
+  default `--tmpfs` options include `noexec`, so npx/uvx could download a
+  server into `/tmp` but never execute it (`Permission denied (os error 13)`)
+  — every real sandboxed launch was broken. The sandbox wrap now mounts
+  `/tmp:rw,exec,nosuid,size=512m`; `DockerTransport`'s scratch tmpfs keeps the
+  stricter noexec default (its server ships in the image).
 
 ---
 

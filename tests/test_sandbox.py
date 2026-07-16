@@ -37,6 +37,28 @@ class TestSandboxWrapCmd:
         img_idx = wrapped.index(SANDBOX_NPM_IMAGE)
         assert wrapped[img_idx + 1:] == ["npx", "-y", "some-pkg@1.2.3"]
 
+    def test_sandbox_tmpfs_is_executable(self):
+        """npx/uvx must be able to EXECUTE what they download into /tmp.
+
+        Docker's default --tmpfs options include noexec, which broke every
+        real sandboxed launch with 'Permission denied (os error 13)' — the
+        wrap points HOME and the package caches at /tmp, so the server's
+        entrypoint always lands there. Caught by the docker-e2e CI job.
+        """
+        wrapped = sandbox_wrap_cmd(["npx", "-y", "some-pkg@1.2.3"])
+        tmpfs = wrapped[wrapped.index("--tmpfs") + 1]
+        assert tmpfs.startswith("/tmp:")
+        assert "exec" in tmpfs.split(":", 1)[1].split(",")
+        assert "nosuid" in tmpfs
+
+    def test_docker_transport_tmpfs_keeps_noexec_default(self):
+        """docker: images ship their server in the image — their scratch
+        tmpfs stays on Docker's stricter default (noexec)."""
+        from kitsune_mcp.transport import _hardened_docker_flags
+
+        flags = _hardened_docker_flags({})
+        assert flags[flags.index("--tmpfs") + 1] == "/tmp"
+
     def test_uvx_command_uses_pypi_image_and_uv_cache(self):
         wrapped = sandbox_wrap_cmd(["uvx", "some-pkg==1.2.3"])
         assert SANDBOX_PYPI_IMAGE in wrapped

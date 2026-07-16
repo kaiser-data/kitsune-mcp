@@ -1045,11 +1045,16 @@ class WebSocketTransport(BaseTransport):
         return _truncate(_clean_response(raw_text))
 
 
-def _hardened_docker_flags(config: dict) -> list[str]:
+def _hardened_docker_flags(config: dict, tmpfs_exec: bool = False) -> list[str]:
     """Locked-down `docker run` flags shared by DockerTransport and sandbox_wrap_cmd().
 
     See DockerTransport's docstring for the profile rationale and the meaning
     of each config override (memory, pids_limit, writable, network, cap_add).
+
+    tmpfs_exec: Docker's default --tmpfs options include noexec — right for
+    DockerTransport's scratch space (the server ships in the image), fatal for
+    the sandbox wrap, where npx/uvx must EXECUTE the package they download
+    into /tmp (HOME and the package caches point there).
     """
     memory = str(config.get("memory") or DOCKER_DEFAULT_MEMORY)
     pids_limit = str(config.get("pids_limit") or DOCKER_DEFAULT_PIDS)
@@ -1064,8 +1069,11 @@ def _hardened_docker_flags(config: dict) -> list[str]:
         flags += ["--cap-add", str(cap)]
     # Read-only root filesystem unless the server explicitly needs to write.
     # Always give it a small writable tmpfs so well-behaved servers can scratch.
+    # (tmpfs pages count against --memory, so the exec variant's size stays
+    # within the default cap.)
     if not config.get("writable"):
-        flags += ["--read-only", "--tmpfs", "/tmp"]
+        tmpfs = "/tmp:rw,exec,nosuid,size=512m" if tmpfs_exec else "/tmp"
+        flags += ["--read-only", "--tmpfs", tmpfs]
     network = config.get("network")
     if network:
         flags += ["--network", str(network)]
@@ -1102,7 +1110,7 @@ def sandbox_wrap_cmd(cmd: list[str], env_names: list[str] | None = None, config:
         )
     image, cache_env = _SANDBOX_LAUNCHERS[launcher]
     config = config or {}
-    wrapped = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config)]
+    wrapped = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config, tmpfs_exec=True)]
     for k, v in cache_env.items():
         wrapped += ["-e", f"{k}={v}"]
     for name in env_names or []:
