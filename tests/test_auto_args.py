@@ -265,7 +265,11 @@ class TestAutoFillsArgs:
             return t
 
         call_log.clear()
+        # Force Docker absent so transport_for_exec delegates provider-b (npm/stdio)
+        # to the mocked _get_transport instead of Docker-wrapping the real launch
+        # (CI runners have docker on PATH; dev machines may not).
         with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
+             patch("kitsune_mcp.tools._state.shutil.which", return_value=None), \
              patch("kitsune_mcp.tools._state._get_transport", side_effect=make_transport):
             mock_reg.search = AsyncMock(return_value=[srv_a, srv_b])
             mock_reg.get_server = AsyncMock(side_effect=get_server_side_effect)

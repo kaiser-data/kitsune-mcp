@@ -74,13 +74,17 @@ async def call(
     # _get_transport() can't see (it re-resolves from registry and picks HTTP for
     # Smithery servers regardless of what shapeshift set up).
     pool_key = session.get("current_form_pool_key")
+    sandbox_note = ""
     if server_id == session.get("current_form") and pool_key:
+        # Pooled shapeshift form — shapeshift() already applied trust + sandbox
+        # policy when it built this process, so reuse it verbatim.
         try:
             transport: BaseTransport = _state.PersistentStdioTransport(json.loads(pool_key))
         except (json.JSONDecodeError, TypeError):
             transport = _state._get_transport(server_id, srv)
     else:
-        transport = _state._get_transport(server_id, srv)
+        # Ad-hoc one-shot — cage community/unknown local stdio servers best-effort.
+        transport, sandbox_note = _state.transport_for_exec(server_id, srv)
     result = await transport.execute(tool_name, arguments, resolved_config)
 
     _state._track_call(server_id, tool_name)
@@ -89,7 +93,7 @@ async def call(
         source = srv.source
         if source not in TRUST_HIGH | TRUST_MEDIUM:
             result = result + f"\n[source: {source}]"
-    return result
+    return result + sandbox_note if sandbox_note else result
 
 
 @mcp.tool()
@@ -103,11 +107,12 @@ async def run(
         arguments = {}
     cmd = ["uvx", package[4:]] if package.startswith("uvx:") else ["npx", "-y", package]
 
-    transport = _state.PersistentStdioTransport(cmd)
+    # Ad-hoc npm/pip run — no registry vetting, so cage it best-effort in Docker.
+    transport, sandbox_note = _state.sandboxed_stdio_transport(cmd, None)
     result = await transport.execute(tool_name, arguments, {})
 
     _state._track_call(package, tool_name)
-    return result
+    return result + sandbox_note if sandbox_note else result
 
 
 @mcp.tool()

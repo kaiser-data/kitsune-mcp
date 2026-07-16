@@ -4,6 +4,112 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added — sandbox-by-default on the exec paths (`auto()` / `call()` / `run()`)
+
+`shapeshift(sandbox=True)` was opt-in, but the "magic" execution paths still
+spawned community npx/uvx processes uncaged: `auto()` (the model picks the
+server), ad-hoc `call()`, and `run()`. These now cage low-trust / unknown-source
+local stdio servers by default, **best-effort**:
+
+- Docker present → the launch is wrapped in the same hardened `docker run`
+  profile automatically (credential names forwarded value-less, as with
+  `sandbox=True`).
+- Docker absent → the server still runs (uncaged) and the result carries a
+  one-line nudge to install Docker — these paths never hard-fail on a missing
+  daemon (unlike `shapeshift(sandbox=True)`, which the user asked for explicitly).
+- High-trust registry sources (official / absorbed / mcpregistry / smithery /
+  glama) are **not** caged by default; an explicit `KITSUNE_SANDBOX` policy
+  still applies on top. Pooled `shapeshift` forms reused by `call()` keep the
+  policy `shapeshift()` already applied.
+- New helpers in `kitsune_mcp/tools/_state.py`
+  (`_sandbox_default_for_exec`, `sandboxed_stdio_transport`,
+  `transport_for_exec`); no tool-schema change. 14 new tests.
+
+### Added — trust-on-first-use (TOFU) version pinning
+
+Resolution-time pinning (`pkg@1.2.3`) makes one session reproducible but
+"latest" still drifts across sessions, so the same `shapeshift()` could
+silently execute a newer — possibly hijacked — release later. TOFU closes that:
+
+- The first mount of an npm/PyPI server records its exact version in
+  `~/.kitsune/pins.json` (atomic, `0600`). Later mounts reuse the pinned
+  version and, on drift, launch the pinned version while surfacing
+  `⚠️ pinned to X, registry now offers Y` in the shapeshift output.
+- `KITSUNE_REPIN=1` adopts the newer version and updates the pin.
+- Applied before `server_args` and before the Docker sandbox wrap, so the
+  pinned version is what actually launches on host or in the container.
+- Honest limits (documented): pins a version, not a content digest;
+  `github:` targets and hand-written `connect()` commands carry no version and
+  pass through unpinned. New module `kitsune_mcp/pins.py`; no tool-schema
+  change (policy via env, like `KITSUNE_TRUST`/`KITSUNE_SANDBOX`).
+
+### Added — Docker sandbox for local npm/PyPI servers (`sandbox=True`)
+
+The hardened Docker profile was previously reachable only via explicit
+`docker:` image IDs — npm/PyPI servers still ran as raw host subprocesses.
+Now the profile applies to them too:
+
+- **`shapeshift(server_id, sandbox=True)`** wraps the local `npx`/`uvx` launch
+  in the locked-down `docker run` profile (`--cap-drop ALL`, read-only rootfs,
+  `--pids-limit`, `--memory`, no host filesystem). `npx`/`uvx` caches are
+  redirected to the container tmpfs so the read-only rootfs doesn't break
+  first-run package download.
+- **Secrets never enter the argv.** Credential env vars are forwarded by NAME
+  only (`docker -e KEY`) — declared credentials plus the same host-var
+  heuristic `inspect()` probes use. Values stay out of `ps` output and the
+  process-pool key.
+- **`KITSUNE_SANDBOX` session policy:** `community` sandboxes every low-trust
+  (npm/pypi/github) mount automatically; `all`/`1` sandboxes every local mount.
+- **The community trust gate now teaches the safer path** — it offers
+  `confirm=True, sandbox=True` alongside plain `confirm=True`.
+- Pre-flight checks fail fast (before the current form is shed) when Docker is
+  missing, the server is HTTP-hosted, or the launcher isn't npx/uvx.
+- New constants `SANDBOX_NPM_IMAGE` (node:22-slim) / `SANDBOX_PYPI_IMAGE`
+  (astral-sh/uv python3.13); `DockerTransport` and the sandbox share one
+  `_hardened_docker_flags()` profile builder.
+
+### Security — hardened Docker profile + default version pinning
+
+Responds to an external review noting that "an isolated OS subprocess is not a
+sandbox" and that execution was unpinned.
+
+- **DockerTransport is hardened by default.** Every `docker run` now adds
+  `--pids-limit 512`, `--security-opt no-new-privileges`, `--cap-drop ALL`, and
+  `--read-only` with a writable `--tmpfs /tmp`. Per-call opt-outs: `writable`,
+  `cap_add`, `network`, `pids_limit`, `memory`.
+- **npm/PyPI versions are pinned at resolution.** `NpmRegistry.get_server` and
+  `PyPIRegistry.get_server` now emit `npx -y pkg@<version>` / `uvx pkg==<version>`
+  using the exact version the registry reports, so a later run can't silently
+  pick up a newer release. Falls back to the bare name when no version is known.
+- **Docs:** README "Safety & sandboxing" → "Safety model", split into what it
+  does and does not protect against; `confirm=True` documented as a
+  model-settable signal, not a human-approval boundary. New `docs/demo-realtime.md`.
+
+### Tests/CI — Docker-independent suite + real-container E2E job
+
+Sandbox-by-default made three tests silently depend on whether the HOST has
+docker on PATH (green on a docker-less dev machine, red on CI runners, which
+ship Docker). Fixed and made structural:
+
+- Autouse conftest fixture forces `shutil.which("docker")` → `None` suite-wide;
+  tests that fake Docker present still patch within their own scope, and tests
+  that need the real daemon opt out via the new `real_docker` marker.
+- New `docker-e2e` CI job runs `tests/test_docker_e2e.py` against the runner's
+  real daemon (gated by `KITSUNE_E2E_DOCKER=1`): a sandboxed
+  `uvx mcp-server-time` serves a real tool call through the hardened wrap, and
+  `transport_for_exec` cages a low-trust npm server end-to-end — closing the
+  "container E2E deferred" gap from the sandbox PRs.
+- The job's first run caught a real bug the mocked tests couldn't: Docker's
+  default `--tmpfs` options include `noexec`, so npx/uvx could download a
+  server into `/tmp` but never execute it (`Permission denied (os error 13)`)
+  — every real sandboxed launch was broken. The sandbox wrap now mounts
+  `/tmp:rw,exec,nosuid,size=512m`; `DockerTransport`'s scratch tmpfs keeps the
+  stricter noexec default (its server ships in the image).
+
+---
+
 ## [0.20.8] — 2026-05-24
 
 ### Fixed — #44 completed for Smithery servers (thin registry schemas)

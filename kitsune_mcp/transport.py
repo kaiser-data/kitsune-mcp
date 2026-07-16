@@ -15,10 +15,14 @@ from dataclasses import dataclass, field
 import kitsune_mcp.credentials as _creds
 from kitsune_mcp import oauth
 from kitsune_mcp.constants import (
+    DOCKER_DEFAULT_MEMORY,
+    DOCKER_DEFAULT_PIDS,
     MCP_CLIENT_INFO,
     MCP_PROTOCOL_VERSION,
     POOL_MAX_IDLE_SECONDS,
     POOL_MAX_PROCESSES,
+    SANDBOX_NPM_IMAGE,
+    SANDBOX_PYPI_IMAGE,
     STDIO_BUFFER_LIMIT,
     TIMEOUT_HTTP_TOOL,
     TIMEOUT_PROMPT_LIST,
@@ -1041,29 +1045,117 @@ class WebSocketTransport(BaseTransport):
         return _truncate(_clean_response(raw_text))
 
 
-class DockerTransport(BaseTransport):
-    """Run an MCP server inside a Docker container via stdio.
+def _hardened_docker_flags(config: dict, tmpfs_exec: bool = False) -> list[str]:
+    """Locked-down `docker run` flags shared by DockerTransport and sandbox_wrap_cmd().
 
-    Uses `docker run --rm -i --memory <limit>` so the container is:
-    - ephemeral (--rm auto-removes it on exit)
-    - RAM-capped (default 512m, override via config["memory"])
+    See DockerTransport's docstring for the profile rationale and the meaning
+    of each config override (memory, pids_limit, writable, network, cap_add).
+
+    tmpfs_exec: Docker's default --tmpfs options include noexec — right for
+    DockerTransport's scratch space (the server ships in the image), fatal for
+    the sandbox wrap, where npx/uvx must EXECUTE the package they download
+    into /tmp (HOME and the package caches point there).
+    """
+    memory = str(config.get("memory") or DOCKER_DEFAULT_MEMORY)
+    pids_limit = str(config.get("pids_limit") or DOCKER_DEFAULT_PIDS)
+    flags = [
+        "--label", "kitsune-mcp=1",
+        "--memory", memory,
+        "--pids-limit", pids_limit,
+        "--security-opt", "no-new-privileges",
+        "--cap-drop", "ALL",
+    ]
+    for cap in (config.get("cap_add") or []):
+        flags += ["--cap-add", str(cap)]
+    # Read-only root filesystem unless the server explicitly needs to write.
+    # Always give it a small writable tmpfs so well-behaved servers can scratch.
+    # (tmpfs pages count against --memory, so the exec variant's size stays
+    # within the default cap.)
+    if not config.get("writable"):
+        tmpfs = "/tmp:rw,exec,nosuid,size=512m" if tmpfs_exec else "/tmp"
+        flags += ["--read-only", "--tmpfs", tmpfs]
+    network = config.get("network")
+    if network:
+        flags += ["--network", str(network)]
+    return flags
+
+
+# launcher → (base image, cache env forced onto the tmpfs so the read-only
+# rootfs doesn't break package download on first run)
+_SANDBOX_LAUNCHERS = {
+    "npx": (SANDBOX_NPM_IMAGE, {"HOME": "/tmp", "npm_config_cache": "/tmp/.npm"}),
+    "uvx": (SANDBOX_PYPI_IMAGE, {"HOME": "/tmp", "UV_CACHE_DIR": "/tmp/.uv-cache"}),
+}
+
+
+def sandbox_wrap_cmd(cmd: list[str], env_names: list[str] | None = None, config: dict | None = None) -> list[str]:
+    """Wrap a local `npx`/`uvx` launch in the hardened `docker run` profile.
+
+    The container gets no host filesystem, no capabilities, a read-only rootfs,
+    and RAM/PID caps — the same profile DockerTransport applies to `docker:`
+    images. Credential env vars are forwarded by NAME only (`-e KEY`): docker
+    copies each value from its own (inherited) environment, so secrets never
+    appear in the argv, `ps` output, or the process-pool key.
+
+    Raises ValueError for launchers other than npx/uvx — arbitrary local
+    commands have no known base image to run in.
+    """
+    if not cmd:
+        raise ValueError("sandbox: empty command")
+    launcher = cmd[0]
+    if launcher not in _SANDBOX_LAUNCHERS:
+        raise ValueError(
+            f"sandbox supports npx/uvx commands only, got {launcher!r} — "
+            f"run it unsandboxed or provide a docker: image instead"
+        )
+    image, cache_env = _SANDBOX_LAUNCHERS[launcher]
+    config = config or {}
+    wrapped = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config, tmpfs_exec=True)]
+    for k, v in cache_env.items():
+        wrapped += ["-e", f"{k}={v}"]
+    for name in env_names or []:
+        wrapped += ["-e", name]
+    wrapped.append(str(config.get("image") or image))
+    wrapped += cmd
+    return wrapped
+
+
+class DockerTransport(BaseTransport):
+    """Run an MCP server inside a Docker container via stdio, hardened by default.
+
+    Every container runs with a locked-down profile so an untrusted image is
+    contained even if it turns hostile:
+    - ephemeral        (--rm auto-removes it on exit)
+    - RAM-capped       (--memory, default 512m)
+    - PID-capped       (--pids-limit, default 512 — blunts fork bombs)
+    - no privilege esc (--security-opt no-new-privileges)
+    - no capabilities  (--cap-drop ALL)
+    - read-only rootfs (--read-only + --tmpfs /tmp for scratch space)
     - pooled through PersistentStdioTransport — shares the 10-process hard cap
+
+    Networking stays on by default (most MCP servers need egress); pass
+    config["network"]="none" to cut it. This is stronger than a bare `docker
+    run`, but Docker is not a security boundary against a kernel exploit —
+    treat it as defence-in-depth, not a guarantee.
+
+    Config overrides (all optional):
+        memory:     RAM limit                (default "512m")
+        pids_limit: max processes            (default 512)
+        writable:   True → drop --read-only  (for servers that write to disk)
+        network:    docker --network value   (e.g. "none")
+        cap_add:    list of caps to re-add   (for servers that truly need one)
+        env:        {name: value} passed as -e
 
     Usage:
         call("docker:mcp/my-image:latest", "tool_name", {...})
-        call("docker:my-image", "tool_name", {...}, config={"memory": "256m"})
+        call("docker:my-image", "tool_name", {...}, config={"network": "none"})
     """
 
     def __init__(self, image: str):
         self.image = image
 
     def _build_cmd(self, config: dict) -> list[str]:
-        memory = str(config.get("memory") or "512m")
-        cmd = [
-            "docker", "run", "--rm", "-i",
-            "--label", "kitsune-mcp=1",
-            "--memory", memory,
-        ]
+        cmd = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config)]
         for k, v in (config.get("env") or {}).items():
             cmd += ["-e", f"{k}={v}"]
         cmd.append(self.image)

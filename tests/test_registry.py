@@ -178,7 +178,34 @@ class TestNpmRegistry:
 
         assert result is not None
         assert result.id == "mcp-server-test"
-        assert result.install_cmd == ["npx", "-y", "mcp-server-test"]
+        # Version is pinned from dist-tags.latest so future runs are reproducible.
+        assert result.install_cmd == ["npx", "-y", "mcp-server-test@1.2.3"]
+
+    async def test_get_server_pins_scoped_package_version(self):
+        npm_detail = {
+            "name": "@scope/mcp-thing",
+            "dist-tags": {"latest": "0.4.1"},
+            "versions": {"0.4.1": {"description": "scoped"}},
+        }
+        with respx.mock:
+            respx.get("https://registry.npmjs.org/@scope/mcp-thing").mock(
+                return_value=httpx.Response(200, json=npm_detail)
+            )
+            reg = NpmRegistry()
+            result = await reg.get_server("@scope/mcp-thing")
+        # Scoped name keeps its leading @, version appended after a second @.
+        assert result.install_cmd == ["npx", "-y", "@scope/mcp-thing@0.4.1"]
+
+    async def test_get_server_unknown_version_stays_unpinned(self):
+        npm_detail = {"name": "mcp-noversion", "dist-tags": {}, "versions": {}}
+        with respx.mock:
+            respx.get("https://registry.npmjs.org/mcp-noversion").mock(
+                return_value=httpx.Response(200, json=npm_detail)
+            )
+            reg = NpmRegistry()
+            result = await reg.get_server("mcp-noversion")
+        # No resolvable version → fall back to unpinned rather than an invalid spec.
+        assert result.install_cmd == ["npx", "-y", "mcp-noversion"]
 
     async def test_get_server_http_error_returns_none(self):
         with respx.mock:
@@ -462,8 +489,27 @@ class TestPyPIRegistry:
         assert result is not None
         assert result.id == "mcp-server-git"
         assert result.source == "pypi"
+        # No version in metadata → unpinned fallback (still valid).
         assert result.install_cmd == ["uvx", "mcp-server-git"]
         assert result.description == "Git repository MCP server"
+
+    async def test_get_server_pins_version_when_known(self):
+        pypi_detail = {
+            "info": {
+                "name": "mcp-server-git",
+                "summary": "Git repository MCP server",
+                "version": "2.5.0",
+            }
+        }
+        from server import PyPIRegistry
+        with respx.mock:
+            respx.get("https://pypi.org/pypi/mcp-server-git/json").mock(
+                return_value=httpx.Response(200, json=pypi_detail)
+            )
+            reg = PyPIRegistry()
+            result = await reg.get_server("mcp-server-git")
+        # uvx takes a PEP 508 requirement; pin with == for reproducible runs.
+        assert result.install_cmd == ["uvx", "mcp-server-git==2.5.0"]
 
     async def test_get_server_http_error_returns_none(self):
         from server import PyPIRegistry

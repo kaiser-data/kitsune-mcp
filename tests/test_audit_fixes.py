@@ -313,6 +313,7 @@ class TestRunTool:
             return "tool result"
 
         with patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT, \
+             patch("kitsune_mcp.tools._state.shutil.which", return_value=None), \
              patch("kitsune_mcp.tools._state._track_call"):
             mock_t = MagicMock()
             mock_t.execute = fake_execute
@@ -321,7 +322,8 @@ class TestRunTool:
             from kitsune_mcp.tools.exec import run
             result = await run("some-mcp-package", "do_thing", {"x": "val"})
 
-        assert result == "tool result"
+        # Docker forced absent → runs uncaged, argv unchanged, nudge note appended.
+        assert result.startswith("tool result")
         MockT.assert_called_once_with(["npx", "-y", "some-mcp-package"])
 
     @pytest.mark.asyncio
@@ -330,6 +332,7 @@ class TestRunTool:
             return "uvx result"
 
         with patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT, \
+             patch("kitsune_mcp.tools._state.shutil.which", return_value=None), \
              patch("kitsune_mcp.tools._state._track_call"):
             mock_t = MagicMock()
             mock_t.execute = fake_execute
@@ -338,7 +341,8 @@ class TestRunTool:
             from kitsune_mcp.tools.exec import run
             result = await run("uvx:my-python-mcp", "analyze", {})
 
-        assert result == "uvx result"
+        # Docker forced absent → runs uncaged, argv unchanged, nudge note appended.
+        assert result.startswith("uvx result")
         MockT.assert_called_once_with(["uvx", "my-python-mcp"])
 
 

@@ -7,6 +7,7 @@ import inspect as _inspect
 import json
 import os
 import shlex
+import shutil
 import time
 
 import httpx
@@ -220,11 +221,13 @@ async def shapeshift(
     confirm: bool = False,
     source: str = "auto",
     server_args: list[str] | None = None,
+    sandbox: bool = False,
 ) -> str:
     """Mount an MCP server's tools at runtime. Empty server_id unmounts.
 
     shapeshift('mcp-server-time')          # mount
     shapeshift('id', tools=['only_this'])  # lean — mount only listed tools
+    shapeshift('id', sandbox=True)         # run local server caged in Docker
     shapeshift()                           # unmount + kill process
 
     source: auto|local|smithery|official. confirm=True for community sources.
@@ -235,6 +238,12 @@ async def shapeshift(
     # Pool connections (from connect()) take priority — user already vetted these, bypass trust gates
     for _pk, conn in session["connections"].items():
         if conn.get("name") == server_id or conn.get("command") == server_id:
+            if sandbox:
+                return (
+                    f"❌ sandbox=True is not supported for pool connections — '{server_id}' runs "
+                    f"your own local command, which has no known container image.\n"
+                    f"Mount it unsandboxed, or package it as a docker: image."
+                )
             # Prefer pre-parsed argv stored at connect() time; fall back to shlex.split()
             # so quoted paths (e.g. "/path with spaces") are never mangled.
             cmd = conn.get("install_cmd") or shlex.split(conn["command"])
@@ -316,6 +325,7 @@ async def shapeshift(
             f"⚠️  '{server_id}' is from {srv_source} (community — not verified by the official MCP registry)."
             f"{preview}"
             f"To proceed: shapeshift('{server_id}', confirm=True)\n"
+            f"Safer — run it caged in Docker (no host filesystem): shapeshift('{server_id}', confirm=True, sandbox=True)\n"
             f"To always trust community: auth(\"KITSUNE_TRUST\", \"community\")"
         )
 
@@ -363,6 +373,33 @@ async def shapeshift(
             f'    shapeshift("@scope/pkg-name", source="local", confirm=True)'
         )
 
+    # Sandbox pre-flight — validated BEFORE the lock (and before _do_shed())
+    # so a refusal never silently drops the user's current form.
+    will_be_stdio = source == "local" or srv.transport == "stdio"
+    sandboxing = will_be_stdio and _state._sandbox_active(sandbox, srv_source)
+    if sandbox and not will_be_stdio:
+        return (
+            f"❌ sandbox=True needs a locally-run stdio server; '{server_id}' is {srv.transport}-hosted "
+            f"(nothing executes on this machine, so there is nothing to cage).\n"
+            f"To force a local sandboxed install: shapeshift(\"{server_id}\", source=\"local\", sandbox=True)"
+        )
+    if sandboxing:
+        if not shutil.which("docker"):
+            return (
+                f"❌ sandbox requested but Docker is not available on PATH.\n"
+                f"Start/install Docker, or mount unsandboxed: shapeshift(\"{server_id}\", confirm=True)"
+            )
+        planned_cmd = (
+            (srv.install_cmd or _state._infer_install_cmd(server_id))
+            if source == "local"
+            else (srv.install_cmd or ["npx", "-y", server_id])
+        )
+        if planned_cmd[0] not in ("npx", "uvx"):
+            return (
+                f"❌ sandbox failed: sandbox supports npx/uvx commands only, got '{planned_cmd[0]}'.\n"
+                f"Mount unsandboxed (shapeshift(\"{server_id}\", confirm=True)) or package it as a docker: image."
+            )
+
     _shapeshift_started = time.monotonic()
 
     # _registry_lock serialises all shed→register sequences. Without it a concurrent
@@ -376,10 +413,21 @@ async def shapeshift(
         if source == "local":
             install_cmd = srv.install_cmd or _state._infer_install_cmd(server_id)
             srv = dataclasses.replace(srv, transport="stdio", install_cmd=install_cmd)
-            session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
+            if not sandboxing:
+                # Sandboxed installs live inside the container's tmpfs —
+                # nothing lands on the host, so there is nothing to uninstall.
+                session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
 
+        pin_note = ""
         if srv.transport == "stdio":
-            cmd = (srv.install_cmd or ["npx", "-y", server_id]) + (server_args or [])
+            base_cmd = srv.install_cmd or ["npx", "-y", server_id]
+            # TOFU pin: reuse the version trusted on first mount; warn on drift.
+            # Applied before server_args and before the sandbox wrap so the
+            # pinned version is what actually launches (host or container).
+            base_cmd, pin_note = _state.reconcile_pin(server_id, base_cmd, srv_source)
+            cmd = base_cmd + (server_args or [])
+            if sandboxing:
+                cmd = _state.sandbox_wrap_cmd(cmd, env_names=_state._sandbox_env_names(srv))
             # PersistentStdioTransport keeps the process alive for subsequent tool calls
             transport = _state.PersistentStdioTransport(cmd)
             pool_key: str | None = json.dumps(cmd, sort_keys=True)
@@ -407,7 +455,12 @@ async def shapeshift(
 
         # Only show "via local npx/uvx" when a real local process was started.
         _actually_local = source == "local" or _original_transport == "stdio"
-        transport_label = " via local npx/uvx" if _actually_local and srv.transport == "stdio" else ""
+        if sandboxing and srv.transport == "stdio":
+            transport_label = " via Docker sandbox"
+        elif _actually_local and srv.transport == "stdio":
+            transport_label = " via local npx/uvx"
+        else:
+            transport_label = ""
         elapsed = time.monotonic() - _shapeshift_started
         timing = f" ({elapsed:.1f}s{'  — warm calls will be instant' if elapsed > 3 else ''})"
         if srv_source in TRUST_HIGH | TRUST_MEDIUM:
@@ -416,6 +469,8 @@ async def shapeshift(
             trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry){timing}"
         if auto_resolved_from is not None:
             trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
+        if pin_note:
+            trust_note = trust_note + "\n" + pin_note
 
         return await _commit_shapeshift(
             server_id, transport, tool_schemas, resolved_config, tools, ctx,
@@ -627,7 +682,9 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
         label = existing.name or friendly
         return (
             f"Already connected: {label} (PID {existing.pid()}) | "
-            f"uptime: {uptime}s | calls: {calls}"
+            f"uptime: {uptime}s | calls: {calls}\n"
+            f"Changed the code? release('{label}') first — this process "
+            f"predates your edit and is running the old code."
         )
 
     transport = _state.PersistentStdioTransport(install_cmd, inherit_stderr=inherit_stderr)

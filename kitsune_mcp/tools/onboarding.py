@@ -25,7 +25,6 @@ from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.registry import REGISTRY_BASE, _relevance_score, _works_now_score
 from kitsune_mcp.session import _save_skills, session
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import BaseTransport
 from kitsune_mcp.utils import _get_http_client, _is_safe_url
 
 
@@ -340,9 +339,12 @@ async def auto(
     # Wall-clock cap of 5s per provider is enforced by transport timeouts already.
     attempted: list[tuple[str, str]] = []
     last_result: str = ""
+    sandbox_note: str = ""
     while True:
         srv = await _state._registry.get_server(server_id)
-        transport: BaseTransport = _state._get_transport(server_id, srv)
+        # Cage community/unknown local stdio servers best-effort — auto() picked
+        # this server, so nobody explicitly vetted it.
+        transport, sandbox_note = _state.transport_for_exec(server_id, srv)
         last_result = await transport.execute(tool_name, arguments, resolved_config)
         _state._track_call(server_id, tool_name)
         attempted.append((server_id, tool_name))
@@ -382,7 +384,7 @@ async def auto(
                 f'Retry with: auto("{task}", server_hint="<id>")'
             )
 
-    return last_result
+    return last_result + sandbox_note if sandbox_note else last_result
 
 
 # Param names that semantically take a free-text query — always safe to fill

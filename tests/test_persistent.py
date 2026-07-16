@@ -247,6 +247,9 @@ class TestConnect:
 
         assert "Already connected" in result
         assert "running" in result
+        # Hot-reload footgun guard: the message must steer a dev to release()
+        # first, since the pooled process is still running pre-edit code.
+        assert "release('running')" in result
         _process_pool.pop(pool_key, None)
 
 

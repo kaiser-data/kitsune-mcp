@@ -102,6 +102,14 @@ web_search_exa(query="MCP servers")
 
 **Note:** Automatically reverts previous form before shapeshifting.
 
+**`sandbox=True`** runs a local npm/PyPI server inside the hardened Docker
+profile instead of as a host subprocess: no host filesystem, `--cap-drop ALL`,
+read-only rootfs, RAM/PID caps. Credential env vars are forwarded by name only
+(`docker -e KEY`) — values never enter the argv or process list. Requires
+Docker; the first sandboxed mount pulls the base image. Session policy via
+`KITSUNE_SANDBOX=community` (sandbox all low-trust sources) or `=all` (every
+local mount). Filesystem-style servers need host paths and don't fit a sandbox.
+
 ---
 
 ### `shiftback()`

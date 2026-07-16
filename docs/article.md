@@ -41,17 +41,17 @@ That's the whole idea: **a lean agent that reaches the entire ecosystem, but onl
 
 Here's where I have to correct my own earlier marketing, because the first version of this story was inflated — and the real numbers are still good enough that the honesty costs nothing.
 
-**Kitsune is not free at rest.** It is itself an always-on MCP server. Its six lean-profile tools (`status`, `search`, `shapeshift`, `call`, `auto`, `auth`) cost **~1,321 tokens** in every turn, measured, whether you use them or not. That is a fixed floor — it never drops to zero. Any comparison that hides this floor is lying to you.
+**Kitsune is not free at rest.** It is itself an always-on MCP server. Its six lean-profile tools (`status`, `search`, `shapeshift`, `call`, `auto`, `auth`) cost **~1,358 tokens** in every turn, measured, whether you use them or not. That is a fixed floor — it never drops to zero. Any comparison that hides this floor is lying to you.
 
-The win isn't that Kitsune is weightless. It's that **the floor stays flat while always-on servers stack linearly.** Every figure below already includes the 1,321-token floor:
+The win isn't that Kitsune is weightless. It's that **the floor stays flat while always-on servers stack linearly.** Every figure below already includes the 1,358-token floor:
 
 | Always-on servers | Always-on / turn | Kitsune / turn | Saved |
 |---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | ~1,621 | **62%** |
-| GitHub + filesystem + git | 8,678 | ~1,631–2,011 | **77–81%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,631–3,271 | **87–93%** |
+| GitHub (26 tools) | 4,229 | ~1,658 | **61%** |
+| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | **76–81%** |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
 
-And the break-even, stated plainly: **if you only ever run one small server** — say `mcp-server-time` at ~261 tokens — always-on is *cheaper* than Kitsune's 1,321 floor. Kitsune pays off the moment the always-on alternative exceeds that floor: one medium server, or two-plus small ones. The bigger and more numerous your servers, the bigger the win.
+And the break-even, stated plainly: **if you only ever run one small server** — say `mcp-server-time` at ~261 tokens — always-on is *cheaper* than Kitsune's 1,358 floor. Kitsune pays off the moment the always-on alternative exceeds that floor: one medium server, or two-plus small ones. The bigger and more numerous your servers, the bigger the win.
 
 That break-even note is the part most "10x token savings!" pitches leave out. Including it is the difference between a benchmark and an honest tool.
 

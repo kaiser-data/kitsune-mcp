@@ -1,10 +1,39 @@
 """Shared test fixtures for Chameleon MCP tests."""
 import json
+import shutil
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import respx
+
+_REAL_WHICH = shutil.which
+
+
+@pytest.fixture(autouse=True)
+def _no_host_docker(request, monkeypatch):
+    """Make the suite deterministic regardless of host Docker.
+
+    Sandbox-by-default (transport_for_exec / sandboxed_stdio_transport /
+    shapeshift's sandbox pre-flight) branches on shutil.which("docker"): with
+    Docker on PATH the launch is docker-wrapped and bypasses the mocked
+    _get_transport — so a suite that is green on a docker-less dev machine can
+    still fail on a CI runner, which ships Docker. Force the docker lookup to
+    None by default; every other executable resolves normally.
+
+    Tests that fake Docker present keep patching shutil.which in their own
+    scope (the inner patch wins for its duration); tests that need the real
+    daemon opt out with @pytest.mark.real_docker.
+    """
+    if request.node.get_closest_marker("real_docker"):
+        return
+
+    def _which(cmd, *args, **kwargs):
+        if cmd == "docker":
+            return None
+        return _REAL_WHICH(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "which", _which)
 
 # ---------------------------------------------------------------------------
 # Shared subprocess mock helpers (importable or usable as fixtures)
