@@ -6,6 +6,27 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added — sandbox-by-default on the exec paths (`auto()` / `call()` / `run()`)
+
+`shapeshift(sandbox=True)` was opt-in, but the "magic" execution paths still
+spawned community npx/uvx processes uncaged: `auto()` (the model picks the
+server), ad-hoc `call()`, and `run()`. These now cage low-trust / unknown-source
+local stdio servers by default, **best-effort**:
+
+- Docker present → the launch is wrapped in the same hardened `docker run`
+  profile automatically (credential names forwarded value-less, as with
+  `sandbox=True`).
+- Docker absent → the server still runs (uncaged) and the result carries a
+  one-line nudge to install Docker — these paths never hard-fail on a missing
+  daemon (unlike `shapeshift(sandbox=True)`, which the user asked for explicitly).
+- High-trust registry sources (official / absorbed / mcpregistry / smithery /
+  glama) are **not** caged by default; an explicit `KITSUNE_SANDBOX` policy
+  still applies on top. Pooled `shapeshift` forms reused by `call()` keep the
+  policy `shapeshift()` already applied.
+- New helpers in `kitsune_mcp/tools/_state.py`
+  (`_sandbox_default_for_exec`, `sandboxed_stdio_transport`,
+  `transport_for_exec`); no tool-schema change. 14 new tests.
+
 ### Added — trust-on-first-use (TOFU) version pinning
 
 Resolution-time pinning (`pkg@1.2.3`) makes one session reproducible but

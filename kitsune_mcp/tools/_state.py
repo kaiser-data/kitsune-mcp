@@ -9,6 +9,7 @@ is a deliberate choice driven by whether tests mock it.
 import asyncio
 import os
 import re
+import shutil
 
 from kitsune_mcp.constants import (
     MAX_RESOURCE_DOCS,
@@ -259,7 +260,12 @@ def _sandbox_env_names(srv) -> list[str]:
          suffix sharing a name token with the server's id/name (npm/pypi
          listings declare no credentials, so this is the common path).
     Everything else (AWS_*, unrelated API keys) stays on the host.
+
+    srv may be None on ad-hoc paths (run(), unknown-package call()) — no declared
+    creds and no identity to match, so nothing is forwarded.
     """
+    if srv is None:
+        return []
     names = [_to_env_var(c) for c in (srv.credentials or {})]
     haystack = {
         tok for tok in re.findall(r"[a-z0-9]{4,}", (srv.id + " " + srv.name).lower())
@@ -272,6 +278,70 @@ def _sandbox_env_names(srv) -> list[str]:
             if any(tok in var_lower for tok in haystack):
                 names.append(var)
     return names
+
+
+def _sandbox_default_for_exec(explicit: bool, source: str) -> bool:
+    """Sandbox policy for the auto()/call()/run() execution paths.
+
+    Broader than shapeshift's `_sandbox_active`: on these "magic" paths the model
+    (auto) or an ad-hoc caller (call/run) runs a server nobody explicitly vetted,
+    so low-trust community sources AND unknown-source local servers default to the
+    Docker cage. Any explicit KITSUNE_SANDBOX policy (all/community/…) still
+    applies on top via `_sandbox_active`. Medium/high-trust registry sources are
+    vetted enough to skip the default cage.
+    """
+    if _sandbox_active(explicit, source):
+        return True
+    return source in TRUST_LOW or not source
+
+
+# Nudge appended when a sandbox was wanted but Docker isn't on PATH. The server
+# still runs (uncaged) — the exec paths never hard-fail on a missing daemon,
+# unlike shapeshift(sandbox=True), which the user asked for explicitly.
+_UNCAGED_NOTE = (
+    "\n⚠️  Ran uncaged — Docker not found on PATH. "
+    "Install Docker to sandbox community/untrusted servers."
+)
+
+
+def sandboxed_stdio_transport(cmd: list[str], srv, explicit: bool = False):
+    """Return (transport, note) for an ad-hoc local stdio launch (run()).
+
+    Wraps `cmd` in the hardened Docker profile when policy wants a sandbox AND
+    Docker is on PATH AND `cmd` is an npx/uvx launch; otherwise runs it as-is.
+    Used by run(), which builds its own argv and has no registry transport.
+    """
+    source = getattr(srv, "source", "") or ""
+    note = ""
+    if cmd and cmd[0] in ("npx", "uvx") and _sandbox_default_for_exec(explicit, source):
+        if shutil.which("docker"):
+            cmd = sandbox_wrap_cmd(cmd, env_names=_sandbox_env_names(srv))
+        else:
+            note = _UNCAGED_NOTE
+    return PersistentStdioTransport(cmd), note
+
+
+def transport_for_exec(server_id: str, srv, explicit_sandbox: bool = False):
+    """Return (transport, note) for auto()/call() — sandbox local stdio per policy.
+
+    HTTP/WS/OAuth and `docker:` servers route through `_get_transport` unchanged
+    (nothing runs locally, so there is nothing to cage). For a local stdio server
+    the launch is Docker-wrapped only when policy wants a cage AND Docker is on
+    PATH AND the launch is npx/uvx; every other case delegates to `_get_transport`
+    (uncaged) — with a nudge note when a cage was wanted but Docker was missing.
+    """
+    if server_id.startswith(("http://", "https://", "ws://", "wss://", "docker:")):
+        return _get_transport(server_id, srv), ""
+    if srv is not None and getattr(srv, "transport", None) not in (None, "stdio"):
+        return _get_transport(server_id, srv), ""
+    source = getattr(srv, "source", "") or ""
+    cmd = (getattr(srv, "install_cmd", None) or _infer_install_cmd(server_id))
+    if cmd and cmd[0] in ("npx", "uvx") and _sandbox_default_for_exec(explicit_sandbox, source):
+        if shutil.which("docker"):
+            wrapped = sandbox_wrap_cmd(cmd, env_names=_sandbox_env_names(srv))
+            return PersistentStdioTransport(wrapped), ""
+        return _get_transport(server_id, srv), _UNCAGED_NOTE
+    return _get_transport(server_id, srv), ""
 
 
 def _probe_env(srv) -> dict:
