@@ -119,10 +119,11 @@ loop; the agent is the improvement engine (no LLM inside Kitsune).
   caught the noexec-tmpfs bug that had silently broken every real sandboxed
   launch (see evening session above).
 - [x] ~~sandbox-by-default for `auto()`/community `call()`~~ — done 2026-07-16 (`b30a6e0`, in PR #61).
-- [ ] **README reposition around the agent-harness loop** — the *other* half of the
-  reframe pillar, NOT started. Deferred at ~90% context; needs a fresh window to
-  read the current ~400-line README and restructure it (agent-harness value, not
-  token-savings; sandbox-by-default as a headline safety property).
+- [x] **README reposition around the agent-harness loop** — done 2026-07-23:
+  hero reframed as agent harness (reach + REPL + try-before-trust); honest
+  Who it's for / not for; token math demoted to secondary with pointer to
+  benchmarks; GATEWAY/Safety/Why Kitsune + `docs/article.md` + demo cold-open
+  aligned. Old token-savings pitch no longer leads.
 - [x] ~~regenerate the skills dashboard to list `kitsune-improve`~~ — done 2026-07-16
   (marty-skills `970d8b4`). marty-skills still has unrelated local WIP
   (`jetson-bench-remote/SKILL.md`) — NOT touched.

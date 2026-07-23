@@ -1,15 +1,18 @@
 # Scenarios — when Kitsune changes agent behavior
 
-This folder collects real-world tasks where on-demand mounting (Kitsune's
-`shapeshift()` / `shiftback()` paradigm) measurably improves an LLM agent
-compared with the two alternatives:
+This folder collects real-world tasks where Kitsune's on-demand mount loop
+(`search` → `shapeshift` → `call` → release) changes agent behavior compared
+with the two common alternatives:
 
-1. **Always-on MCP servers** — every tool's schema sits in context every turn.
+1. **Always-on MCP servers** — everything preconfigured (or deferred via Tool Search
+   if already in config).
 2. **CLI fallback** — agent shells out to `aws`, `gcloud`, `gh`, `kubectl` etc.
    and relies on training-data recall of flag syntax.
 
-Each scenario is a self-contained story: the task, the failure modes without
-Kitsune, the Kitsune transcript, and the measured token + accuracy delta.
+Kitsune shines when the server isn't already in config, the API surface is
+long-tail / high-stakes, or you need to try community code without a permanent
+install. Token deltas vs fully-mounted always-on are a secondary receipt — not
+the primary reason to use the pattern.
 
 ## The pattern
 

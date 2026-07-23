@@ -10,17 +10,13 @@ Claude Desktop (everyday user), OpenClaw (power user).
 **[COLD OPEN — terminal, no music]**
 
 ```
-status()
+search("pdf extract")
+shapeshift("mcp-pdf-tools", confirm=True, sandbox=True)
 ```
 
-Output on screen:
-```
-GATEWAY
-  ⚠  3 other server(s) active (~47 tools in context)
-  Paying for them every turn, whether you use them or not
-```
+Output on screen: tools appear live. No config edit. No restart.
 
-**TITLE CARD**: *"What if you only paid for what you actually use?"*
+**TITLE CARD**: *"What if your agent could borrow any MCP — mid-session?"*
 
 ---
 
@@ -28,9 +24,9 @@ GATEWAY
 ```
 shapeshift("brave-search", tools=["web_search"])
 call("web_search", {"query": "anthropic MCP updates"})
-shapeshift()   # context back to baseline
+shapeshift()   # form dropped — session intact
 ```
-**CAPTION**: *Developer. One tool loaded. Done. Gone.*
+**CAPTION**: *Developer. One tool borrowed. Done. Gone.*
 
 ---
 
@@ -38,7 +34,7 @@ shapeshift()   # context back to baseline
 
 User types: `"search: best MCP servers for productivity"`
 
-Tool call appears: `auto(task="search: best MCP servers")`
+Tool call appears: `auto(task="search: best MCP servers", server_hint="…")`
 
 Result pops in. One turn. No setup.
 
@@ -51,7 +47,7 @@ Result pops in. One turn. No setup.
 setup(action="harvest")   # pulls API keys from other servers
 setup(action="absorb")    # registers them all for shapeshift()
 ```
-**CAPTION**: *Power user. One command. All servers absorbed.*
+**CAPTION**: *Power user. One gateway. Whole catalog on demand.*
 
 ---
 
@@ -68,14 +64,14 @@ pip install kitsune-mcp
 
 **[Screen: Claude Desktop config file — 5 servers listed]**
 
-**VO**: "Every MCP server you add loads all its tools, every turn, whether you use them or
-not. Five typical servers — that's around 25,000 tokens of overhead on every single message.
-And it gets worse the more you add."
+**VO**: "Adding an MCP server still means editing your config and restarting the
+client. You lose the session to gain a tool. And if you're *building* an MCP
+server, you restart on every edit."
 
-**VO**: "More tools in context means worse tool selection. The research is clear —
-Gorilla (Patil et al. 2023) and Hsieh et al. 2023 both show 20–40% accuracy loss when
-the model has to pick from a full catalog versus a retrieved subset.
-The fix isn't a better model — it's a smaller menu."
+**VO**: "Native Tool Search already helps with servers you've configured —
+schemas stay deferred until needed. What it doesn't solve: the long tail you
+haven't installed, the server you're writing right now, and community code you
+want to try without wiring it in permanently."
 
 ---
 
@@ -97,10 +93,9 @@ RESTING: ~1,358 tokens   (Kitsune's own 6 tools — the fixed floor)
 GATEWAY: 2 other server(s) in claude-desktop (~24 tools)
 ```
 
-**VO**: "Kitsune isn't free at rest — its own six tools cost about 1,358 tokens.
-That's the floor. The point is it stays flat no matter how many servers sit behind it.
-The GATEWAY shows what I'm paying for in other clients.
-Now let's mount GitHub — but only one tool, not all 26."
+**VO**: "Status shows the floor — Kitsune isn't free at rest — and which other
+clients still have always-on servers. The point of this demo isn't saving those
+tokens. It's mounting something I never put in the config."
 
 ```
 shapeshift("@modelcontextprotocol/server-github",
@@ -120,11 +115,11 @@ call("search_repositories", {"query": "MCP servers productivity"})
 shapeshift()
 ```
 ```
-✓ Released. Back to ~1,358 tokens.
+✓ Released. Session intact. Back to lean form.
 ```
 
-**VO**: "One tool, real data. With the floor included that's about 1,621 tokens against
-4,229 always-on — 62% fewer, and the next task starts clean."
+**VO**: "One tool, real data, no restart. That's the harness: borrow a capability,
+use it, put it back — conversation continues."
 
 ---
 
@@ -257,13 +252,13 @@ status()
 
 ---
 
-## Token scorecard (for on-screen graphics)
+## Token scorecard (secondary — for on-screen graphics if needed)
 
-**Every Kitsune figure below includes the fixed ~1,358-token floor — it is never
-subtracted out or hidden.** Saved = 1 − (1,358 floor + surgical mount) / always-on.
-These match the README Performance table; keep them in sync.
+**Secondary metric only.** Real vs fully-mounted always-on / clients without Tool
+Search. Do not lead the video on these numbers — lead on reach + REPL.
+Every Kitsune figure includes the fixed ~1,358-token floor.
 
-### Per-server savings (floor included)
+### Per-server (floor included)
 | Server | Always-on | 1,358 floor + surgical | Saved |
 |---|---:|---:|---:|
 | mcp-server-time (2 tools) | 261 | ~1,619 | — ¹ |
@@ -284,8 +279,10 @@ cheaper — Kitsune only pays off past one medium server, or two-plus small ones
 | GitHub + filesystem + git | 8,678 | ~1,668–2,048 | 76–81% |
 | Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
 
-### Headline for thumbnail
-> "One server. Up to ~90% fewer tokens. Smarter tool selection."
+### Headline for thumbnail (prefer reach, not tokens)
+> "One config. Any MCP. Mid-session — no restart."
+
+Alternate (legacy baseline only): *"Up to ~90% fewer tokens vs fully-mounted always-on."*
 
 ---
 

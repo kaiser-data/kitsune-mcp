@@ -1,76 +1,77 @@
-# The Tool Tax: Why Your AI Agent Pays for Tools It Never Uses
+# Reach Without Restart: What Kitsune MCP Is Actually For
 
-*A technical write-up of Kitsune MCP — what it does, the honest numbers, and what I got wrong the first time.*
+*A technical write-up of Kitsune MCP — the agent harness pitch, the honest limits, and what I got wrong the first time.*
 
 ---
 
-## The problem nobody prices
+## The problem that still isn't solved
 
-The Model Context Protocol (MCP) made it trivial to give an AI agent tools: a GitHub server, a filesystem server, a Notion server, a web-search server. Add them to your config, restart the client, done.
+The Model Context Protocol made it trivial to give an AI agent tools: add a server to your config, restart the client, done.
 
-What the config screen doesn't show you is the bill. **Every MCP server you connect injects all of its tool schemas into the model's context on every single turn** — names, descriptions, JSON Schemas for every parameter — whether the current message uses that server or not. A mid-sized GitHub server is ~4,200 tokens. Five typical servers is ~25,000 tokens. That rides along on *every* message in the conversation.
+What that workflow still cannot do:
 
-And it's not only a token bill. There's a measured accuracy cost. When a model has to select from a large catalog of tools instead of a small retrieved subset, tool-selection accuracy drops — Patil et al.'s Gorilla work (2023) and related retrieval studies put the degradation at 20–40% on large surfaces. The fix for *that* isn't a bigger model; it's a smaller menu.
+1. **Reach a server you've never configured** without editing JSON and restarting (and losing the session).
+2. **Iterate on a server you're writing** without the same restart loop on every schema change.
+3. **Try community MCP code** without permanently wiring arbitrary packages into your always-on tool surface.
 
-So you pay twice: tokens on every turn, and worse decisions when it matters.
+Native Tool Search (Claude Code 2.1.7+) already defers schemas for *configured* servers — so "save tokens by not loading GitHub's 26 tools every turn" is largely a solved client problem. Kitsune does not win by competing with Tool Search. It wins by covering the servers Tool Search never sees.
 
-## The hub model
+## The harness model
 
-Kitsune MCP is a single MCP server that sits between your client and the entire ecosystem. You put **one** entry in your config. Behind it sit 130,000+ servers across the official registry, Smithery, npm, PyPI, and Glama — reachable on demand, none of them loaded until you ask.
+Kitsune is a single always-on MCP gateway. One config entry. Behind it: 130,000+ servers across official registries, Smithery, npm, PyPI, and Glama — reachable on demand, none of them loaded until you ask.
 
-The core verb is `shapeshift()`: mount a server's tools at runtime, use them, then release them so the context returns to baseline.
+The core verb is `shapeshift()`: mount a server's tools at runtime, use them, release them.
 
 ```python
-status()                                               # what am I paying for right now?
+status()                                               # what form am I in?
 
 shapeshift("github", tools=["search_repositories"])    # mount ONE tool, not all 26
 call("search_repositories", {"query": "mcp servers"})  # real call, real data
 shapeshift()                                            # release — tools gone, process killed
 ```
 
-Don't know which server you need? `auto()` does discovery, ranking, and the call in one step:
+Don't know which server you need? Prefer `search()` first, or `auto(..., server_hint=...)` when you already know the id:
 
 ```python
-auto("what time is it in Tokyo")
-auto("search the web for the latest python release")   # routes to a real web-search server
+auto("current time in Tokyo", server_hint="mcp-server-time")
 ```
 
-That's the whole idea: **a lean agent that reaches the entire ecosystem, but only ever holds the tools the current task needs.**
+That's the idea: **an agent that can borrow any MCP capability mid-session — then put it back.**
 
-## The honest numbers
+## Three things that shine
 
-Here's where I have to correct my own earlier marketing, because the first version of this story was inflated — and the real numbers are still good enough that the honesty costs nothing.
+| | Loop | Why it matters |
+|---|---|---|
+| **MCP REPL** | `connect` → edit → `release` → `connect` → `call` | Develop your own server without restarting the client |
+| **Long-tail reach** | `search` → `shapeshift` → `call` → drop | One-offs without permanent config |
+| **Try-before-you-trust** | `confirm=True` + optional `sandbox=True` + TOFU pins | Community catalog without blind always-on installs |
 
-**Kitsune is not free at rest.** It is itself an always-on MCP server. Its six lean-profile tools (`status`, `search`, `shapeshift`, `call`, `auto`, `auth`) cost **~1,358 tokens** in every turn, measured, whether you use them or not. That is a fixed floor — it never drops to zero. Any comparison that hides this floor is lying to you.
+## The honest numbers (secondary)
 
-The win isn't that Kitsune is weightless. It's that **the floor stays flat while always-on servers stack linearly.** Every figure below already includes the 1,358-token floor:
+Kitsune is **not free at rest**. Six lean tools cost **~1,358 tokens every turn**. Against a client with native deferral, that floor is *additive* — do not install Kitsune to save tokens.
 
-| Always-on servers | Always-on / turn | Kitsune / turn | Saved |
-|---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | ~1,658 | **61%** |
-| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | **76–81%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
+Where token math still applies: comparing against **fully-mounted always-on** stacks, or clients without Tool Search. Full tables: [`benchmarks.md`](./benchmarks.md) and the README Performance section.
 
-And the break-even, stated plainly: **if you only ever run one small server** — say `mcp-server-time` at ~261 tokens — always-on is *cheaper* than Kitsune's 1,358 floor. Kitsune pays off the moment the always-on alternative exceeds that floor: one medium server, or two-plus small ones. The bigger and more numerous your servers, the bigger the win.
-
-That break-even note is the part most "10x token savings!" pitches leave out. Including it is the difference between a benchmark and an honest tool.
+**Break-even (always-on, no deferral):** one small server (e.g. time ~261 tokens) is cheaper always-on than Kitsune's floor. Kitsune pays off once the alternative exceeds ~1,358 tokens.
 
 ## "But the CLI is free at rest too"
 
-A fair objection: shelling out to `aws`, `gh`, or `kubectl` from a Bash tool also costs ~0 tokens at rest. So why MCP at all?
+Fair. Shelling out to `aws` / `gh` / `kubectl` also costs ~0 at rest.
 
-Because long-tail CLI commands fail. LLMs have excellent recall on the top ~20 commands of a CLI they've seen in training (`git status`, `gh pr list`) and steeply degraded recall on everything else. For a surface the size of `aws` (~9,000 subcommands), first-call success on long-tail operations drops to 30–50% — wrong flag names, singular-vs-plural verbs, case-sensitive enums, silently-deprecated options. Each miss costs a retry turn, and the worst failures aren't errors — they're *plausible-looking wrong calls that succeed.*
+Long-tail CLI commands still fail. Models nail the top ~20 trained commands and degrade hard elsewhere — wrong flags, silent wrong success. MCP schemas fix that; Kitsune mounts those schemas only while you need them, without a restart to add the server.
 
-That's the structural argument for the hub: **CLI-cheap at rest, schema-validated when accuracy matters.** For a one-off on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost — production infra changes, billing, security flows — schema validation without the always-on tax is the point.
+## What's under the hood (worth a developer's attention)
 
-## What's under the hood
+- **Surgical mounting.** `shapeshift("github", tools=["search_repositories"])` — one tool out of twenty-six.
+- **Real OAuth + logout.** OAuth 2.1 + PKCE; `auth(server, "logout")` hits RFC 7009 revocation.
+- **Docker sandbox for community mounts.** `sandbox=True` / `KITSUNE_SANDBOX=community` — not a marketing checkbox; read the Safety model limits.
+- **Tested.** Large pytest suite + live smoke of discover → mount → call → unmount.
 
-A few things I think are worth a developer's attention:
+## Who should skip it
 
-- **Intent-aware routing.** `auto()` without a server hint used to misroute "search the web" tasks to fetch tools and chat-forwarders — anything whose description happened to contain "search." It now strips generic intent verbs from the registry query and filters candidates to those that actually advertise a matching capability, so a search task routes to a search server, not a URL-fetcher.
-- **Real OAuth, real logout.** Servers behind OAuth 2.1 (Notion, etc.) get full Dynamic Client Registration + PKCE. `auth(server, "logout")` doesn't just delete the local token — it hits the provider's RFC 7009 revocation endpoint and forces a genuine browser re-login on the next auth, so workspace switching actually works. (I verified this end-to-end against live Notion; the subtle trap was that Notion re-issues tokens with a *stable prefix*, so "same prefix" looked like "didn't log out" when in fact a fresh token had been minted. Verify by expiry, not by eyeballing the prefix.)
-- **Surgical mounting.** `shapeshift("github", tools=["search_repositories"])` mounts one tool out of twenty-six. You're not trading "all of GitHub" for "none of GitHub" — you take exactly the slice the task needs.
-- **It's tested.** 683 tests, and I smoke-test the live tool surface (discover → mount → call → unmount) against the running server, not just the unit suite.
+- You only need a few trusted always-on servers → configure them natively.
+- Unattended prod with admin/billing credentials → don't (default local mode = your user permissions).
+- Sub-second path → cold mount is seconds; prewarm or always-on.
 
 ## Try it
 
@@ -78,12 +79,10 @@ A few things I think are worth a developer's attention:
 pip install kitsune-mcp
 ```
 
-Add one entry to your MCP config:
-
 ```json
 { "mcpServers": { "kitsune": { "command": "kitsune-mcp" } } }
 ```
 
-Restart your client and run `status()`. It'll show you what your *other* servers are costing you right now — which, the first time, is usually the moment the whole thing clicks.
+Restart your client and run `status()`. Then `search` for something you've never installed — that's the moment it clicks.
 
-Source, issues, and the full token methodology: **github.com/kaiser-data/kitsune-mcp**
+Source: **github.com/kaiser-data/kitsune-mcp**

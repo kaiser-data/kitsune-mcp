@@ -2,7 +2,9 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>One config entry. Discover, connect to, and run any of 130,000+ MCP servers at runtime — no restart, no per-server setup.</strong></p>
+  <p><strong>The agent harness for MCP.</strong><br/>
+  One config entry. Borrow any of 130,000+ servers <em>mid-session</em> — develop live, reach the long tail, try community code contained — then shift back.<br/>
+  <em>Session survives.</em></p>
 </div>
 
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
@@ -18,99 +20,48 @@
 
 ---
 
-Kitsune is a **runtime MCP proxy**. It discovers, connects to, and runs any of 130,000+ MCP servers *live, mid-session* — no config edit, no client restart (134,945 indexed on Glama alone as of May 2026). `shapeshift(server_id)` connects to a target server and makes its tools callable in the current turn; `shapeshift()` with no args disconnects and drops them again.
+Kitsune is a **runtime MCP proxy**: one always-on gateway your agent uses to reach the rest of the ecosystem. `search` finds a server across 7 registries. `shapeshift(id)` mounts its tools in the current turn. `shapeshift()` drops them. No config edit. No client restart.
 
-**The core advantage is the runtime, not the token count.** Adding a normal MCP server means editing your client config and restarting the session. Kitsune removes both steps: the model can reach — and execute — a server it has never seen, without you touching config or restarting. That is the durable win: access and execution on demand.
+```text
+search → shapeshift → call → shapeshift()     # reach, use, release
+connect → edit → release → connect → call     # MCP REPL (forge profile)
+```
 
-**Two use cases where nothing else fits:**
+**Install for reach and live execution — not for token savings.** Native Tool Search already defers schemas for servers you've configured. Kitsune covers what Tool Search cannot: servers you've never set up, servers you're writing right now, and community packages you want to try without wiring them into `mcp.json` forever.
 
-1. **Developing your own MCP server, live.** Edit a tool's code, `shapeshift()` back into it, and call it again in the *same* session — an edit → reload → test loop (an MCP REPL) instead of restarting your client on every change.
-2. **Shifting into an unknown MCP on demand.** Hit a task that needs a server you've never set up? `shapeshift()` into it — discover, connect, run — then drop it. No config edit, no restart, no leaving the session to go install anything.
-
-This is where the name earns itself: you *shift* into an unfamiliar server's shape, use its tools, and shift back.
-
-**What about native deferred loading?** Since Claude Code v2.1.7 (Jan 2026), clients defer the tool schemas of *configured* servers until the model searches for them (Tool Search), so the old "keep tools out of context" benefit is now built into the client for servers you've already set up. Kitsune's edge is the servers you *haven't* set up — the long tail, one-offs, and anything you'd otherwise add-and-restart for. Standard servers you always keep on (Supabase, Google Drive, GitHub) are likely already configured and deferred natively; Kitsune isn't trying to replace those. It covers everything else, on demand.
-
-**Kitsune is not free at rest.** It is itself an always-on MCP server: its six built-in tools cost **~1,358 tokens** in every turn. Against a client with native deferral, that floor is *additive* — so don't install Kitsune to save tokens. Install it for reach: one config entry that puts the entire MCP ecosystem one call away, with no restart. The token math below still applies when you compare against servers kept fully mounted (always-on, or clients without native Tool Search).
-
----
-
-## What this actually solves
-
-Native Tool Search already handles the token problem for servers in your config. These four problems it does **not** touch — they are what Kitsune is for:
-
-| Problem | Without Kitsune | With Kitsune |
+| | Loop | Why it wins |
 |---|---|---|
-| **Adding a server is a restart.** A new MCP server means editing client JSON and restarting the session — you lose your context to gain a tool. | Edit config → restart → re-establish context | `shapeshift("server", confirm=True)` → tools live, same session |
-| **Iterating on your own server is a restart *per change*.** Every edit to a tool's schema or behaviour needs a client reboot to take effect. | Edit code → restart client → re-test → repeat | Edit code → `release()` → `connect()` → `call()` — an [MCP REPL](docs/demo-realtime.md#act-1) |
-| **The long tail can't be pre-installed.** 130,000+ servers across Glama, Smithery, npm, PyPI. You will never keep them configured. | Not available — or install-and-restart for a one-off | `search()` → `shapeshift()` → `call()` on demand, then drop it |
-| **Unknown server code is a supply-chain risk.** Running a community server means executing arbitrary code with your credentials. | You run it raw, or you don't run it | Trust-tier consent gate + process/Docker isolation + SSRF & injection guards — with [honest limits](#safety-model) |
+| **MCP REPL** | edit → `release` → `connect` → `call` | Iterate on your own server without killing the session |
+| **Long-tail reach** | `search` → `shapeshift` → `call` | One-offs and obscure APIs with no pre-install |
+| **Try-before-you-trust** | `confirm=True` + optional `sandbox=True` + TOFU pins | Community catalog without blind always-on installs |
 
-The through-line: **reach and execution, at runtime, without giving up your session** — and a safety layer because "run any of 130,000 servers on demand" is only usable if running an unknown one is contained.
+| Use Kitsune when… | Skip it when… |
+|---|---|
+| You're building an MCP and need an edit/reload loop | You only need 1–3 trusted servers (configure them natively) |
+| A task needs a server that isn't in your config | Every turn hits the same server (keep it always-on) |
+| CLI flag-guessing on a long-tail API is too risky | You want cheaper tokens — floor is **~1,358 tokens/turn**, additive on modern clients |
+| You want to evaluate community MCP code safely | Unattended prod admin/billing/security keys ([Safety](#safety-model)) |
+| You're consolidating a crowded MCP config ([GATEWAY](#gateway-consolidate-always-on-servers)) | You need sub-second first call (cold mount ~1–15s — `prewarm` or always-on) |
 
-### Why not just shell out to a CLI?
-
-Shelling out to `aws`, `gcloud`, `kubectl`, or `gh` from a Bash tool *also* costs ~0 tokens at rest. So why MCP at all?
-
-**Because long-tail CLI commands fail.** LLMs have great recall on the top ~20 commands of a CLI they've seen in training (`git status`, `gh pr list`, `aws s3 cp`) and steeply degraded recall on everything else. For an API surface the size of `aws` (~9,000 subcommands), first-call success drops to **30–50%** on long-tail operations — wrong flag names, singular-vs-plural verbs, case-sensitive enums, and silently-deprecated options. Each miss costs a retry turn, and the worst failures aren't errors but *plausible-looking wrong calls that succeed*.
-
-MCP gives you structured tool schemas the model can read and validate against:
-
-| Approach | Long-tail accuracy | Failure mode | Token cost at rest |
-|---|---|---|---|
-| CLI fallback | ~30–50% on rare subcommands | Hallucinated flags, silent wrong calls | ~0 |
-| Always-on MCP | ~95% across the whole surface | Schema bloat in every turn | ~10–15K per server |
-| **Kitsune (mount on demand)** | **~95% — only when you need it** | None — schemas drop after `shiftback()` | **~1,358 tokens** |
-
-That's the structural argument for the hub model: **CLI-cheap at rest, MCP-accurate when it matters**. For one-off ops on a CLI the model knows cold, `gh` is fine. For unfamiliar APIs, internal tooling, or any operation where a wrong call has real cost (production AWS changes, billing operations, security flows), Kitsune gives you schema-validated execution without the always-on tax. See [`examples/scenarios/`](./examples/scenarios/) for seven worked use cases.
-
-### Token savings vs always-on (secondary benefit)
-
-> **Honest note — this was the original idea, and Tool Search has largely overtaken it.** Cutting always-on token overhead was Kitsune's founding motivation. But at roughly the same time it was being built, the client layer solved the same problem natively: since Claude Code v2.1.7 (Jan 2026), configured servers' tool schemas are deferred until the model searches for them (Tool Search). Against such a client the numbers and graph below no longer describe a unique win — Kitsune's ~1,358-token floor is even *additive* rather than a saving. Treat this section as historical / edge-case: it still holds for servers kept **fully mounted always-on** or for clients without native deferral, but it is **not** the reason to run Kitsune today. That reason is runtime reach and live development without a restart (above).
-
-Kitsune carries a **fixed ~1,358-token floor** (measured: 6 lean-profile tools — run `python examples/benchmark.py` to reproduce). Every comparison below already includes that floor; it is never subtracted out or hidden. Savings come from the floor staying *flat* while always-on servers stack linearly:
-
-Saving formula: `1 − (Kitsune base 1,358 + surgical mount) / always-on total`
-
-| Always-on servers | Always-on/turn | Kitsune per active call | Saved |
-|---|---:|---:|---:|
-| GitHub (26 tools) | 4,229 | ~1,658 (1,358 + ~300) | **61%** |
-| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | **76–81%** |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
-
-**Break-even:** if you only ever run **one small server** (e.g. `mcp-server-time` at ~261 tokens), always-on is *cheaper* than Kitsune — you'd pay 261 tokens instead of Kitsune's 1,358 floor. Kitsune wins when the always-on alternative exceeds ~1,358 tokens, which happens as soon as you'd keep one medium server (GitHub-sized) or two-plus small ones loaded. The bigger and more numerous your servers, the bigger the win.
-
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)"
-            srcset="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost-dark.svg"/>
-    <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost-light.svg"
-         alt="Token cost comparison: always-on vs Kitsune" width="700"/>
-  </picture>
-</div>
-
-*This graph compares Kitsune against **fully-mounted always-on** servers. A client with native Tool Search already flattens most of this curve on its own, so read the chart as "what deferral buys you" — not as something unique to Kitsune.*
-
-Fewer tools in context also means more reliable answers. Research consistently shows LLM tool-selection degrades as the visible tool count grows — though on a modern client, native Tool Search delivers much of that focus too.
+Worked high-stakes flows (IAM, IR, audits): [`examples/scenarios/`](./examples/scenarios/). CLI vs MCP accuracy argument lives there too — short version: models nail common CLI commands and fail on the long tail; Kitsune mounts schemas only while you need them.
 
 ---
 
 ## Contents
 
-- [What this actually solves](#what-this-actually-solves)
-- [Why not just shell out to a CLI?](#why-not-just-shell-out-to-a-cli)
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Developing an MCP server live](#developing-an-mcp-server-live)
 - [How it works](#how-it-works)
 - [Tool reference](#tool-reference)
 - [Server sources](#server-sources)
-- [GATEWAY: context bloat detection](#gateway-context-bloat-detection)
+- [Safety model](#safety-model)
+- [GATEWAY: consolidate always-on servers](#gateway-consolidate-always-on-servers)
 - [Performance](#performance)
 - [Configuration](#configuration)
-- [Agent profiles](#agent-profiles)
-- [Safety model](#safety-model)
+- [Mount patterns](#mount-patterns)
 - [For MCP developers](#for-mcp-developers)
+- [Why Kitsune?](#why-kitsune)
 - [Contributing](#contributing)
 
 ---
@@ -125,9 +76,9 @@ uvx kitsune-mcp              # isolated env via uv, no venv setup
 npx kitsune-mcp              # npm (delegates to uvx internally)
 ```
 
-**Requirements:** Python 3.12+ · `node`/`npx` for npm-based servers · `uvx` from [uv](https://github.com/astral-sh/uv) for PyPI-based servers
+**Requirements:** Python 3.12+ · `node`/`npx` for npm-based servers · `uvx` from [uv](https://github.com/astral-sh/uv) for PyPI-based servers · Docker optional (sandbox)
 
-Add to your MCP client config — once, globally:
+Add once to your MCP client config:
 
 ```json
 {
@@ -137,8 +88,6 @@ Add to your MCP client config — once, globally:
 }
 ```
 
-Compatible with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.dev, Zed, and any MCP-compatible client.
-
 | Client | Config file |
 |---|---|
 | Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
@@ -147,54 +96,65 @@ Compatible with Claude Desktop, Claude Code, Cursor, Cline, OpenClaw, Continue.d
 | Cursor / Windsurf | `~/.cursor/mcp.json` |
 | Cline / Continue.dev | VS Code settings / `~/.continue/config.json` |
 
+Also works with OpenClaw, Zed, and any MCP-compatible client.
+
+Lean profile at rest: **6 tools · ~1,358 tokens/turn** (`status`, `search`, `auth`, `shapeshift`, `call`, `auto`) — measured via `python examples/benchmark.py`.
+
 ---
 
 ## Quick start
 
+**Borrow a server you never configured:**
+
 ```python
-# Find a server
 search("web scraping")
+shapeshift("firecrawl", tools=["scrape_url"])   # surgical: one tool, not the whole surface
+call("scrape_url", arguments={"url": "https://example.com"})
+shapeshift()                                    # drop form — session stays up
+```
 
-# Mount specific tools, use them, release
-shapeshift("notion-hosted", tools=["notion-search"])
-call("notion-search", arguments={"query": "roadmap"})
-shapeshift()                          # disconnect; context back to baseline
+**Community / long-tail (confirm + optional sandbox):**
 
-# One-shot via auto() — use server_hint for reliable routing
-auto("current time in Tokyo", server_hint="mcp-server-time")
-
-# Store a credential, then mount
-auth("BRAVE_API_KEY", "sk-...")
-shapeshift("brave", tools=["brave_web_search"])
-call("brave_web_search", arguments={"query": "MCP protocol 2025"})
+```python
+search("pdf", registry="glama")
+shapeshift("mcp-pdf-tools", confirm=True, sandbox=True)  # Docker cage for npm/PyPI
+call("extract_text", arguments={"path": "report.pdf"})
 shapeshift()
 ```
 
-**Run a long-tail server from Glama or Smithery — none of it pre-installed:**
+**Hosted (Smithery HTTP — needs a free `SMITHERY_API_KEY`):**
 
 ```python
-search("pdf", registry="glama")        # search a specific registry
-# Community sources (glama/npm/pypi) need one explicit confirm:
-shapeshift("mcp-pdf-tools", confirm=True)     # spawns via npx/uvx, isolated subprocess
-call("extract_text", arguments={"path": "report.pdf"})
-shapeshift()                                  # process released
-
-# Smithery-hosted (HTTP) — needs a free SMITHERY_API_KEY
 search("exa", registry="smithery")
-shapeshift("exa")                             # hosted, no local install
+shapeshift("exa")
 call("web_search_exa", arguments={"query": "MCP registry growth 2026"})
 shapeshift()
 ```
 
-See [Developing an MCP server live](#developing-an-mcp-server-live) for the edit → reload → test loop, and the full [real-time demo script](docs/demo-realtime.md).
+**Credentials mid-session:**
+
+```python
+auth("BRAVE_API_KEY", "sk-...")
+shapeshift("brave", tools=["brave_web_search"])
+call("brave_web_search", arguments={"query": "MCP protocol 2026"})
+shapeshift()
+```
+
+**One-shot** — pass `server_hint` when you know the id (`auto` without it is best-effort and can misfire):
+
+```python
+auto("current time in Tokyo", server_hint="mcp-server-time")
+```
+
+Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 
 ---
 
 ## Developing an MCP server live
 
-Building your own MCP server normally means a restart on every change: edit a tool, reboot the client so it re-reads the schema, re-establish your session, test, repeat. Kitsune turns that into an **edit → reload → test loop in one session** — an MCP REPL for your work-in-progress server.
+Building an MCP normally means: edit → restart client → lose session → re-test. Kitsune turns that into an **MCP REPL** in one session.
 
-The loop uses `connect()` (start a local command as a pooled process) and `release()` (kill it so the next `connect()` picks up your new code). These are dev tools, **not** in the default lean profile — enable them:
+`connect` / `release` are forge tools — enable them:
 
 ```json
 {
@@ -207,37 +167,30 @@ The loop uses `connect()` (start a local command as a pooled process) and `relea
 }
 ```
 
-Then, without ever restarting your client:
-
 ```python
-# 1. Start your work-in-progress server
-connect("uvx --from . my-mcp-server", name="dev")
-#   → Connected: dev (PID 40213) | Tools (3): search, fetch, summarize
-
-# 2. Call a tool, see it work (or fail)
+connect("uvx --from . my-mcp-server", name="dev")       # start child process
+shapeshift("dev")                                       # mount tools → client sees them
 call("summarize", arguments={"url": "https://example.com"})
 
-# 3. Edit the tool's code in your editor …
+# … edit the tool in your editor …
 
-# 4. Reload: drop the old process, start the new code
-release("dev")
-connect("uvx --from . my-mcp-server", name="dev")     # now running your edit
-
-# 5. Re-test immediately
+release("dev")                                          # kill stale process first
+connect("uvx --from . my-mcp-server", name="dev")      # fresh code
+shapeshift("dev")                                       # remount new schemas live
 call("summarize", arguments={"url": "https://example.com"})
 ```
 
-> **The footgun this removes:** `connect()` pools processes, so calling it again after an edit without `release()` first hands you the *old* process running the *old* code. Kitsune detects this and tells you: *"Changed the code? release('dev') first — this process predates your edit."* Always `release()` before reconnecting.
+> **Footgun:** `connect()` pools by command. Calling it again after an edit *without* `release()` returns the old process. Kitsune warns: *"Changed the code? release('dev') first."* Always `release()` before reconnecting.
 
-Local `connect()` targets are treated as untrusted (`confirm=True` / `KITSUNE_TRUST` applies) and run as isolated subprocesses — but note that isolation is not a security sandbox; see [Safety model](#safety-model). Full walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md#act-1).
+Local `connect()` targets are untrusted (`confirm` / `KITSUNE_TRUST` apply). Process isolation ≠ security sandbox — see [Safety model](#safety-model). Companion skill: `kitsune-dev`.
 
 ---
 
 ## How it works
 
-Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target server via the appropriate transport (stdio subprocess, HTTP, WebSocket), fetches its `tools/list`, and registers each tool as a native FastMCP tool with the exact schema from the server. The AI client receives a `notifications/tools/list_changed` event and sees the new tools as first-class — no wrapper, no indirection.
+`shapeshift(server_id)` picks a transport (stdio / HTTP+SSE / WebSocket / Docker), connects, fetches `tools/list`, and registers each tool as a native FastMCP tool with the server's real schema. The client gets `notifications/tools/list_changed` and sees first-class tools — no wrapper indirection.
 
-`shapeshift()` with no args reverses all of it: deregisters the proxy closures, closes the connection, and notifies the client. Context returns to the ~1,358-token baseline.
+`shapeshift()` with no args deregisters proxies, closes the connection, and returns to the lean baseline.
 
 <div align="center">
   <picture>
@@ -248,184 +201,194 @@ Kitsune is a **dynamic MCP proxy**. `shapeshift(server_id)` connects to a target
   </picture>
 </div>
 
-### Tool-schema RAG
+**Mental model — tool-schema RAG:** index the ecosystem → `search` retrieves candidates → `shapeshift(..., tools=[…])` injects only what's needed → agent calls natively → `shapeshift()` evicts.
 
-| Document RAG | Kitsune |
+| Source | Transport |
 |---|---|
-| Index all documents | Registry: 130,000+ servers across 7 sources |
-| Query → retrieve relevant chunks | `search("notion")` → ranked candidates with token estimates |
-| Inject only relevant content | `shapeshift(server, tools=[...])` → mount only what is needed |
-| Model reasons over those chunks | Agent calls those tools natively |
-| Evict when done | `shapeshift()` → context returns to baseline |
-
-### Transport selection
-
-| Server source | Transport |
-|---|---|
-| npm package | `npx <package>` — spawned locally |
-| PyPI package | `uvx <package>` — spawned locally |
-| GitHub repo | `npx github:user/repo` or `uvx --from git+https://...` |
-| Smithery hosted | HTTP + SSE (requires `SMITHERY_API_KEY`) |
+| npm | `npx <package>` (local; optional Docker sandbox) |
+| PyPI | `uvx <package>` (local; optional Docker sandbox) |
+| GitHub | `npx github:user/repo` or `uvx --from git+…` |
+| Smithery hosted | HTTP + SSE (`SMITHERY_API_KEY`) |
 | WebSocket | `ws://` / `wss://` |
-| Docker | `docker run --rm -i --memory 512m <image>` |
+| Docker image | `docker run …` hardened profile |
 
 ---
 
 ## Tool reference
 
-| Tool | Signature | Description |
+**Lean (default)**
+
+| Tool | Signature | Role |
 |---|---|---|
-| `status()` | — | Provider auth state, GATEWAY bloat detection, session performance stats |
-| `search()` | `query, registry?, compare?` | Search for servers across 7 registries; `compare=True` shows side-by-side token costs |
-| `shapeshift()` | `server_id?, tools=[], server_args=[]` | Shift into a server: connect and make its tools callable (with ID), or shift back / disconnect (no args). A runtime connect + execute — not a transform of Kitsune itself. `tools=[...]` for surgical load |
-| `call()` | `tool_name, arguments` | Invoke a tool; `server_id` inferred when shapeshifted |
-| `auth()` | `server_or_var, value?` | Check or set env vars; trigger OAuth 2.1 browser flow for hosted servers |
-| `auto()` | `task, server_hint=, arguments=` | One-shot: search → mount → call → return result |
+| `status()` | — | Current form, pool, GATEWAY scan, session stats |
+| `search()` | `query, registry?, compare?` | Fan-out across 7 registries |
+| `auth()` | `server_or_var, value?` | Env keys + OAuth 2.1 browser flow / logout |
+| `shapeshift()` | `server_id?, tools=[], …` | Mount / unmount; `tools=[…]` surgical; `sandbox=True` / `confirm=True` |
+| `call()` | `tool_name, arguments` | Invoke; server inferred when mounted |
+| `auto()` | `task, server_hint=, arguments=` | search → mount → call (prefer `server_hint`) |
 
-Context overhead at rest: **~1,358 tokens** for all 6 lean-profile tools (measured via `examples/benchmark.py`).
-
-> **`auto()` note:** `auto(task, server_hint="server-id")` gives reliable results. Without `server_hint`, routing is best-effort via semantic search and can misfire on ambiguous queries — use `search()` first when unsure.
+**Forge** (`KITSUNE_TOOLS=all` or `kitsune-forge`): `connect`, `release`, `prewarm`, `inspect`, `test`, `bench`, `compare`, `craft`, `run`, `fetch`, `setup`, `skill`, `shiftback`, … — see [For MCP developers](#for-mcp-developers).
 
 ---
 
 ## Server sources
 
-Kitsune searches 7 registries in parallel. No single registry is required.
-
-| Registry | Auth required | `registry=` value |
+| Registry | Auth | `registry=` |
 |---|---|---|
-| [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | None | `official` |
-| [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io) | None | `mcpregistry` |
-| [Glama](https://glama.ai/mcp/servers) | None | `glama` |
-| npm | None | `npm` |
-| PyPI | None | `pypi` |
-| GitHub repos | None | `github:owner/repo` |
+| [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) | — | `official` |
+| [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io) | — | `mcpregistry` |
+| [Glama](https://glama.ai/mcp/servers) | — | `glama` |
+| npm | — | `npm` |
+| PyPI | — | `pypi` |
+| GitHub | — | `github:owner/repo` |
 | [Smithery](https://smithery.ai) | Free API key | `smithery` |
 
-`search()` fans out across all no-auth registries by default. Add a `SMITHERY_API_KEY` to include Smithery's hosted catalog (HTTP servers, no local install required).
+`search()` fans out across no-auth registries by default. Add `SMITHERY_API_KEY` for hosted HTTP servers (no local install).
 
 ---
 
-## GATEWAY: context bloat detection
+## Safety model
 
-`status()` scans your active MCP client configs and reports what other servers are running on every turn:
+Reach into 130k community servers only works if unknown code can be **contained**. Consent, sandbox, and pins are product features — not footnotes.
+
+**Headline controls**
+
+- `confirm=True` (or `KITSUNE_TRUST`) before community / local mounts
+- `sandbox=True` or `KITSUNE_SANDBOX=community|all` → hardened Docker for npm/PyPI
+- TOFU pins in `~/.kitsune/pins.json` — later malicious publishes don't silently replace what you already ran
+
+### What it protects against
+
+**1. Unverified code without consent**
+
+| Tier | Sources | On mount |
+|---|---|---|
+| High | `official` | runs directly |
+| Medium | `mcpregistry`, `glama`, `smithery` | runs directly |
+| Community | `npm`, `pypi`, `github`, local `connect()` | **requires `confirm=True`** |
+
+`KITSUNE_TRUST=community` waives the gate; `status()` warns when that override is active.
+
+> **`confirm=True` is not a human-approval boundary.** The model can set it. Real approval belongs in your client's tool-approval UI.
+
+**2. Shell injection at spawn.** Install commands are validated (no `& ; | $ \` `\n` / `../`) and launched with `create_subprocess_exec` — no shell. Vets the launch line, not what the package does once running.
+
+**3. SSRF.** `fetch()` and registry HTTP are HTTPS-only; private/loopback/non-global hosts blocked; **every redirect hop re-validated** (`KITSUNE_ALLOW_LOCAL_FETCH=1` to opt out).
+
+**4. Credential exposure.** `~/.kitsune/.env` and `oauth/` at mode `0600`; OAuth 2.1 + PKCE S256 + DCR (RFC 7591); missing-cred warnings before calls; `auth(id, "logout")` clears tokens (RFC 7009 where available).
+
+**5. Docker sandbox for untrusted local servers.** `shapeshift("pkg", sandbox=True)` runs npm/PyPI inside: no host FS, `--cap-drop ALL`, read-only rootfs, RAM/PID caps. Cred env vars forwarded by **name** only (`docker -e KEY`) — never in argv, `ps`, or the pool key. First sandboxed mount pulls `node:22-slim` / `uv:python3.13-bookworm-slim`. Filesystem-style servers need host paths and don't fit the sandbox.
+
+### What it does NOT do
+
+- **No sandbox without opt-in.** Default local stdio runs as your user — full FS, network, inherited env. Process isolation ≠ a security boundary.
+- **Docker ≠ kernel boundary.** Hardened flags blunt escalation / fork bombs / FS tampering; not a guarantee against container escape. No default non-root / `--network none` (most servers need egress).
+- **TOFU ≠ digest pin.** Pins a version, not a content hash. `github:` / `git+` / hand-written `connect()` commands aren't pinned. High assurance: pin by digest or vendor.
+- **Tools first.** Resource/prompt proxying is narrower (URI templates skipped; HTTP path differs). "Any server" means tool execution.
+
+**Bottom line:** strong for supervised developer and personal use. **Do not run unattended with production admin, billing, or security credentials in default local mode.** Prefer client approval + `sandbox=True` / `KITSUNE_SANDBOX=community` for untrusted packages.
+
+See guards live: [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
+
+---
+
+## GATEWAY: consolidate always-on servers
+
+Optional. Keep daily drivers (GitHub, filesystem, …) native if you prefer. When a config is crowded, `status()` flags other always-on servers so you can collapse to one Kitsune entry and reach them via `shapeshift`:
 
 ```
 GATEWAY
   ⚠  1 other server(s) active in claude-desktop (~8 extra tools in context)
      Run setup() to harvest their credentials and reduce bloat
-  ⚠  1 other server(s) active in claude-code (~8 extra tools in context)
 ```
-
-To consolidate:
 
 ```python
-setup()                    # preview — shows what can be harvested
-setup(action="harvest")    # extract API keys → ~/.kitsune/.env  (non-destructive)
-setup(action="absorb")     # register those servers for shapeshift()
-setup(project=True)        # write .claude/mcp.json with only Kitsune (this project)
+setup()                    # preview
+setup(action="harvest")    # keys → ~/.kitsune/.env (non-destructive)
+setup(action="absorb")     # register for shapeshift()
+setup(project=True)        # project mcp.json with only Kitsune
 ```
 
-Kitsune never modifies existing configs without explicit confirmation.
+Never modifies existing configs without explicit confirmation. (`setup` is forge-profile.)
 
 ---
 
 ## Performance
 
-### Token overhead: surgical mount vs full mount
+### Connection latency (what you feel)
 
-> The same caveat as above applies to this whole section: these savings are real **only** versus fully-mounted always-on servers. On a client with native Tool Search (Claude Code 2.1.7+), configured servers are already deferred, so most of these numbers no longer represent a Kitsune-specific advantage. Kept here for transparency and for clients/servers without native deferral.
+Warm pool re-attach within a session: **0 ms**.
 
-Full-mount figures measured live via `shapeshift()` probes. Surgical estimates (~) are proportional approximations based on tool count, not individually measured. Every Kitsune figure **includes the fixed ~1,358-token floor** — it is never omitted. To measure Kitsune's own profile size: `python examples/benchmark.py`.
-
-Saved = 1 − (1,358 floor + surgical) / always-on. A negative result means always-on is cheaper for that single server.
-
-| Server | Tools | Always-on | Surgical example | 1,358 + surgical | Saved |
-|---|---:|---:|---|---:|---:|
-| `mcp-server-time` | 2 | 261 | (all tools) | ~1,619 | — ¹ |
-| `mcp-server-git` | 12 | 1,242 | status / diff / log | ~1,668 | — ¹ |
-| `@modelcontextprotocol/server-memory` | 9 | 2,615 | read_graph / search_nodes | ~1,938 | 26% |
-| `@modelcontextprotocol/server-filesystem` | 14 | 3,207 | read / write / edit | ~2,048 | 36% |
-| `brave` | 8 | 3,612 | brave_web_search | ~1,808 | 50% |
-| `@modelcontextprotocol/server-github` | 26 | 4,229 | search_repositories | ~1,658 | 61% |
-| `notion-hosted` | 14 | 13,707 | search / fetch | ~3,308 | 76% |
-
-¹ For a **single** server smaller than Kitsune's ~1,358-token floor (time, git), running it always-on is cheaper than Kitsune. Kitsune only pays off once the always-on alternative exceeds the floor — i.e. one medium server, or two-plus small ones sharing the single baseline.
-
-### Multi-server compounding
-
-Kitsune's resting cost (~1,358 tokens) is constant regardless of how many servers are registered. Always-on cost grows linearly with each server added — that linear stack is where Kitsune wins.
-
-All figures include the 1,358 floor + surgical mount for whichever server is active. The range reflects the cheapest (git ~310) to most expensive (Notion ~1,950) surgical call.
-
-| Servers always-on | Always-on/turn | Kitsune per active call | Saved |
-|---|---:|---|---:|
-| GitHub only | 4,229 | ~1,658 | 61% |
-| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | 76–81% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
-
-### Tool-selection reliability
-
-LLM tool-selection degrades as the visible tool count grows — a finding consistent across multiple tool-use benchmarks (Gorilla, ToolBench). The failure mode is typically adjacent-name confusion: a model that sees `read_file`, `read_text_file`, and `read_media_file` simultaneously is more likely to call the wrong one than a model that sees only the one it needs.
-
-Kitsune holds 6 tools at rest; 7–9 during active use. A Kitsune-specific benchmark measuring selection accuracy across tool-count conditions does not yet exist — contributions welcome.
-
-### Connection latency
-
-Kitsune maintains a persistent process pool — re-attaching to a running server within a session takes 0 ms.
-
-| Transport | Cold start | Warm (pooled) |
+| Transport | Cold start | Warm |
 |---|---|---|
-| HTTP / Smithery hosted | 0–1.4 s | 0.0 s |
-| Local stdio via `npx` | 1.7–6.3 s | 0.0 s |
-| Local stdio via `uvx` | 1.0–5.2 s | 0.0 s |
+| HTTP / Smithery | 0–1.4 s | 0.0 s |
+| Local `npx` | 1.7–6.3 s | 0.0 s |
+| Local `uvx` | 1.0–5.2 s | 0.0 s |
+
+Use `prewarm` (forge) when you know you'll need a server soon.
+
+### Token overhead (secondary)
+
+> Real vs **fully-mounted always-on** or clients **without** Tool Search. On Claude Code 2.1.7+ with native deferral, this is mostly not a Kitsune-specific win. Product pitch is reach + REPL above — not this table.
+
+Every Kitsune figure **includes** the ~1,358 floor. Reproduce: `python examples/benchmark.py`. Methodology: [`docs/benchmarks.md`](docs/benchmarks.md).
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost-dark.svg"/>
+    <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/token-cost-light.svg"
+         alt="Token cost comparison: always-on vs Kitsune" width="700"/>
+  </picture>
+</div>
+
+| Server | Always-on | Surgical + floor | vs always-on |
+|---|---:|---:|---:|
+| `mcp-server-time` | 261 | ~1,619 | always-on cheaper ¹ |
+| `mcp-server-git` | 1,242 | ~1,668 | always-on cheaper ¹ |
+| `server-memory` | 2,615 | ~1,938 | 26% |
+| `server-filesystem` | 3,207 | ~2,048 | 36% |
+| `brave` | 3,612 | ~1,808 | 50% |
+| `server-github` | 4,229 | ~1,658 | 61% |
+| `notion-hosted` | 13,707 | ~3,308 | 76% |
+
+¹ Break-even: Kitsune pays off past one medium server, or two-plus small ones sharing the single floor. Multi-server stack (GitHub+fs+git → Notion suite): **76–93%** vs fully-mounted always-on — same caveat as above.
+
+Fewer visible tools also helps selection reliability (Gorilla / ToolBench); on modern clients Tool Search delivers much of that focus for *configured* servers. Kitsune-specific accuracy bench: not yet — contributions welcome.
 
 ---
 
 ## Configuration
 
-### Env vars and `.env` files
+### Env and `.env`
 
-Kitsune re-reads credentials on every `shapeshift()` and `call()`. Add or update a key mid-session — no restart needed.
+Re-read on every `shapeshift` / `call` — add keys mid-session, no restart.
 
 Search order: `CWD/.env` → `~/.env` → `~/.kitsune/.env` (last wins).
 
 ```bash
-# Write a key and activate immediately
-auth("BRAVE_API_KEY", "sk-...")    # writes to ~/.kitsune/.env
-
-# Or manage .env directly
-echo "BRAVE_API_KEY=sk-..." >> ~/.kitsune/.env
+auth("BRAVE_API_KEY", "sk-...")    # → ~/.kitsune/.env
 ```
 
-### Custom tool surface
-
-Expose only specific tools via `KITSUNE_TOOLS`:
+### Tool surface
 
 ```json
-{
-  "mcpServers": {
-    "kitsune": {
-      "command": "kitsune-mcp",
-      "env": { "KITSUNE_TOOLS": "shapeshift,call,auth" }
-    }
-  }
-}
+{ "env": { "KITSUNE_TOOLS": "shapeshift,call,auth" } }   # subset
+{ "env": { "KITSUNE_TOOLS": "all" } }                    # forge
 ```
 
-### Custom state directory
+### State directory
 
-All persistent state — credentials (`.env`), absorbed servers, OAuth tokens,
-session state, skills — lives under `~/.kitsune/` by default. Set
-`KITSUNE_HOME` to relocate the whole directory, e.g. for benchmarks, CI, or
-multi-tenant isolation:
+Default `~/.kitsune/` (credentials, pins, OAuth, session). Relocate with `KITSUNE_HOME=/tmp/kitsune-iso`.
+
+### Sandbox / trust policy
 
 ```bash
-KITSUNE_HOME=/tmp/kitsune-iso kitsune-mcp
+KITSUNE_SANDBOX=community   # Docker-cage community npm/PyPI mounts
+KITSUNE_SANDBOX=all         # cage every local mount
+KITSUNE_TRUST=community     # waive confirm gate (status warns)
+KITSUNE_REPIN=1             # adopt newer pinned version
 ```
-
-Everything Kitsune writes then stays under `/tmp/kitsune-iso/` — nothing
-touches `~/.kitsune/`.
 
 ### Smithery
 
@@ -433,120 +396,63 @@ touches `~/.kitsune/`.
 { "env": { "SMITHERY_API_KEY": "your-key" } }
 ```
 
-Get a free key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, Kitsune is fully functional via npm, PyPI, official registry, and GitHub.
+Free key: [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys). Without it, npm / PyPI / official / GitHub still work.
 
 ---
 
-## Agent profiles
+## Mount patterns
 
-### Research agent — web search + fetch + memory
-
-```python
-shapeshift("brave", tools=["brave_web_search"])                              # ~450 tokens
-shapeshift("mcp-server-fetch")                                               # ~289 tokens
-shapeshift("@modelcontextprotocol/server-memory",
-           tools=["read_graph", "search_nodes"])                             # ~580 tokens
-# Mounts: ~1,300 tokens; total with ~1,358 floor: ~2,650 vs 6,516 always-on  →  59% reduction
-```
-
-### Code agent — filesystem + git
+Switch forms mid-session — take only the slice you need:
 
 ```python
+# Research
+shapeshift("brave", tools=["brave_web_search"])
+shapeshift("mcp-server-fetch")
+shapeshift("@modelcontextprotocol/server-memory", tools=["read_graph", "search_nodes"])
+
+# Code
 shapeshift("@modelcontextprotocol/server-filesystem",
            tools=["read_file", "write_file", "edit_file"],
-           server_args=["/path/to/project"])                                 # ~690 tokens
-shapeshift("mcp-server-git",
-           tools=["git_status", "git_diff", "git_log"])                     # ~310 tokens
-# Mounts: ~1,000 tokens; total with ~1,358 floor: ~2,350 vs 4,449 always-on  →  47% reduction
+           server_args=["/path/to/project"])
+shapeshift("mcp-server-git", tools=["git_status", "git_diff", "git_log"])
+
+# Notes
+shapeshift("notion-hosted", tools=["notion-search", "notion-append-block-children"])
+shapeshift("@modelcontextprotocol/server-memory", tools=["add_memory", "search_nodes"])
+
+shapeshift()   # always drop when the task is done
 ```
-
-### Notes / PM agent — Notion + memory
-
-```python
-shapeshift("notion-hosted",
-           tools=["notion-search", "notion-append-block-children"])         # ~1,950 tokens
-shapeshift("@modelcontextprotocol/server-memory",
-           tools=["add_memory", "search_nodes"])                            # ~580 tokens
-# Mounts: ~2,500 tokens; total with ~1,358 floor: ~3,850 vs 16,322 always-on  →  76% reduction
-```
-
----
-
-## Safety model
-
-Kitsune executes third-party code — npm, PyPI, GitHub, and local packages — with your permissions. That makes it a **supply-chain execution surface**, not just a router. Be clear-eyed about what it contains and what it does not.
-
-### What it protects against
-
-**1. Unverified code running without consent.**
-
-| Tier | Sources | On mount |
-|---|---|---|
-| High | `official` (modelcontextprotocol/servers) | runs directly |
-| Medium | `mcpregistry`, `glama`, `smithery` | runs directly |
-| Community | `npm`, `pypi`, `github`, local `connect()` | **requires `confirm=True`** |
-
-Community and local sources refuse to run until you pass `confirm=True` on `shapeshift()`/`connect()`. `KITSUNE_TRUST=community` waives the gate for sources you already trust; `status()` warns when that override is active.
-
-> **Caveat — `confirm=True` is not a human-approval boundary.** It is a tool argument the model can set on its own. It's a consent *signal* and defence-in-depth; the real user-facing approval must come from your host client's tool-approval UI (per the MCP spec's guidance that apps provide real confirmation). Don't rely on `confirm` alone to keep an autonomous agent from executing a server.
-
-**2. Shell injection at spawn time.** Install commands are validated against shell-metacharacter (`& ; | $ \` \n`) and path-traversal (`../`) patterns and are launched via `create_subprocess_exec` — no shell is involved. A malicious `server_id` can't inject a shell command. *This vets the launch command, not what the package does once it runs.*
-
-**3. SSRF.** `fetch()` and every registry call are HTTPS-only; private, loopback, and non-global hosts are blocked, and **every redirect hop is re-validated** (opt out only with `KITSUNE_ALLOW_LOCAL_FETCH=1`).
-
-**4. Credential exposure.** `~/.kitsune/.env` and `~/.kitsune/oauth/` are written at mode `0600`; OAuth 2.1 with PKCE S256 and Dynamic Client Registration (RFC 7591); missing-credential warnings *before* any call; `auth("server-id", "logout")` clears cached tokens.
-
-**5. Untrusted local servers — opt-in Docker sandbox.** `shapeshift("pkg", sandbox=True)` runs an npm/PyPI server inside the hardened Docker profile instead of as a host subprocess: no host filesystem, `--cap-drop ALL`, read-only rootfs, RAM/PID caps. Only credential env vars relevant to that server are forwarded — by *name* (`docker -e KEY`), never by value, so secrets stay out of the argv, the process list, and the pool key. Set `KITSUNE_SANDBOX=community` to sandbox every community-source mount automatically, or `KITSUNE_SANDBOX=all` for every local mount. Requires Docker; the first sandboxed mount pulls the base image (`node:22-slim` / `uv:python3.13-bookworm-slim`). Filesystem-style servers need host paths and are the one category that doesn't fit a sandbox.
-
-### What it does NOT do — read before trusting it with real credentials
-
-- **A local stdio server is isolated from Kitsune's memory, but it is not sandboxed unless you opt in.** Without `sandbox=True` / `KITSUNE_SANDBOX`, it runs as your user and inherits your permissions: it can read and write your files, reach the network, spawn processes, and read inherited environment variables. Process isolation is not a security boundary.
-- **Docker mode is hardened, but Docker is still not a kernel boundary.** Every container runs `--cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp --pids-limit 512 --memory 512m` by default (opt out per call: `writable`, `cap_add`, `network`, `pids_limit`, `memory`). That blunts privilege escalation, fork bombs, and filesystem tampering — but it is defence-in-depth, **not** a guarantee against a container-escape kernel exploit. It also does not yet default to a non-root user or `--network none` (most MCP servers need egress).
-- **Version pinning is trust-on-first-use (TOFU), not a digest lock.** When Kitsune first mounts an npm/PyPI server it records the exact resolved version in `~/.kitsune/pins.json` and reuses it on every later mount — so a package that publishes a malicious release *after* you trusted it can't silently execute; you get a `⚠️ pinned to 1.2.3, registry now offers 1.3.0` warning instead. `KITSUNE_REPIN=1` adopts the newer version and updates the pin. Limits: it pins a version, not a content digest; and `github:`/`--from git+…` targets and hand-written `connect()` commands carry no version, so they aren't pinned. For high-assurance use, pin by digest or vendor the package.
-- **Not every MCP capability is proxied identically.** Native tools are first-class; resource/prompt proxying is narrower (URI templates are skipped; HTTP transports don't proxy resources/prompts through the same path). "Any server" refers to tool execution, not every MCP capability.
-
-**Bottom line:** strong fit for supervised developer and personal workflows. **Do not run it unattended with production admin, billing, or security credentials in the default local-execution mode** — a local (non-Docker) server still runs with your full user permissions. For higher assurance: enforce approval at the client, restrict credentials and filesystem access, and run untrusted servers sandboxed — `shapeshift(id, sandbox=True)` or `KITSUNE_SANDBOX=community` — rather than as raw local `npx`/`uvx` processes.
-
-See these guards in action in [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
 
 ---
 
 ## For MCP developers
 
-The full evaluation suite is available by setting `KITSUNE_TOOLS=all`:
-
 ```json
 { "command": "kitsune-mcp", "env": { "KITSUNE_TOOLS": "all" } }
 ```
 
-Additional tools:
-
-| Tool | What it does |
+| Tool | Role |
 |---|---|
-| `inspect(server_id)` | Schema review + live credential check (✓/✗ per key) + measured token cost |
-| `test(server_id)` | Quality score 0–100 across connectivity, schema correctness, and tool behaviour |
-| `bench(server_id, tool, args)` | Latency benchmark — p50, p95, min, max |
-| `compare(query)` | Side-by-side: token cost, tool count, trust tier, credential status |
-| `craft(name, description, params, url)` | Register a custom HTTP-backed tool; `shapeshift()` removes it |
+| `connect` / `release` / `prewarm` | MCP REPL + warm pool |
+| `inspect(server_id)` | Schemas, live cred check, measured cost |
+| `test(server_id)` | Quality score 0–100 |
+| `bench(server_id, tool, args)` | Latency p50 / p95 / min / max |
+| `compare(query)` | Side-by-side cost, tools, trust, creds |
+| `craft(name, description, params, url)` | Register a live HTTP-backed tool |
 
-Test your server inside real Claude or Cursor sessions — not in an isolated inspector UI.
+Test inside real Claude / Cursor sessions — not only an inspector UI. Companion skills: `kitsune-dev`, `kitsune-improve`.
 
 ---
 
 ## Why Kitsune?
 
-In Japanese folklore, the Kitsune (狐) is a fox spirit of extraordinary intelligence and magical power. What makes it remarkable is not what it is, but what it can *become*. With age and wisdom, a Kitsune grows new tails — each one a new ability mastered, a new form borrowed from the world around it. It can shapeshift into anything: a scholar, a warrior, a force of nature. And when the purpose is fulfilled, it casts off that form as easily as it took it on, returning to its true self — ready to become something else entirely.
+In Japanese folklore the Kitsune (狐) is known for what it can *become*: borrow a form, use that power, cast it off, return to itself.
 
-One fox. Infinite forms. Every power available. Nothing carried that isn't needed.
+That is the product loop — reach, use, release; or edit, reload, re-test. One config entry. Long tail one call away. Session intact.
 
-`shapeshift("brave-search")` — the fox takes on a new form. Its tools appear as if they were always there.
-`shapeshift()` — it returns to its true shape. Context drops back to baseline. Ready for the next form.
+`shapeshift()` is a literal mid-session mount, not a metaphor. Durable advantages: **reach, live development, contained try-before-trust** — not a smaller token bill on clients that already defer schemas.
 
-Each server mounted is a new tail. Each capability borrowed cleanly and released when done. One entry in your config. Every server in the MCP ecosystem, on demand — summoned, used, and let go.
-
-Concretely, `shapeshift()` **connects to a server at runtime and makes its tools callable** — you shift into an unfamiliar server's shape, use it, and shift back. It's an on-demand connect-and-execute, not a transformation of Kitsune itself. The value is that it happens live, mid-session, without editing config or restarting the client.
-
-> *I am not Japanese, and I use this name with the highest respect for the mythology and culture it comes from. The parallel felt too precise to ignore — a spirit that shapeshifts between forms, gains new powers, and releases them at will. That is exactly what this tool does.*
+> *I am not Japanese, and I use this name with the highest respect for the mythology and culture it comes from. The parallel felt too precise to ignore.*
 
 ---
 
@@ -558,9 +464,7 @@ make test    # pytest
 make lint    # ruff
 ```
 
-Issues and PRs: [github.com/kaiser-data/kitsune-mcp](https://github.com/kaiser-data/kitsune-mcp)
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+Issues and PRs: [github.com/kaiser-data/kitsune-mcp](https://github.com/kaiser-data/kitsune-mcp) · [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
