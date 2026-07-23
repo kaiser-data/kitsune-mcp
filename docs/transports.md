@@ -77,6 +77,6 @@ release("voice")  # kills process, removes from pool
 | Scenario | Transport | Command |
 |----------|-----------|---------|
 | Smithery hosted API | HTTPSSETransport | `call()` / `shapeshift()` automatic |
-| One-shot npm tool | StdioTransport | `call()` / `run()` / `receive()` automatic |
+| One-shot npm tool | StdioTransport | `call()` / `run()` / `shapeshift()` automatic |
 | Audio/hardware tool | PersistentStdioTransport | `connect()` then `release()` |
 | Unknown server | Auto-detected | `call()` detects from registry |

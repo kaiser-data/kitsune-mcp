@@ -1,14 +1,15 @@
 # Kitsune MCP — Test Session
 
-Paste the prompt below into a Claude Code session that has Kitsune MCP configured.
-Run tests in order — each one builds on the previous.
+Paste the prompt below into a Claude Code session that has Kitsune MCP configured
+(default lean profile — no `KITSUNE_TOOLS=all` needed). Run tests in order — each
+one builds on the previous.
 
 ---
 
 ## Prompt to paste
 
 ```
-You are running a structured test of Kitsune MCP v0.6.0.
+You are running a structured test of Kitsune MCP v0.21.0 (lean profile).
 
 Work through each test case below in order. For every test:
 1. Call the tool(s) listed
@@ -19,116 +20,110 @@ Do not skip tests. If a test fails, note why and continue to the next one.
 
 ---
 
-TEST 1 — Verify Chameleon is running
+TEST 1 — Verify Kitsune is running
 Call: status()
 Expect:
-- Output starts with "KITSUNE MCP STATUS"
-- Shows "CURRENT FORM: base (no mount active)"
-- Shows PERFORMANCE STATS section
+- Output starts with "KITSUNE MCP STATUS" (or equivalent status header)
+- Shows current form is base / no mount active
+- Shows PERFORMANCE STATS (or resting token floor)
 
 ---
 
-TEST 2 — Search works across registries
+TEST 2 — Search works + works-now signal
 Call: search("filesystem")
 Expect:
 - At least one result returned
 - Each result shows source/transport (e.g. "official/stdio")
-- Result includes @modelcontextprotocol/server-filesystem
+- Each row ends with " | ready: high|mid|low"
+- Result includes @modelcontextprotocol/server-filesystem (or mcp-server-filesystem)
 
 ---
 
-TEST 3 — Inspect fetches live schemas
-Call: inspect("@modelcontextprotocol/server-filesystem")
+TEST 3 — Inspect fetches live schemas (forge-only; skip if lean)
+If inspect() is not available in this session, SKIP and note "lean profile".
+Otherwise call: inspect("@modelcontextprotocol/server-filesystem")
 Expect:
-- Shows "Source: official | Transport: stdio"
+- Shows Source / Transport
 - TOOLS section lists read_file, write_file, list_directory (and others)
-- Each tool shows its parameters in parentheses e.g. read_file(path)
-- Shows "Token cost: ~XXX tokens (measured)" — note the number
-- Shows "CREDENTIALS: none required"
+- Shows a measured token cost
+- CREDENTIALS: none required
 
 ---
 
-TEST 4 — Full mount injects tools natively
-Call: receive("@modelcontextprotocol/server-filesystem")
+TEST 4 — Full mount injects tools
+Call: shapeshift("@modelcontextprotocol/server-filesystem")
 Expect:
-- Output says "Received form of '@modelcontextprotocol/server-filesystem'"
-- Lists registered tools: read_file, write_file, list_directory etc
-- Shows "✓  Source: official" (high-trust source)
-- No credential warning (filesystem needs none)
-- The filesystem tools are now visible in your tool list
+- Output says shapeshifted / registered tools for that server
+- Lists registered tools (read_file, write_file, list_directory, …)
+- Shows a Source: official (high-trust) note
+- Filesystem tools are now visible in your tool list
 
 ---
 
-TEST 5 — Morphed tool actually executes
-Call: list_directory(path="/tmp")
+TEST 5 — Mounted tool actually executes
+Call via call(): call("list_directory", arguments={"path": "/tmp"})
+  (or the exact registered proxy name if prefixed)
 Expect:
 - Returns a real directory listing (not an error)
-- Content looks like a file list
 
 ---
 
-TEST 6 — Unmount removes all mounted tools
-Call: cast_off()
+TEST 6 — Unmount removes mounted tools
+Call: shapeshift()
 Expect:
-- Output says "Unmount '@modelcontextprotocol/server-filesystem'. Removed: read_file, write_file, ..."
+- Form is cleared / tools unmounted
 - Filesystem tools are gone from your tool list
 
 ---
 
 TEST 7 — Lean mount filters to specific tools
-Call: receive("@modelcontextprotocol/server-filesystem", tools=["read_file", "list_directory"])
+Call: shapeshift("@modelcontextprotocol/server-filesystem", tools=["read_file", "list_directory"])
 Expect:
-- Output says "(lean: read_file, list_directory)"
-- Only 2 tools registered — NOT write_file, create_directory, delete_file etc
-- Output count matches: "2 tool(s) registered"
-Then call: cast_off()
+- Output mentions lean / only the listed tools
+- Only 2 tools registered — NOT write_file, create_directory, etc.
+Then call: shapeshift()
 
 ---
 
-TEST 8 — Status shows token savings after inspection
+TEST 8 — Community trust gate + default cage
+Call: shapeshift("mcp-server-brave-search")   # no confirm
+Expect:
+- Warning that the source is community / npm
+- Instructs confirm=True to proceed
+- Mentions Docker cage by default (or sandbox=False to opt out)
+- Tools are NOT registered yet (gate blocked)
+Then (optional, if Brave key present):
+  shapeshift("mcp-server-brave-search", confirm=True)
+  Expect caged-in-Docker note when Docker is available, or uncaged nudge if not
+  shapeshift()
+
+---
+
+TEST 9 — MCP REPL reload is on lean
+Call: connect("npx -y @modelcontextprotocol/server-everything", name="dev")
+  (or any quick local stdio server you have)
+Expect: Connected with a PID and tool list
+Then call: reload("dev")
+Expect:
+- Reloaded message (old PID killed, restarted, remounted)
+- Does NOT say "Already connected … predates your edit"
+Then: shapeshift(); release("dev")
+
+---
+
+TEST 10 — status() full picture
 Call: status()
 Expect:
-- EXPLORED section shows @modelcontextprotocol/server-filesystem [inspected]
-- PERFORMANCE STATS shows "Saved vs always-on: ~XXX tokens [based on 1 inspected schema(s)]"
-  (This confirms inspect() stored the measured token cost)
-
----
-
-TEST 9 — Trust warning for community server
-Call: receive("mcp-server-brave-search")
-Expect:
-- Output shows "⚠️  Source: npm (community — not verified by official MCP registry)"
-- Output shows credential warning: '⚠️  Credentials may be required' with key("BRAVE_API_KEY", ...)
-- Tools ARE registered despite the warning (warning is informational, not blocking)
-Then call: cast_off()
-
----
-
-TEST 10 — inspect() is cheaper than receive()
-Call: inspect("@modelcontextprotocol/server-memory")
-Expect:
-- Shows tool schemas with parameters
-- Shows token cost
-- Critically: no memory tools appear in your tool list — inspect() registers NOTHING
-  (Verify by checking — you should still only see Chameleon's base tools)
-
----
-
-TEST 11 — status() full picture
-Call: status()
-Expect:
-- EXPLORED section shows both servers inspected/used so far
-- If any servers were mounted and unmount, those appear in ACTIVE NODES
-- PERFORMANCE STATS shows cumulative token savings from all inspected servers
-  (Should now be higher than after TEST 8)
+- Reflects explored / mounted activity from earlier tests
+- Resting floor still quoted around ~1,774 tokens for lean
 
 ---
 
 SUMMARY
 Report:
-- How many tests passed / failed
-- The token cost shown by inspect() in TEST 3 (should be around 300-500 tokens)
-- The savings shown by status() in TEST 11
+- How many tests passed / failed / skipped
+- Whether reload() worked in one call (TEST 9)
+- Whether the community gate mentioned default cage (TEST 8)
 - Any unexpected behaviour
 ```
 
@@ -136,14 +131,14 @@ Report:
 
 ## Expected token numbers (reference)
 
-| Tool | Expected tokens |
+| Surface | Expected tokens |
 |---|---|
-| Chameleon lean (6 tools) | ~450 |
-| filesystem server (10 tools) | ~300–400 |
-| brave-search (3 tools) | ~100–150 |
-| memory server (varies) | ~100–300 |
+| Kitsune lean (9 tools) | ~1,774 |
+| Kitsune forge (22 tools) | ~3,561 |
+| filesystem server (14 tools) | ~3,000+ |
+| memory server (varies) | ~2,000+ |
 
-Run `python examples/benchmark.py` to see Chameleon's own schema costs measured exactly.
+Run `python examples/benchmark.py` for exact lean/forge schema costs.
 
 ---
 
@@ -151,26 +146,25 @@ Run `python examples/benchmark.py` to see Chameleon's own schema costs measured 
 
 | Test | What it proves |
 |---|---|
-| 1 | Chameleon is connected and responding |
-| 2 | Registry fan-out works (official + fallbacks) |
-| 3 | inspect() fetches live schemas, measures token cost, stores in session |
-| 4 | receive() registers tools natively, trust tier shown |
-| 5 | Proxy execution works — call actually reaches the target server |
-| 6 | cast_off() removes all mounted tools cleanly |
-| 7 | Lean mount (tools=[...]) filters correctly |
-| 8 | status() uses measured token costs, not heuristics (v0.6.0) |
-| 9 | Trust warnings and credential warnings fire for community sources |
-| 10 | inspect() has zero tool-registration side effects |
-| 11 | Session accumulates state correctly across multiple operations |
+| 1 | Kitsune is connected and responding |
+| 2 | Registry fan-out + works-now signal |
+| 3 | inspect() (forge) fetches schemas without mounting |
+| 4 | shapeshift() registers tools natively |
+| 5 | Proxy execution works via call() |
+| 6 | shapeshift() empty arg unmounts cleanly |
+| 7 | Lean mount (`tools=[…]`) filters correctly |
+| 8 | Community trust gate + default Docker cage messaging |
+| 9 | Lean MCP REPL: connect + one-call reload |
+| 10 | Session state accumulates across operations |
 
 ---
 
 ## Troubleshooting
 
-**"Server not found"** — run `search("filesystem")` first to confirm registry is reachable.
+**"Server not found"** — run `search("filesystem")` first to confirm registry reachability.
 
 **Mount takes a long time** — first run downloads the npm package via npx. Subsequent calls use the process pool and are instant.
 
-**No trust warning on TEST 9** — check that mcp-server-brave-search resolves from npm (source should be "npm", not "official").
+**No trust warning on TEST 8** — check that the id resolves from npm (source should be "npm", not "official").
 
-**Token savings is 0 in TEST 8** — make sure you called `inspect()` in TEST 3 before `receive()` in TEST 4. inspect() is what stores the measured cost; receive() alone does not.
+**reload says Already connected** — that means the old 3-step footgun; `reload` should always release first. File a bug if it doesn't.

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something is broken in Chameleon MCP
+about: Something is broken in Kitsune MCP
 title: "[BUG] "
 labels: bug
 assignees: ""
@@ -14,9 +14,9 @@ assignees: ""
 
 ## What you did
 ```
-call('server-id', 'tool-name', {...})
+call("tool_name", arguments={...})
 # or
-morph('server-id')
+shapeshift("server-id")
 ```
 
 ## Error / unexpected output
@@ -29,6 +29,7 @@ paste the exact error or output here
 
 ## Environment
 - Python version: `python --version`
-- Chameleon version: `pip show chameleon-mcp`
+- Kitsune version: `pip show kitsune-mcp`
 - OS: macOS / Linux / Windows
 - SMITHERY_API_KEY set: yes / no
+- Profile: lean (default) / forge (`KITSUNE_TOOLS=all`)

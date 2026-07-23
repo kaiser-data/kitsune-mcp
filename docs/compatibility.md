@@ -27,7 +27,7 @@ Kitsune MCP sends MCP notifications when the tool/resource/prompt list changes �
 | `shiftback()` after mounted prompts | `notifications/prompts/list_changed` | Only if prompts were present |
 | `craft()` | `notifications/tools/list_changed` | Always |
 
-Notification failures are silently suppressed — Chameleon continues to work even if the client doesn't support notifications.
+Notification failures are silently suppressed — Kitsune continues to work even if the client doesn't support notifications.
 
 ## Manual test protocol
 

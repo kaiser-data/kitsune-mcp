@@ -18,7 +18,7 @@ call("search_repositories", {"query": "mcp servers"})
 shapeshift()                                           # released — context back to floor
 ```
 
-It's not free at rest — Kitsune's own 9 lean tools cost ~1,685 tokens. But that floor stays flat while always-on servers stack linearly. Past one medium server, you win: ~53% fewer tokens on GitHub alone, up to ~92% across five servers.
+It's not free at rest — Kitsune's own 9 lean tools cost ~1,774 tokens. But that floor stays flat while always-on servers stack linearly. Past one medium server, you win: ~51% fewer tokens on GitHub alone, up to ~92% across five servers.
 
 Lean agent. Honest math. Open source.
 

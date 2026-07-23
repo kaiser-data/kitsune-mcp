@@ -13,7 +13,7 @@ assignees: ""
 <!-- How do you handle this today, if at all? -->
 
 ## Proposed solution
-<!-- What would you like Chameleon to do? Be as specific as you can. -->
+<!-- What would you like Kitsune to do? Be as specific as you can. -->
 
 ## Would you like to contribute a PR?
 <!-- yes / no / maybe -->

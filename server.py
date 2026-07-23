@@ -8,8 +8,8 @@ All logic lives in the kitsune_mcp package. This file:
 
 KITSUNE_TOOLS env var controls which tools are registered:
   (not set)  — lean profile: status, search, auth, shapeshift, call, auto,
-               connect, release, reload  (9 tools, ~1,685 tokens overhead)
-  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~3,396 tokens)
+               connect, release, reload  (9 tools, ~1,774 tokens overhead)
+  KITSUNE_TOOLS=all           — all tools (forge / evaluator mode, ~3,561 tokens)
   KITSUNE_TOOLS=shapeshift,call — exactly those tools
 """
 

@@ -1,10 +1,33 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-23. **Agent-harness reposition SHIPPED** + **all three
+_Last updated: 2026-07-24. **v0.21.0 SHIPPED** (PyPI / npm / MCP Registry all
+live). Post-release hygiene (floor remount to measured ~1,774 / ~3,561, SVG
+regen, test_session rewrite, Chameleon strip, issue templates, skill sync) is
+the current WIP — see session note below._
+
+## SESSION 2026-07-24 — post-v0.21.0 hygiene (floor remount + stale docs + skills)
+
+Tri-state `sandbox` on `shapeshift` raised the measured lean floor after the
+0.21.0 cut (~1,685 → **~1,774**; forge ~3,396 → **~3,561**). Remounted every
+live reference + regenerated token-cost / architecture SVGs. Closed the
+deferred backlog called out at release:
+
+- [x] Stale token-cost + architecture SVGs
+- [x] `examples/test_session.md` rewritten (lean / `reload` / default cage)
+- [x] Stray Chameleon/`receive` in `docs/compatibility.md` + `docs/transports.md`
+- [x] Issue templates modernized (Kitsune naming, `shapeshift`/`call`)
+- [x] `kitsune-dev` prefers `reload()`; `kitsune-gateway` documents lean REPL +
+  default cage + ~1,774 floor (skills live in marty-skills)
+
+---
+
+## SESSION 2026-07-23 — reposition as agent harness + sellability plan + v0.21.0
+
+_Last updated earlier: **Agent-harness reposition SHIPPED** + **all three
 sellability PRs (A lean REPL, B discovery/demo, C sandbox-by-default) SHIPPED in
 v0.21.0** — pushed to `main` (`20a311c`), tag `v0.21.0`, and **live on all three
 registries** (PyPI / npm / MCP Registry all `0.21.0`, registry `isLatest: true`,
-verified 2026-07-23). Remaining: stale-docs cleanup + skill sync (below)._
+verified 2026-07-23)._
 
 ## SESSION 2026-07-23 — reposition as agent harness + sellability plan PR A (lean MCP REPL)
 
@@ -105,11 +128,9 @@ were forge-only. Plan saved at
   npm + MCP Registry, all 3 jobs ✓.
 - Verified live: PyPI `0.21.0`, npm `dist-tags.latest = 0.21.0`, MCP Registry
   `0.21.0` `isLatest: true`.
-- Still open (deferred, out of the A/B/C scope): stale token-cost SVGs, legacy
-  `examples/test_session.md` / stray Chameleon mentions in
-  `docs/compatibility.md` + `docs/transports.md`, and syncing the
-  `kitsune-dev` (prefer `reload`) / `kitsune-gateway` (lean now has the REPL +
-  default cage) skills.
+- Post-release hygiene (2026-07-24): floor remounted to measured ~1,774 / ~3,561;
+  SVGs, test_session, Chameleon docs, issue templates, and kitsune-dev/gateway
+  skills synced — see SESSION 2026-07-24 above.
 - [ ] **Stale token-cost SVGs** — `docs/token-cost-{light,dark}.svg` still show the
   old floor; regen needed (deferred from PR A — needs the SVG regen script).
 - [ ] v0.21.0 release (bump `pyproject.toml`/`package.json`/`server.json`, tag, publish).

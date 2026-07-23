@@ -39,7 +39,7 @@ connect → shapeshift → edit → reload → call     # MCP REPL (default inst
 |---|---|
 | You're building an MCP and need an edit/reload loop | You only need 1–3 trusted servers (configure them natively) |
 | A task needs a server that isn't in your config | Every turn hits the same server (keep it always-on) |
-| CLI flag-guessing on a long-tail API is too risky | You want cheaper tokens — floor is **~1,685 tokens/turn**, additive on modern clients |
+| CLI flag-guessing on a long-tail API is too risky | You want cheaper tokens — floor is **~1,774 tokens/turn**, additive on modern clients |
 | You want to evaluate community MCP code safely | Unattended prod admin/billing/security keys ([Safety](#safety-model)) |
 | You're consolidating a crowded MCP config ([GATEWAY](#gateway-consolidate-always-on-servers)) | You need sub-second first call (cold mount ~1–15s — `prewarm` or always-on) |
 
@@ -98,7 +98,7 @@ Add once to your MCP client config:
 
 Also works with OpenClaw, Zed, and any MCP-compatible client.
 
-Lean profile at rest: **9 tools · ~1,685 tokens/turn** (`status`, `search`, `auth`, `shapeshift`, `call`, `auto`, plus the `connect` / `release` / `reload` REPL trio) — measured via `python examples/benchmark.py`.
+Lean profile at rest: **9 tools · ~1,774 tokens/turn** (`status`, `search`, `auth`, `shapeshift`, `call`, `auto`, plus the `connect` / `release` / `reload` REPL trio) — measured via `python examples/benchmark.py`.
 
 ---
 
@@ -317,7 +317,7 @@ Use `prewarm` (forge) when you know you'll need a server soon.
 
 > Real vs **fully-mounted always-on** or clients **without** Tool Search. On Claude Code 2.1.7+ with native deferral, this is mostly not a Kitsune-specific win. Product pitch is reach + REPL above — not this table.
 
-Every Kitsune figure **includes** the ~1,685 floor. Reproduce: `python examples/benchmark.py`. Methodology: [`docs/benchmarks.md`](docs/benchmarks.md).
+Every Kitsune figure **includes** the ~1,774 floor. Reproduce: `python examples/benchmark.py`. Methodology: [`docs/benchmarks.md`](docs/benchmarks.md).
 
 <div align="center">
   <picture>
@@ -330,15 +330,15 @@ Every Kitsune figure **includes** the ~1,685 floor. Reproduce: `python examples/
 
 | Server | Always-on | Surgical + floor | vs always-on |
 |---|---:|---:|---:|
-| `mcp-server-time` | 261 | ~1,946 | always-on cheaper ¹ |
-| `mcp-server-git` | 1,242 | ~1,995 | always-on cheaper ¹ |
-| `server-memory` | 2,615 | ~2,265 | 13% |
-| `server-filesystem` | 3,207 | ~2,375 | 26% |
-| `brave` | 3,612 | ~2,135 | 41% |
-| `server-github` | 4,229 | ~1,985 | 53% |
-| `notion-hosted` | 13,707 | ~3,635 | 73% |
+| `mcp-server-time` | 261 | ~2,035 | always-on cheaper ¹ |
+| `mcp-server-git` | 1,242 | ~2,084 | always-on cheaper ¹ |
+| `server-memory` | 2,615 | ~2,354 | 10% |
+| `server-filesystem` | 3,207 | ~2,464 | 23% |
+| `brave` | 3,612 | ~2,224 | 38% |
+| `server-github` | 4,229 | ~2,074 | 51% |
+| `notion-hosted` | 13,707 | ~3,724 | 73% |
 
-¹ Break-even: Kitsune pays off past one medium server, or two-plus small ones sharing the single floor. Multi-server stack (GitHub+fs+git → Notion suite): **~77–85%** vs fully-mounted always-on — same caveat as above.
+¹ Break-even: Kitsune pays off past one medium server, or two-plus small ones sharing the single floor. Multi-server stack (GitHub+fs+git → Notion suite): **~72–85%** vs fully-mounted always-on — same caveat as above.
 
 Fewer visible tools also helps selection reliability (Gorilla / ToolBench); on modern clients Tool Search delivers much of that focus for *configured* servers. Kitsune-specific accuracy bench: not yet — contributions welcome.
 

@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Docs — remount lean floor to v0.21.0 measured (~1,774 / ~3,561)
+
+PR C's tri-state `sandbox` docstring grew `shapeshift`'s schema cost; live
+`python examples/benchmark.py` now reads lean **1,774** / forge **3,561**
+(was ~1,685 / ~3,396 at the 0.21.0 cut). Regenerated every live reference:
+README savings table, `docs/benchmarks.md`, article / demo-script /
+linkedin_post, `server.py` docstring, token-cost + architecture SVGs.
+
+Also closed the deferred hygiene backlog: rewrote `examples/test_session.md`
+(lean + `reload` + default cage), stripped stray Chameleon/`receive` from
+`docs/compatibility.md` + `docs/transports.md`, modernized issue templates,
+and synced `kitsune-dev` / `kitsune-gateway` skills (prefer `reload`, lean
+REPL + default cage + ~1,774 floor).
+
+---
+
 ## [0.21.0] — 2026-07-23
 
 ### Added — lean MCP REPL: `connect` / `release` / `reload` in the default profile
