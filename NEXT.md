@@ -1,9 +1,10 @@
 # What's next — post v0.20.7
 
 _Last updated: 2026-07-23. **Agent-harness reposition SHIPPED** + **all three
-sellability PRs (A lean REPL, B discovery/demo, C sandbox-by-default) committed
-to `main`, unpushed, unreleased.** Next: **v0.21.0 bump/tag/publish** — still NOT
-done._
+sellability PRs (A lean REPL, B discovery/demo, C sandbox-by-default) SHIPPED in
+v0.21.0** — pushed to `main` (`20a311c`), tag `v0.21.0`, and **live on all three
+registries** (PyPI / npm / MCP Registry all `0.21.0`, registry `isLatest: true`,
+verified 2026-07-23). Remaining: stale-docs cleanup + skill sync (below)._
 
 ## SESSION 2026-07-23 — reposition as agent harness + sellability plan PR A (lean MCP REPL)
 
@@ -95,7 +96,20 @@ were forge-only. Plan saved at
 - Tests: `test_sandbox.py` (default-cage/opt-out/best-effort/off + gate copy),
   `test_sandbox_default.py::TestSandboxForMount` + off-policy, `test_prewarm.py`
   (+2). **823 passed, 2 skipped; ruff clean.** `graphify update .` run.
-- [ ] **v0.21.0 release still pending** (bump + tag + publish — see below).
+
+### v0.21.0 RELEASE — SHIPPED (`20a311c`, tag `v0.21.0`, pushed)
+- Bumped `pyproject.toml` / `package.json` / `server.json` (3 occurrences) →
+  `0.21.0`; CHANGELOG `[Unreleased]` → `[0.21.0] — 2026-07-23`.
+- Tag push auto-published PyPI (run 30045976543 ✓); `publish.yml` dispatch
+  (`-f publish_npm=true -f publish_registry=true`, run 30047074902) published
+  npm + MCP Registry, all 3 jobs ✓.
+- Verified live: PyPI `0.21.0`, npm `dist-tags.latest = 0.21.0`, MCP Registry
+  `0.21.0` `isLatest: true`.
+- Still open (deferred, out of the A/B/C scope): stale token-cost SVGs, legacy
+  `examples/test_session.md` / stray Chameleon mentions in
+  `docs/compatibility.md` + `docs/transports.md`, and syncing the
+  `kitsune-dev` (prefer `reload`) / `kitsune-gateway` (lean now has the REPL +
+  default cage) skills.
 - [ ] **Stale token-cost SVGs** — `docs/token-cost-{light,dark}.svg` still show the
   old floor; regen needed (deferred from PR A — needs the SVG regen script).
 - [ ] v0.21.0 release (bump `pyproject.toml`/`package.json`/`server.json`, tag, publish).
