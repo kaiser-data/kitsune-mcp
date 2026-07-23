@@ -49,7 +49,9 @@ class TestOnboard:
             result = await onboard()
         assert "3-STEP CHECK" in result
         assert 'call("get_current_time"' in result
-        assert "shiftback()" in result
+        # Step 3 uses shapeshift() (lean-profile verb), not the forge-only shiftback().
+        assert "shapeshift()" in result
+        assert "shiftback()" not in result
 
     async def test_kitsune_trust_env_warning_appears_when_set(self):
         from kitsune_mcp.tools import onboard

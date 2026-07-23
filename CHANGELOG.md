@@ -6,6 +6,32 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added — lean MCP REPL: `connect` / `release` / `reload` in the default profile
+
+The pitch's headline developer loop (edit → reload → test in one session) was
+forge-only, so it was unreachable on a default `pip install`. The REPL trio now
+ships in the lean profile:
+
+- `connect`, `release`, and the new **`reload(name)`** are in `_LEAN_TOOL_NAMES`.
+  `reload` folds the manual release → connect → shapeshift cycle into one call:
+  it kills the stale process, restarts the stored launch command as fresh code,
+  and remounts so the client sees the new schemas — removing the "connect handed
+  back the old process" footgun (it always releases first).
+- Lean floor rises 6 → 9 tools (~1,358 → ~1,685 tokens); still additive on Tool
+  Search clients — this is reachability, not a token-savings claim.
+
+### Added — works-now signal on `search()` and demo/onboarding hygiene
+
+- Each `search()` result row now ends with ` | ready: high|mid|low` — a no-probe
+  heuristic (`_works_now_label` over `registry._works_now_score`: creds resolved
+  + source tier + local transport) so it's obvious which hits run without setup.
+- `onboard()`'s 3-step check ends with `shapeshift()` (lean unmount) instead of
+  the forge-only `shiftback()`, so the copy-paste check is correct in both
+  profiles.
+- Rewrote `examples/demo_wow.md` (dropped legacy Chameleon/`receive`/`cast_off`
+  and the token-savings framing; lean-only session across the three pillars) and
+  realigned `docs/demo-realtime.md` Act 1 to the lean `reload` loop.
+
 ### Added — sandbox-by-default on the exec paths (`auto()` / `call()` / `run()`)
 
 `shapeshift(sandbox=True)` was opt-in, but the "magic" execution paths still

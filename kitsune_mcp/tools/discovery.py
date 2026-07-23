@@ -17,10 +17,26 @@ from kitsune_mcp.credentials import (
     _credentials_ready,
     _to_env_var,
 )
+from kitsune_mcp.registry import _works_now_score
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import _kill_process_tree, _ping, _process_pool
 from kitsune_mcp.utils import _estimate_tokens, _rss_mb
+
+
+def _works_now_label(srv) -> str:
+    """Compact works-now signal for search rows: high | mid | low.
+
+    Wraps registry._works_now_score (0.0–1.0) so lean search can show whether a
+    hit is likely to run without setup — creds already resolved + trusted source
+    + local transport push toward "high". No probe, no network: pure heuristic.
+    """
+    score = _works_now_score(srv)
+    if score >= 0.55:
+        return "high"
+    if score >= 0.3:
+        return "mid"
+    return "low"
 
 
 def _kill_probe(pool_key: str) -> None:
@@ -199,7 +215,10 @@ async def search(
             lines.insert(1, f"⚠️  Skipped: {failed}\n")
     for s in servers:
         cred_status = _credentials_ready(s.credentials, s.source)
-        lines.append(f"{s.id} | {s.name} — {s.description} | {s.source}/{s.transport} | {cred_status}")
+        lines.append(
+            f"{s.id} | {s.name} — {s.description} | {s.source}/{s.transport} | "
+            f"{cred_status} | ready: {_works_now_label(s)}"
+        )
         session["explored"][s.id] = {"name": s.name, "desc": s.description, "status": "explored"}
 
     _is_fresh = not session["grown"] and session["stats"]["total_calls"] <= 1

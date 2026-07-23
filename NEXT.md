@@ -50,13 +50,32 @@ were forge-only. Plan saved at
   `examples/linkedin_post.md`.
 - `graphify update .` run.
 
-### OPEN FOLLOW-UPS (for the next session)
-- [ ] **Push `main`** — `fa420eb` (PR A) is committed but NOT pushed. `abf8be4`
-  (reposition) WAS pushed. Decide whether to push A directly or open a PR.
-- [ ] **PR B** — discovery works-now signal at `discovery.py:202`; `onboard()`
-  3-step check `shiftback()` → `shapeshift()` (`onboarding.py:1201`); rewrite
-  `examples/demo_wow.md` (still says "Chameleon" / `receive` — anti-marketing);
-  align `docs/demo-realtime.md` Act 1 to lean + `reload`.
+### PR B — discovery works-now signal + onboard fix + demo hygiene — COMMITTED (unpushed)
+- **Works-now signal on `search`**: new `_works_now_label()` in
+  `kitsune_mcp/tools/discovery.py` wraps `registry._works_now_score` (0.0–1.0)
+  into `high|mid|low` (thresholds: ≥0.55 high, ≥0.3 mid, else low). Every search
+  row now ends ` | ready: <label>` (no probe, pure heuristic: creds resolved +
+  source tier + local transport). No forge `compare` table on lean.
+- **`onboard()` 3-step check accuracy fix** (`onboarding.py`): step 3 was
+  `shiftback()` (forge-only) → now `shapeshift()` (empty arg = unmount, and it's
+  lean), so the check is copy-pasteable in **both** profiles.
+- **`examples/demo_wow.md` full rewrite**: dropped Chameleon/`receive`/`cast_off`
+  and the token-savings headline; now a lean-only 7-step session organized around
+  the three pillars (reach / MCP REPL via `reload` / try-before-trust), default
+  install, wedge line. Concrete `call` uses verified `mcp-server-time` /
+  `get_current_time` (didn't assert the duckduckgo tool name).
+- **`docs/demo-realtime.md`**: setup note no longer demands `KITSUNE_TOOLS=all`
+  (trio is lean now); Act 1 rewritten to add the missing `shapeshift("dev")`
+  mount step and use the one-call `reload("dev")` (was manual release+connect).
+- **README hero**: trimmed the last "forge profile" REPL callout — the flow line
+  now reads `connect → shapeshift → edit → reload → call   # MCP REPL (default
+  install)` and the pillar table cell is `edit → reload → call`.
+- Tests: `tests/test_ux_changes.py::TestSearchWorksNowSignal` (+3),
+  `tests/test_onboard.py` updated to assert `shapeshift()` and NOT `shiftback()`.
+  **812 passed, 2 skipped; ruff clean.** `graphify update .` run.
+- NOT touched (out of PR-B scope, still stale): `examples/test_session.md`
+  (legacy Chameleon/`receive`/`cast_off` walkthrough), `docs/compatibility.md` /
+  `docs/transports.md` stray `Chameleon`/`receive` mentions, issue templates.
 - [ ] **PR C** — tri-state `sandbox: bool | None` on `shapeshift` (None=policy,
   True=force+hard-fail, False=opt-out), cage `TRUST_LOW` by default on
   `shapeshift`+`prewarm` (best-effort uncaged+nudge if Docker missing, matching

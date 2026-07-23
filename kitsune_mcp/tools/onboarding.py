@@ -1199,7 +1199,7 @@ async def onboard() -> str:
     lines.append("3-STEP CHECK")
     lines.append("  1. shapeshift(\"mcp-server-time\")")
     lines.append("  2. call(\"get_current_time\", arguments={\"timezone\": \"UTC\"})")
-    lines.append("  3. shiftback()")
+    lines.append("  3. shapeshift()")
     lines.append("  → If step 2 returns a timestamp, your install works end-to-end.")
     lines.append("")
 

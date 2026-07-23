@@ -11,13 +11,12 @@ Every block is a real tool call. Outputs are representative — abbreviated for 
 screen, and the exact trust/error strings match Kitsune's real messages. Times
 are for a screen recording; trim to taste.
 
-> **Setup for the whole demo.** Acts 1 and 3 use the dev tools (`connect`,
-> `release`), which are **not** in the default lean profile. Enable the full
-> surface once:
+> **Setup for the whole demo.** Every call below runs on the **default install** —
+> the MCP REPL trio (`connect`, `release`, `reload`) now ships in the lean profile,
+> so no `KITSUNE_TOOLS=all` is needed. One config entry:
 >
 > ```json
-> { "mcpServers": { "kitsune": { "command": "kitsune-mcp",
->   "env": { "KITSUNE_TOOLS": "all" } } } }
+> { "mcpServers": { "kitsune": { "command": "kitsune-mcp" } } }
 > ```
 
 ---
@@ -35,14 +34,14 @@ context → test one line → repeat.
 You're building `my-mcp-server`. It has a `summarize` tool that's returning junk.
 
 ```python
-# Start the work-in-progress server as a pooled process
+# Start the work-in-progress server as a pooled process, then mount its tools
 connect("uvx --from . my-mcp-server", name="dev")
+shapeshift("dev")
 ```
 ```
 Connected: dev (PID 40213)
 Tools (3): search, fetch, summarize
-Release with: release('dev')
-⚠️  Source: local (verify command before connecting)
+⚠️  Source: pool connection (local — verify command before use)
 ```
 
 ```python
@@ -54,31 +53,25 @@ call("summarize", arguments={"url": "https://example.com"})
 
 **[CUT to editor]** — fix the bug in `summarize()`, save.
 
-**[BACK to session]** — the naïve move is to just call `connect()` again. Watch
-Kitsune stop you:
+**[BACK to session]** — one call reloads the edit. `reload()` kills the stale
+process, starts fresh code, and remounts live — so the client sees the new
+schemas without a restart, and there's no "connect handed back the old process"
+trap:
 
 ```python
-connect("uvx --from . my-mcp-server", name="dev")
+reload("dev")
 ```
 ```
-Already connected: dev (PID 40213) | uptime: 38s | calls: 1
-Changed the code? release('dev') first — this process
-predates your edit and is running the old code.
-```
+Reloaded: dev (was PID 40213 — killed, restarted, remounted)
 
-**CAPTION:** *It knows the pooled process is stale. No silent old-code trap.*
-
-Reload properly — drop the old process, start the edit:
-
-```python
-release("dev")
-connect("uvx --from . my-mcp-server", name="dev")
-```
-```
-Released: dev (PID 40213) | uptime: 51s | calls: 1
 Connected: dev (PID 40271)          ← new PID = new code
 Tools (3): search, fetch, summarize
+
+Remounted:
+Registered 3 tools: search, fetch, summarize
 ```
+
+**CAPTION:** *One call: release → connect → remount. Never the stale-process trap.*
 
 ```python
 call("summarize", arguments={"url": "https://example.com"})

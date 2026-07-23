@@ -23,15 +23,15 @@
 Kitsune is a **runtime MCP proxy**: one always-on gateway your agent uses to reach the rest of the ecosystem. `search` finds a server across 7 registries. `shapeshift(id)` mounts its tools in the current turn. `shapeshift()` drops them. No config edit. No client restart.
 
 ```text
-search → shapeshift → call → shapeshift()     # reach, use, release
-connect → edit → release → connect → call     # MCP REPL (forge profile)
+search → shapeshift → call → shapeshift()       # reach, use, release
+connect → shapeshift → edit → reload → call     # MCP REPL (default install)
 ```
 
 **Install for reach and live execution — not for token savings.** Native Tool Search already defers schemas for servers you've configured. Kitsune covers what Tool Search cannot: servers you've never set up, servers you're writing right now, and community packages you want to try without wiring them into `mcp.json` forever.
 
 | | Loop | Why it wins |
 |---|---|---|
-| **MCP REPL** | edit → `release` → `connect` → `call` | Iterate on your own server without killing the session |
+| **MCP REPL** | edit → `reload` → `call` | Iterate on your own server without killing the session |
 | **Long-tail reach** | `search` → `shapeshift` → `call` | One-offs and obscure APIs with no pre-install |
 | **Try-before-you-trust** | `confirm=True` + optional `sandbox=True` + TOFU pins | Community catalog without blind always-on installs |
 

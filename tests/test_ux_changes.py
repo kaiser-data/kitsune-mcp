@@ -895,6 +895,49 @@ class TestSearchRegistryWarning:
 
 
 # ---------------------------------------------------------------------------
+# search() — works-now signal on each result row
+# ---------------------------------------------------------------------------
+
+class TestSearchWorksNowSignal:
+    async def test_search_rows_carry_ready_label(self):
+        """Each search hit ends with a compact works-now signal: ready: high|mid|low."""
+        from kitsune_mcp.registry import ServerInfo
+        from kitsune_mcp.tools import search
+
+        # No-cred official stdio → high; http npm needing a key → low.
+        mock_servers = [
+            ServerInfo("srv-hi", "Hi", "no key needed", "official", "stdio"),
+            ServerInfo(
+                "srv-lo", "Lo", "needs a key", "npm", "http",
+                credentials={"KITSUNE_TEST_MISSING_API_KEY": "an unset key"},
+            ),
+        ]
+        mock_registry = MagicMock()
+        mock_registry.search = AsyncMock(return_value=mock_servers)
+        mock_registry.last_registry_errors = {}
+
+        with patch("kitsune_mcp.tools._state._registry", mock_registry):
+            result = await search("anything", limit=5)
+
+        lines = {line.split(" | ")[0]: line for line in result.splitlines() if " | " in line}
+        assert "ready: high" in lines["srv-hi"]
+        assert "ready: low" in lines["srv-lo"]
+
+    def test_works_now_label_thresholds(self):
+        """_works_now_label maps the 0.0–1.0 score into high/mid/low buckets."""
+        from kitsune_mcp.registry import ServerInfo
+        from kitsune_mcp.tools.discovery import _works_now_label
+
+        # official + stdio + no creds = 0.8 → high
+        assert _works_now_label(ServerInfo("a", "A", "d", "official", "stdio")) == "high"
+        # official + http + no creds = 0.7 → high; smithery http no creds = 0.5 → mid
+        assert _works_now_label(ServerInfo("b", "B", "d", "smithery", "http")) == "mid"
+        # npm + http + missing cred = 0.05 → low
+        low = ServerInfo("c", "C", "d", "npm", "http", credentials={"KITSUNE_TEST_MISSING_API_KEY": "x"})
+        assert _works_now_label(low) == "low"
+
+
+# ---------------------------------------------------------------------------
 # inspect() — surface live-probe failure instead of lying
 # ---------------------------------------------------------------------------
 
