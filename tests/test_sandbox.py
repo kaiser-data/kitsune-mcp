@@ -213,8 +213,41 @@ class TestShapeshiftSandbox:
         result, _ = await self._mount(_srv(), monkeypatch, confirm=True, sandbox=True)
         assert "Docker sandbox" in result
 
-    async def test_without_sandbox_cmd_is_unwrapped(self, monkeypatch):
+    async def test_community_source_caged_by_default(self, monkeypatch):
+        """PR C: low-trust npm/PyPI/github mounts cage by default (sandbox=None)
+        when Docker is present — no explicit sandbox=True needed."""
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        result, captured = await self._mount(_srv(), monkeypatch, confirm=True)
+        assert result.startswith("Shapeshifted"), result
+        assert captured[0][0] == "docker"
+        assert captured[0][-3:] == ["npx", "-y", "some-pkg@1.2.3"]
+
+    async def test_sandbox_false_opts_out_of_default_cage(self, monkeypatch):
+        """sandbox=False is the escape hatch — runs uncaged even for community."""
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        result, captured = await self._mount(_srv(), monkeypatch, confirm=True, sandbox=False)
+        assert result.startswith("Shapeshifted"), result
+        assert captured[0] == ["npx", "-y", "some-pkg@1.2.3"]
+
+    async def test_trusted_source_uncaged_by_default(self, monkeypatch):
+        """Medium/high-trust registry sources are NOT caged by default."""
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        result, captured = await self._mount(_srv(source="official"), monkeypatch)
+        assert result.startswith("Shapeshifted"), result
+        assert captured[0] == ["npx", "-y", "some-pkg@1.2.3"]
+
+    async def test_default_cage_best_effort_uncaged_without_docker(self, monkeypatch):
+        """Default cage (sandbox=None) is best-effort: no Docker → runs uncaged
+        with a nudge note, never hard-fails (unlike explicit sandbox=True)."""
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        result, captured = await self._mount(_srv(), monkeypatch, docker=None, confirm=True)
+        assert result.startswith("Shapeshifted"), result
+        assert captured[0] == ["npx", "-y", "some-pkg@1.2.3"]  # uncaged
+        assert "uncaged" in result.lower()
+
+    async def test_sandbox_off_disables_default_cage(self, monkeypatch):
+        """KITSUNE_SANDBOX=off is the session-wide escape hatch."""
+        monkeypatch.setenv("KITSUNE_SANDBOX", "off")
         result, captured = await self._mount(_srv(), monkeypatch, confirm=True)
         assert result.startswith("Shapeshifted"), result
         assert captured[0] == ["npx", "-y", "some-pkg@1.2.3"]
@@ -256,12 +289,14 @@ class TestShapeshiftSandbox:
         assert result.startswith("Shapeshifted"), result
         assert captured[0][0] == "npx"
 
-    async def test_community_gate_message_offers_sandbox(self, monkeypatch):
-        """The trust gate should teach the safer path, not just block."""
+    async def test_community_gate_message_teaches_default_cage(self, monkeypatch):
+        """The trust gate should teach that proceeding now cages by default, and
+        offer the uncaged escape hatch — not demand an explicit sandbox=True."""
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         result, _ = await self._mount(_srv(), monkeypatch)  # no confirm → gated
         assert result.startswith("⚠️")
-        assert "sandbox=True" in result
+        assert "caged in Docker by default" in result
+        assert "sandbox=False" in result
 
     async def test_credential_names_forwarded_into_container(self, monkeypatch):
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)

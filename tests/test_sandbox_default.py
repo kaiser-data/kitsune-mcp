@@ -88,6 +88,42 @@ class TestSandboxDefaultForExec:
         monkeypatch.setenv("KITSUNE_SANDBOX", "all")
         assert _sandbox_default_for_exec(False, "official") is True
 
+    def test_off_policy_disables_default_cage(self, monkeypatch):
+        """KITSUNE_SANDBOX=off is the escape hatch — it must also turn off the
+        low-trust/unknown-source default cage, not just the all/community policy."""
+        from kitsune_mcp.tools._state import _sandbox_default_for_exec
+        monkeypatch.setenv("KITSUNE_SANDBOX", "off")
+        assert _sandbox_default_for_exec(False, "npm") is False
+        assert _sandbox_default_for_exec(False, "") is False
+        # explicit request still wins over the off policy
+        assert _sandbox_default_for_exec(True, "npm") is True
+
+
+# ---------------------------------------------------------------------------
+# Tri-state mount resolver (shapeshift()/prewarm())
+# ---------------------------------------------------------------------------
+class TestSandboxForMount:
+    def test_true_always_cages(self, monkeypatch):
+        from kitsune_mcp.tools._state import _sandbox_for_mount
+        monkeypatch.setenv("KITSUNE_SANDBOX", "off")
+        assert _sandbox_for_mount(True, "official") is True
+
+    def test_false_never_cages(self, monkeypatch):
+        from kitsune_mcp.tools._state import _sandbox_for_mount
+        monkeypatch.setenv("KITSUNE_SANDBOX", "all")
+        assert _sandbox_for_mount(False, "npm") is False
+
+    def test_none_uses_default_policy(self, monkeypatch):
+        from kitsune_mcp.tools._state import _sandbox_for_mount
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        assert _sandbox_for_mount(None, "npm") is True
+        assert _sandbox_for_mount(None, "official") is False
+
+    def test_none_honors_off(self, monkeypatch):
+        from kitsune_mcp.tools._state import _sandbox_for_mount
+        monkeypatch.setenv("KITSUNE_SANDBOX", "off")
+        assert _sandbox_for_mount(None, "npm") is False
+
 
 # ---------------------------------------------------------------------------
 # Best-effort wrap

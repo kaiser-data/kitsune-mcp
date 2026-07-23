@@ -221,16 +221,20 @@ async def shapeshift(
     confirm: bool = False,
     source: str = "auto",
     server_args: list[str] | None = None,
-    sandbox: bool = False,
+    sandbox: bool | None = None,
 ) -> str:
     """Mount an MCP server's tools at runtime. Empty server_id unmounts.
 
-    shapeshift('mcp-server-time')          # mount
+    shapeshift('mcp-server-time')          # mount (community sources cage by default)
     shapeshift('id', tools=['only_this'])  # lean — mount only listed tools
-    shapeshift('id', sandbox=True)         # run local server caged in Docker
+    shapeshift('id', sandbox=False)        # opt out of the default Docker cage
+    shapeshift('id', sandbox=True)         # force the cage (hard-fail if no Docker)
     shapeshift()                           # unmount + kill process
 
-    source: auto|local|smithery|official. confirm=True for community sources.
+    sandbox: None (default) cages low-trust npm/PyPI/github sources in Docker when
+    it's available (best-effort — runs uncaged with a nudge if not); True forces
+    the cage; False opts out. source: auto|local|smithery|official.
+    confirm=True for community sources.
     """
     if not server_id:
         return await _do_unmount(ctx, keep=keep)
@@ -238,7 +242,7 @@ async def shapeshift(
     # Pool connections (from connect()) take priority — user already vetted these, bypass trust gates
     for _pk, conn in session["connections"].items():
         if conn.get("name") == server_id or conn.get("command") == server_id:
-            if sandbox:
+            if sandbox is True:
                 return (
                     f"❌ sandbox=True is not supported for pool connections — '{server_id}' runs "
                     f"your own local command, which has no known container image.\n"
@@ -325,7 +329,8 @@ async def shapeshift(
             f"⚠️  '{server_id}' is from {srv_source} (community — not verified by the official MCP registry)."
             f"{preview}"
             f"To proceed: shapeshift('{server_id}', confirm=True)\n"
-            f"Safer — run it caged in Docker (no host filesystem): shapeshift('{server_id}', confirm=True, sandbox=True)\n"
+            f"  ↳ runs caged in Docker by default (no host filesystem) when Docker is available.\n"
+            f"To run uncaged instead: shapeshift('{server_id}', confirm=True, sandbox=False)\n"
             f"To always trust community: auth(\"KITSUNE_TRUST\", \"community\")"
         )
 
@@ -375,30 +380,45 @@ async def shapeshift(
 
     # Sandbox pre-flight — validated BEFORE the lock (and before _do_shed())
     # so a refusal never silently drops the user's current form.
+    #
+    # Tri-state `sandbox`: True forces the cage (hard-fail on missing Docker or an
+    # uncageable launcher — the user asked explicitly); False opts out; None lets
+    # policy decide (low-trust sources caged by default) and stays best-effort —
+    # runs uncaged with a nudge if Docker is missing, matching auto()/call()/run().
     will_be_stdio = source == "local" or srv.transport == "stdio"
-    sandboxing = will_be_stdio and _state._sandbox_active(sandbox, srv_source)
-    if sandbox and not will_be_stdio:
+    want_cage = will_be_stdio and _state._sandbox_for_mount(sandbox, srv_source)
+    uncaged_note = ""
+    if sandbox is True and not will_be_stdio:
         return (
             f"❌ sandbox=True needs a locally-run stdio server; '{server_id}' is {srv.transport}-hosted "
             f"(nothing executes on this machine, so there is nothing to cage).\n"
             f"To force a local sandboxed install: shapeshift(\"{server_id}\", source=\"local\", sandbox=True)"
         )
-    if sandboxing:
-        if not shutil.which("docker"):
-            return (
-                f"❌ sandbox requested but Docker is not available on PATH.\n"
-                f"Start/install Docker, or mount unsandboxed: shapeshift(\"{server_id}\", confirm=True)"
-            )
+    sandboxing = False
+    if want_cage:
         planned_cmd = (
             (srv.install_cmd or _state._infer_install_cmd(server_id))
             if source == "local"
             else (srv.install_cmd or ["npx", "-y", server_id])
         )
-        if planned_cmd[0] not in ("npx", "uvx"):
-            return (
-                f"❌ sandbox failed: sandbox supports npx/uvx commands only, got '{planned_cmd[0]}'.\n"
-                f"Mount unsandboxed (shapeshift(\"{server_id}\", confirm=True)) or package it as a docker: image."
-            )
+        npx_uvx = bool(planned_cmd) and planned_cmd[0] in ("npx", "uvx")
+        if not shutil.which("docker"):
+            if sandbox is True:
+                return (
+                    f"❌ sandbox requested but Docker is not available on PATH.\n"
+                    f"Start/install Docker, or mount unsandboxed: shapeshift(\"{server_id}\", confirm=True, sandbox=False)"
+                )
+            # Default cage but no daemon → best-effort uncaged + nudge (never hard-fail).
+            uncaged_note = _state._UNCAGED_NOTE
+        elif not npx_uvx:
+            if sandbox is True:
+                return (
+                    f"❌ sandbox failed: sandbox supports npx/uvx commands only, got '{planned_cmd[0]}'.\n"
+                    f"Mount unsandboxed (shapeshift(\"{server_id}\", confirm=True, sandbox=False)) or package it as a docker: image."
+                )
+            # Default cage but the launcher can't be caged (not npx/uvx) → run uncaged.
+        else:
+            sandboxing = True
 
     _shapeshift_started = time.monotonic()
 
@@ -471,6 +491,8 @@ async def shapeshift(
             trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
         if pin_note:
             trust_note = trust_note + "\n" + pin_note
+        if uncaged_note:
+            trust_note = trust_note + uncaged_note
 
         return await _commit_shapeshift(
             server_id, transport, tool_schemas, resolved_config, tools, ctx,
@@ -823,13 +845,21 @@ async def reload(name: str, ctx: Context | None = None) -> str:
 
 
 @mcp.tool()
-async def prewarm(server_id: str, confirm: bool = False, server_args: list[str] | None = None) -> str:
+async def prewarm(
+    server_id: str,
+    confirm: bool = False,
+    server_args: list[str] | None = None,
+    sandbox: bool | None = None,
+) -> str:
     """Start a server's subprocess in the pool WITHOUT mounting its tools.
 
     prewarm('mcp-server-time')      # spawn + pool, no tools in session
     shapeshift('mcp-server-time')   # reuses the warm process — no npx/uvx delay
 
-    For benchmarks and latency-sensitive sessions. confirm=True for community sources.
+    For benchmarks and latency-sensitive sessions. confirm=True for community
+    sources. Caging follows the same tri-state policy as shapeshift(): low-trust
+    sources cage by default (sandbox=None) so a warm community process is never
+    left uncaged then reused by a later call().
     """
     srv = await _state._registry.get_server(server_id)
     if srv is None:
@@ -869,8 +899,22 @@ async def prewarm(server_id: str, confirm: bool = False, server_args: list[str] 
         return f"❌ prewarm failed: missing credentials for '{server_id}':\n\n{creds_msg}"
 
     # Identical cmd construction to shapeshift()'s stdio path — the pool key
-    # must match so the later shapeshift() reuses this exact process.
+    # must match so the later shapeshift() reuses this exact process. Apply the
+    # same tri-state cage policy so a prewarmed community process isn't left
+    # uncaged (best-effort: uncaged + nudge if Docker is missing, unless the
+    # caller explicitly forced sandbox=True).
     cmd = (srv.install_cmd or ["npx", "-y", server_id]) + (server_args or [])
+    uncaged_note = ""
+    if _state._sandbox_for_mount(sandbox, srv.source) and cmd[0] in ("npx", "uvx"):
+        if shutil.which("docker"):
+            cmd = _state.sandbox_wrap_cmd(cmd, env_names=_state._sandbox_env_names(srv))
+        elif sandbox is True:
+            return (
+                f"❌ prewarm sandbox requested but Docker is not available on PATH.\n"
+                f"Start/install Docker, or prewarm uncaged: prewarm(\"{server_id}\", confirm=True, sandbox=False)"
+            )
+        else:
+            uncaged_note = _state._UNCAGED_NOTE
     pool_key = json.dumps(cmd, sort_keys=True)
     entry = _process_pool.get(pool_key)
     if entry is not None and entry.is_alive():
@@ -895,5 +939,5 @@ async def prewarm(server_id: str, confirm: bool = False, server_args: list[str] 
     return (
         f"🔥 Prewarmed '{server_id}' — PID {entry.pid()}, {len(live_tools or [])} tools ready ({elapsed:.1f}s).\n"
         f"No tools mounted. shapeshift(\"{server_id}\") reuses this warm process.\n"
-        f"Discard without mounting: release(\"{server_id}\")."
+        f"Discard without mounting: release(\"{server_id}\").{uncaged_note}"
     )

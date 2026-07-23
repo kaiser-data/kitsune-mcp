@@ -1,9 +1,9 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-23. **Agent-harness reposition SHIPPED** + **PR A of the
-sellability plan committed to `main`** (`fa420eb`, NOT pushed, NOT released).
-Continue with **PR B** (discovery + demo hygiene), then **PR C** (sandbox-by-default).
-v0.21.0 bump/tag/publish still NOT done._
+_Last updated: 2026-07-23. **Agent-harness reposition SHIPPED** + **all three
+sellability PRs (A lean REPL, B discovery/demo, C sandbox-by-default) committed
+to `main`, unpushed, unreleased.** Next: **v0.21.0 bump/tag/publish** — still NOT
+done._
 
 ## SESSION 2026-07-23 — reposition as agent harness + sellability plan PR A (lean MCP REPL)
 
@@ -76,10 +76,26 @@ were forge-only. Plan saved at
 - NOT touched (out of PR-B scope, still stale): `examples/test_session.md`
   (legacy Chameleon/`receive`/`cast_off` walkthrough), `docs/compatibility.md` /
   `docs/transports.md` stray `Chameleon`/`receive` mentions, issue templates.
-- [ ] **PR C** — tri-state `sandbox: bool | None` on `shapeshift` (None=policy,
-  True=force+hard-fail, False=opt-out), cage `TRUST_LOW` by default on
-  `shapeshift`+`prewarm` (best-effort uncaged+nudge if Docker missing, matching
-  the exec paths), `KITSUNE_SANDBOX=off` escape hatch, unify README Safety wording.
+### PR C — tri-state `sandbox` + cage TRUST_LOW by default — COMMITTED (unpushed)
+- **Tri-state `sandbox: bool | None`** on `shapeshift` (and now `prewarm`):
+  `None`=policy (low-trust/unknown caged when Docker present, best-effort
+  uncaged+nudge if missing — matches exec paths), `True`=force cage + hard-fail
+  if Docker missing / launcher not npx-uvx, `False`=per-call opt-out.
+- New `_sandbox_for_mount()` in `_state.py` (reuses `_sandbox_default_for_exec`);
+  `_sandbox_active`/`_sandbox_default_for_exec` gained `KITSUNE_SANDBOX=off`
+  (session-wide escape hatch that also disables the default cage, not just
+  all/community).
+- `prewarm()` applies the same default cage so a warm community process isn't
+  left uncaged then reused by `call()`.
+- Community trust-gate copy rewritten: proceeding cages by default + offers
+  `sandbox=False` (was "run it caged with sandbox=True"). README Safety unified
+  ("caged by default when Docker present"); tool table + fit-table + community
+  example + headline controls + point-5 + "what it does NOT do" all realigned.
+  CHANGELOG entry added under Unreleased.
+- Tests: `test_sandbox.py` (default-cage/opt-out/best-effort/off + gate copy),
+  `test_sandbox_default.py::TestSandboxForMount` + off-policy, `test_prewarm.py`
+  (+2). **823 passed, 2 skipped; ruff clean.** `graphify update .` run.
+- [ ] **v0.21.0 release still pending** (bump + tag + publish — see below).
 - [ ] **Stale token-cost SVGs** — `docs/token-cost-{light,dark}.svg` still show the
   old floor; regen needed (deferred from PR A — needs the SVG regen script).
 - [ ] v0.21.0 release (bump `pyproject.toml`/`package.json`/`server.json`, tag, publish).

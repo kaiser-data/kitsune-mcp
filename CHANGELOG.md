@@ -53,6 +53,29 @@ local stdio servers by default, **best-effort**:
   (`_sandbox_default_for_exec`, `sandboxed_stdio_transport`,
   `transport_for_exec`); no tool-schema change. 14 new tests.
 
+### Changed — `shapeshift`/`prewarm` cage low-trust sources by default (tri-state `sandbox`)
+
+The mount path now matches the exec paths: community `npm`/`pypi`/`github`
+mounts cage automatically instead of only when the model remembered
+`sandbox=True`. `shapeshift(..., sandbox=...)` is now tri-state:
+
+- `sandbox=None` (default) → policy decides: low-trust / unknown sources cage in
+  Docker when it's present, medium/high-trust registry sources don't.
+  **Best-effort** — Docker missing runs uncaged with a nudge note (never
+  hard-fails).
+- `sandbox=True` → force the cage; still **hard-fails** if Docker is missing or
+  the launcher isn't npx/uvx (the user asked explicitly).
+- `sandbox=False` → the per-call escape hatch (run uncaged).
+
+- `prewarm()` gained the same tri-state `sandbox` param and default cage, so a
+  warm community process isn't left uncaged and then reused by a later `call()`.
+- `KITSUNE_SANDBOX=off` is the session-wide escape hatch (turns off the default
+  cage everywhere — mount and exec paths).
+- Community trust-gate copy now teaches the default cage + `sandbox=False` opt-out
+  instead of prompting for `sandbox=True`; README Safety section unified around
+  "caged by default when Docker is present". New resolver `_sandbox_for_mount`;
+  tests across all three states + Docker present/absent.
+
 ### Added — trust-on-first-use (TOFU) version pinning
 
 Resolution-time pinning (`pkg@1.2.3`) makes one session reproducible but

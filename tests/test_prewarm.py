@@ -182,6 +182,63 @@ class TestPrewarm:
         assert "warm" in out.lower()
 
     @pytest.mark.asyncio
+    async def test_community_prewarm_caged_by_default_with_docker(self, monkeypatch):
+        """PR C: a prewarmed low-trust process cages by default when Docker is
+        present, so a later shapeshift()/call() reuses a caged process."""
+        from kitsune_mcp.registry import _registry
+        from kitsune_mcp.tools import _state
+        from kitsune_mcp.tools.shapeshift import prewarm
+        from kitsune_mcp.transport import _process_pool
+
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        captured: list = []
+
+        def factory(cmd, **kwargs):
+            captured.append(cmd)
+            from kitsune_mcp.transport import _PoolEntry
+            t = MagicMock()
+
+            async def _lt(*a, **k):
+                _process_pool[json.dumps(cmd, sort_keys=True)] = _PoolEntry(
+                    proc=make_mock_process(), install_cmd=cmd, started_at=0.0,
+                )
+                return [{"name": "x", "description": "", "inputSchema": {}}]
+
+            t.list_tools = AsyncMock(side_effect=_lt)
+            return t
+
+        srv = _srv(source="npm")
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch.object(_state, "PersistentStdioTransport", factory),
+            patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/local/bin/docker"),
+        ):
+            out = await prewarm("mcp-server-time", confirm=True)
+
+        assert captured[0][0] == "docker"
+        assert "Prewarmed" in out
+
+    @pytest.mark.asyncio
+    async def test_community_prewarm_sandbox_false_opts_out(self, monkeypatch):
+        from kitsune_mcp.registry import _registry
+        from kitsune_mcp.tools.shapeshift import prewarm
+        from kitsune_mcp.transport import _process_pool
+
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        srv = _srv(source="npm")
+        cmd = ["npx", "-y", "mcp-server-time"]
+        transport, pool_key = _fake_persistent_transport(cmd)
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport", return_value=transport),
+            patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/local/bin/docker"),
+        ):
+            out = await prewarm("mcp-server-time", confirm=True, sandbox=False)
+
+        assert pool_key in _process_pool  # unwrapped key → not caged
+        assert "Prewarmed" in out
+
+    @pytest.mark.asyncio
     async def test_release_cleans_up_prewarmed_entry(self):
         from kitsune_mcp.registry import _registry
         from kitsune_mcp.tools.shapeshift import prewarm, release

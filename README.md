@@ -33,7 +33,7 @@ connect → shapeshift → edit → reload → call     # MCP REPL (default inst
 |---|---|---|
 | **MCP REPL** | edit → `reload` → `call` | Iterate on your own server without killing the session |
 | **Long-tail reach** | `search` → `shapeshift` → `call` | One-offs and obscure APIs with no pre-install |
-| **Try-before-you-trust** | `confirm=True` + optional `sandbox=True` + TOFU pins | Community catalog without blind always-on installs |
+| **Try-before-you-trust** | `confirm=True` + Docker cage on by default + TOFU pins | Community catalog without blind always-on installs |
 
 | Use Kitsune when… | Skip it when… |
 |---|---|
@@ -113,12 +113,13 @@ call("scrape_url", arguments={"url": "https://example.com"})
 shapeshift()                                    # drop form — session stays up
 ```
 
-**Community / long-tail (confirm + optional sandbox):**
+**Community / long-tail (confirm; caged by default):**
 
 ```python
 search("pdf", registry="glama")
-shapeshift("mcp-pdf-tools", confirm=True, sandbox=True)  # Docker cage for npm/PyPI
+shapeshift("mcp-pdf-tools", confirm=True)  # npm/PyPI caged in Docker by default (when available)
 call("extract_text", arguments={"path": "report.pdf"})
+shapeshift("mcp-pdf-tools", confirm=True, sandbox=False)  # opt out of the cage
 shapeshift()
 ```
 
@@ -208,7 +209,7 @@ Local `connect()` targets are untrusted (`confirm` / `KITSUNE_TRUST` apply). Pro
 | `status()` | — | Current form, pool, GATEWAY scan, session stats |
 | `search()` | `query, registry?, compare?` | Fan-out across 7 registries |
 | `auth()` | `server_or_var, value?` | Env keys + OAuth 2.1 browser flow / logout |
-| `shapeshift()` | `server_id?, tools=[], …` | Mount / unmount; `tools=[…]` surgical; `sandbox=True` / `confirm=True` |
+| `shapeshift()` | `server_id?, tools=[], …` | Mount / unmount; `tools=[…]` surgical; `confirm=True`; caged by default (`sandbox=False` opts out) |
 | `call()` | `tool_name, arguments` | Invoke; server inferred when mounted |
 | `auto()` | `task, server_hint=, arguments=` | search → mount → call (prefer `server_hint`) |
 
@@ -239,7 +240,7 @@ Reach into 130k community servers only works if unknown code can be **contained*
 **Headline controls**
 
 - `confirm=True` (or `KITSUNE_TRUST`) before community / local mounts
-- `sandbox=True` or `KITSUNE_SANDBOX=community|all` → hardened Docker for npm/PyPI
+- **Community npm/PyPI mounts cage in hardened Docker by default** (when Docker is present); `sandbox=False` or `KITSUNE_SANDBOX=off` opts out, `sandbox=True` forces it, `KITSUNE_SANDBOX=all` cages every local mount
 - TOFU pins in `~/.kitsune/pins.json` — later malicious publishes don't silently replace what you already ran
 
 ### What it protects against
@@ -262,16 +263,16 @@ Reach into 130k community servers only works if unknown code can be **contained*
 
 **4. Credential exposure.** `~/.kitsune/.env` and `oauth/` at mode `0600`; OAuth 2.1 + PKCE S256 + DCR (RFC 7591); missing-cred warnings before calls; `auth(id, "logout")` clears tokens (RFC 7009 where available).
 
-**5. Docker sandbox for untrusted local servers.** `shapeshift("pkg", sandbox=True)` runs npm/PyPI inside: no host FS, `--cap-drop ALL`, read-only rootfs, RAM/PID caps. Cred env vars forwarded by **name** only (`docker -e KEY`) — never in argv, `ps`, or the pool key. First sandboxed mount pulls `node:22-slim` / `uv:python3.13-bookworm-slim`. Filesystem-style servers need host paths and don't fit the sandbox.
+**5. Docker sandbox for untrusted local servers — on by default.** Community `npm`/`pypi`/`github` mounts (and the `auto()`/`call()`/`run()` exec paths) cage automatically when Docker is on `PATH`; no host FS, `--cap-drop ALL`, read-only rootfs, RAM/PID caps. Cred env vars forwarded by **name** only (`docker -e KEY`) — never in argv, `ps`, or the pool key. First sandboxed mount pulls `node:22-slim` / `uv:python3.13-bookworm-slim`. Best-effort: no Docker → runs uncaged with a nudge (an explicit `sandbox=True` hard-fails instead). Opt out per-call with `sandbox=False` or session-wide with `KITSUNE_SANDBOX=off`. Filesystem-style servers need host paths and don't fit the sandbox.
 
 ### What it does NOT do
 
-- **No sandbox without opt-in.** Default local stdio runs as your user — full FS, network, inherited env. Process isolation ≠ a security boundary.
+- **Cage needs Docker + opt-in-trusted sources.** Community mounts cage by default *only when Docker is present*; without it (or with `sandbox=False`/`KITSUNE_SANDBOX=off`, or for medium/high-trust sources) local stdio runs as your user — full FS, network, inherited env. Process isolation ≠ a security boundary.
 - **Docker ≠ kernel boundary.** Hardened flags blunt escalation / fork bombs / FS tampering; not a guarantee against container escape. No default non-root / `--network none` (most servers need egress).
 - **TOFU ≠ digest pin.** Pins a version, not a content hash. `github:` / `git+` / hand-written `connect()` commands aren't pinned. High assurance: pin by digest or vendor.
 - **Tools first.** Resource/prompt proxying is narrower (URI templates skipped; HTTP path differs). "Any server" means tool execution.
 
-**Bottom line:** strong for supervised developer and personal use. **Do not run unattended with production admin, billing, or security credentials in default local mode.** Prefer client approval + `sandbox=True` / `KITSUNE_SANDBOX=community` for untrusted packages.
+**Bottom line:** strong for supervised developer and personal use. **Do not run unattended with production admin, billing, or security credentials in default local mode.** Keep Docker installed so the default cage engages, and prefer client approval for untrusted packages.
 
 See guards live: [`docs/demo-realtime.md`](docs/demo-realtime.md#act-3).
 

@@ -247,6 +247,8 @@ def _sandbox_active(explicit: bool, source: str) -> bool:
     if explicit:
         return True
     mode = (os.getenv("KITSUNE_SANDBOX") or "").lower()
+    if mode == "off":
+        return False
     if mode in ("1", "true", "all", "docker"):
         return True
     if mode == "community":
@@ -297,7 +299,32 @@ def _sandbox_default_for_exec(explicit: bool, source: str) -> bool:
     """
     if _sandbox_active(explicit, source):
         return True
+    # KITSUNE_SANDBOX=off is the session-wide escape hatch — it must also switch
+    # off the default cage, not just the explicit all/community policy.
+    if (os.getenv("KITSUNE_SANDBOX") or "").lower() == "off":
+        return False
     return source in TRUST_LOW or not source
+
+
+def _sandbox_for_mount(sandbox: bool | None, source: str) -> bool:
+    """Tri-state cage policy for the shapeshift()/prewarm() mount paths.
+
+    `sandbox` carries the caller's tri-state request:
+      True  → always cage (the caller hard-fails if Docker is missing).
+      False → never cage (explicit opt-out — the escape hatch).
+      None  → policy default: low-trust / unknown-source servers are caged,
+              medium/high-trust registry sources are not. An explicit
+              KITSUNE_SANDBOX policy (all/community) layers on top;
+              KITSUNE_SANDBOX=off disables the default cage.
+
+    Docker availability is NOT checked here (this is pure policy) — the caller
+    decides hard-fail vs best-effort-uncaged when the daemon is missing.
+    """
+    if sandbox is True:
+        return True
+    if sandbox is False:
+        return False
+    return _sandbox_default_for_exec(False, source)
 
 
 # Nudge appended when a sandbox was wanted but Docker isn't on PATH. The server
