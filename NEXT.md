@@ -1,7 +1,71 @@
 # What's next — post v0.20.7
 
-_Last updated: 2026-07-16 evening. **PR #61 MERGED** (squash `e91d9df`). v0.21.0
-release NOT done — bump/tag/publish are the next actions. README reposition still pending._
+_Last updated: 2026-07-23. **Agent-harness reposition SHIPPED** + **PR A of the
+sellability plan committed to `main`** (`fa420eb`, NOT pushed, NOT released).
+Continue with **PR B** (discovery + demo hygiene), then **PR C** (sandbox-by-default).
+v0.21.0 bump/tag/publish still NOT done._
+
+## SESSION 2026-07-23 — reposition as agent harness + sellability plan PR A (lean MCP REPL)
+
+Two things happened this session. Both are **local commits on `main`, unpushed**;
+no release, no PR opened.
+
+### 1. README/docs reposition — SHIPPED (`abf8be4`, pushed earlier this session)
+The token-savings pitch is dead (native Tool Search owns deferral for configured
+servers). Rewrote the story around the durable value: **agent harness = reach +
+MCP REPL + contained try-before-trust**. Touched `README.md` (full restructure,
+~580→~470 lines then re-expanded in PR A), `docs/article.md`, `docs/demo-script.md`,
+`examples/scenarios/README.md`, `pyproject.toml` description, `NEXT.md`. This commit
+WAS pushed to origin; the header's "reposition still pending" is now done.
+
+### 2. Sellability analysis → 3-PR plan
+Deep repo analysis (code-explorer subagent) found the core problem: **the pitch's
+#1 feature (MCP REPL) was unreachable on a default install** — `connect`/`release`
+were forge-only. Plan saved at
+`~/.cursor/plans/Sellability Improvements-05b7ee0d.plan.md`:
+- **PR A** (DONE this session): lean MCP REPL + `reload()`.
+- **PR B** (NEXT): discovery works-now signal + `onboard` fix + rewrite `examples/demo_wow.md`.
+- **PR C**: tri-state `sandbox` param, cage `TRUST_LOW` on `shapeshift`+`prewarm` by default.
+
+### PR A — lean MCP REPL + reload() — COMMITTED (`fa420eb`, unpushed)
+- `_LEAN_TOOL_NAMES` (`kitsune_mcp/tools/_state.py`) now includes `connect`,
+  `release`, `reload`; `reload` added to `_BASE_TOOL_NAMES`. `auto()`'s built-in
+  guard (`onboarding.py`) moved connect/release into `_KITSUNE_LEAN` + added reload.
+- New **`reload(name)`** tool (`kitsune_mcp/tools/shapeshift.py`, after `release`):
+  reuses release's lookup, reads the stored launch command from
+  `session["connections"][key]["command"]`, then release → connect → `shapeshift(name)`.
+  Surfaces connect failure verbatim and **skips remount** on failure. Removes the
+  "connect handed back the old process" footgun (always releases first).
+- Tests: new `tests/test_reload.py` (7 tests; note — import the module via
+  `importlib.import_module("kitsune_mcp.tools.shapeshift")`, because
+  `kitsune_mcp.tools.shapeshift` resolves to the re-exported *function*, not the
+  module). `tests/test_tool_surface.py`: lean count **6 → 9**, REPL trio in
+  `LEAN_REQUIRED`. **810 passed, 2 skipped; ruff clean.**
+- **Token floor remeasured: lean 1,358 → 1,685 (9 tools), forge 3,253 → 3,396.**
+  Updated every LIVE reference: `README.md` (fit-table, install line, Performance
+  table recomputed + multi-server range ~77–85%, Developing section rewritten
+  around `reload()` — no more "enable forge"), `server.py` docstring,
+  `docs/benchmarks.md` (regenerated reference output + interpretation: lean now
+  cost-effective at 4+ servers), `docs/article.md`, `docs/demo-script.md`,
+  `examples/linkedin_post.md`.
+- `graphify update .` run.
+
+### OPEN FOLLOW-UPS (for the next session)
+- [ ] **Push `main`** — `fa420eb` (PR A) is committed but NOT pushed. `abf8be4`
+  (reposition) WAS pushed. Decide whether to push A directly or open a PR.
+- [ ] **PR B** — discovery works-now signal at `discovery.py:202`; `onboard()`
+  3-step check `shiftback()` → `shapeshift()` (`onboarding.py:1201`); rewrite
+  `examples/demo_wow.md` (still says "Chameleon" / `receive` — anti-marketing);
+  align `docs/demo-realtime.md` Act 1 to lean + `reload`.
+- [ ] **PR C** — tri-state `sandbox: bool | None` on `shapeshift` (None=policy,
+  True=force+hard-fail, False=opt-out), cage `TRUST_LOW` by default on
+  `shapeshift`+`prewarm` (best-effort uncaged+nudge if Docker missing, matching
+  the exec paths), `KITSUNE_SANDBOX=off` escape hatch, unify README Safety wording.
+- [ ] **Stale token-cost SVGs** — `docs/token-cost-{light,dark}.svg` still show the
+  old floor; regen needed (deferred from PR A — needs the SVG regen script).
+- [ ] v0.21.0 release (bump `pyproject.toml`/`package.json`/`server.json`, tag, publish).
+
+---
 
 ## SESSION 2026-07-16 (evening) — CI red → green, container E2E in CI, real sandbox bug found+fixed, PR #61 merged
 
