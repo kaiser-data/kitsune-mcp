@@ -62,11 +62,16 @@ _DUMMY_VALUES = {"string": "test", "integer": 0, "boolean": False, "number": 0.0
 _BASE_TOOL_NAMES = {
     "auth", "search", "inspect", "call", "run", "fetch",
     "skill", "key", "login", "auto", "status", "shapeshift", "shiftback", "craft",
-    "connect", "release", "test", "bench", "setup", "compare", "onboard", "prewarm",
+    "connect", "release", "reload", "test", "bench", "setup", "compare", "onboard", "prewarm",
 }
 
 # Default (lean) profile — server.py prunes to this set when KITSUNE_TOOLS is unset.
-_LEAN_TOOL_NAMES = {"status", "search", "auth", "shapeshift", "call", "auto"}
+# The connect/release/reload trio is lean so the MCP REPL (Kitsune's headline
+# developer loop) works on a default install without KITSUNE_TOOLS=all.
+_LEAN_TOOL_NAMES = {
+    "status", "search", "auth", "shapeshift", "call", "auto",
+    "connect", "release", "reload",
+}
 
 
 def _active_tool_names() -> set[str]:

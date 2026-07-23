@@ -89,7 +89,7 @@ status()
 
 ```
 ACTIVE:  none
-RESTING: ~1,358 tokens   (Kitsune's own 6 tools — the fixed floor)
+RESTING: ~1,685 tokens   (Kitsune's own 9 lean tools — the fixed floor)
 GATEWAY: 2 other server(s) in claude-desktop (~24 tools)
 ```
 
@@ -256,28 +256,28 @@ status()
 
 **Secondary metric only.** Real vs fully-mounted always-on / clients without Tool
 Search. Do not lead the video on these numbers — lead on reach + REPL.
-Every Kitsune figure includes the fixed ~1,358-token floor.
+Every Kitsune figure includes the fixed ~1,685-token floor.
 
 ### Per-server (floor included)
-| Server | Always-on | 1,358 floor + surgical | Saved |
+| Server | Always-on | 1,685 floor + surgical | Saved |
 |---|---:|---:|---:|
-| mcp-server-time (2 tools) | 261 | ~1,619 | — ¹ |
-| mcp-server-git (12) | 1,242 | ~1,668 | — ¹ |
-| server-memory (9) | 2,615 | ~1,938 | 26% |
-| server-filesystem (14) | 3,207 | ~2,048 | 36% |
-| brave (8) | 3,612 | ~1,808 | 50% |
-| server-github (26) | 4,229 | ~1,658 | **61%** |
-| notion-hosted (14) | 13,707 | ~3,308 | 76% |
+| mcp-server-time (2 tools) | 261 | ~1,946 | — ¹ |
+| mcp-server-git (12) | 1,242 | ~1,995 | — ¹ |
+| server-memory (9) | 2,615 | ~2,265 | 13% |
+| server-filesystem (14) | 3,207 | ~2,375 | 26% |
+| brave (8) | 3,612 | ~2,135 | 41% |
+| server-github (26) | 4,229 | ~1,985 | **53%** |
+| notion-hosted (14) | 13,707 | ~3,635 | 73% |
 
-¹ For a **single** server smaller than the 1,358 floor (time, git), always-on is
+¹ For a **single** server smaller than the 1,685 floor (time, git), always-on is
 cheaper — Kitsune only pays off past one medium server, or two-plus small ones.
 
 ### Multi-server compounding (floor stays flat; always-on stacks)
 | Servers always-on | Always-on/turn | Kitsune/turn | Saved |
 |---|---:|---:|---:|
-| GitHub | 4,229 | ~1,658 | 61% |
-| GitHub + filesystem + git | 8,678 | ~1,668–2,048 | 76–81% |
-| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,668–3,308 | **87–93%** |
+| GitHub | 4,229 | ~1,985 | 53% |
+| GitHub + filesystem + git | 8,678 | ~1,995–2,375 | 73–77% |
+| Notion + GitHub + filesystem + git + memory | 25,000 | ~1,995–3,635 | **85–92%** |
 
 ### Headline for thumbnail (prefer reach, not tokens)
 > "One config. Any MCP. Mid-session — no restart."

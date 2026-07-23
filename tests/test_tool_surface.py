@@ -59,13 +59,15 @@ def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
 
 LEAN_REQUIRED = {
     "shapeshift", "search", "auth", "call", "status", "auto",
+    # MCP REPL trio — lean so the headline developer loop works on a default install.
+    "connect", "release", "reload",
 }
 
 # Tools that must NOT appear in lean (forge-only)
 FORGE_ONLY = {
     "shiftback", "inspect", "compare", "key", "onboard",
-    "run", "fetch", "craft", "connect", "release",
-    "test", "bench", "setup",
+    "run", "fetch", "craft",
+    "test", "bench", "setup", "prewarm", "skill",
 }
 
 ALL_TOOLS = LEAN_REQUIRED | FORGE_ONLY
@@ -110,9 +112,9 @@ def test_base_tool_names_covers_lean_and_forge():
 
 
 def test_lean_tools_documented_count():
-    """Lean profile is exactly 6 tools — catch silent drift."""
+    """Lean profile is exactly 9 tools (6 core + connect/release/reload) — catch silent drift."""
     from server import _LEAN_TOOLS
-    assert len(_LEAN_TOOLS) == 6, (
+    assert len(_LEAN_TOOLS) == 9, (
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
     )

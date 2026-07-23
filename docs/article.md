@@ -42,17 +42,17 @@ That's the idea: **an agent that can borrow any MCP capability mid-session — t
 
 | | Loop | Why it matters |
 |---|---|---|
-| **MCP REPL** | `connect` → edit → `release` → `connect` → `call` | Develop your own server without restarting the client |
+| **MCP REPL** | `connect` → edit → `reload` → `call` | Develop your own server without restarting the client (all lean tools) |
 | **Long-tail reach** | `search` → `shapeshift` → `call` → drop | One-offs without permanent config |
 | **Try-before-you-trust** | `confirm=True` + optional `sandbox=True` + TOFU pins | Community catalog without blind always-on installs |
 
 ## The honest numbers (secondary)
 
-Kitsune is **not free at rest**. Six lean tools cost **~1,358 tokens every turn**. Against a client with native deferral, that floor is *additive* — do not install Kitsune to save tokens.
+Kitsune is **not free at rest**. Its nine lean tools cost **~1,685 tokens every turn**. Against a client with native deferral, that floor is *additive* — do not install Kitsune to save tokens.
 
 Where token math still applies: comparing against **fully-mounted always-on** stacks, or clients without Tool Search. Full tables: [`benchmarks.md`](./benchmarks.md) and the README Performance section.
 
-**Break-even (always-on, no deferral):** one small server (e.g. time ~261 tokens) is cheaper always-on than Kitsune's floor. Kitsune pays off once the alternative exceeds ~1,358 tokens.
+**Break-even (always-on, no deferral):** one small server (e.g. time ~261 tokens) is cheaper always-on than Kitsune's floor. Kitsune pays off once the alternative exceeds ~1,685 tokens.
 
 ## "But the CLI is free at rest too"
 

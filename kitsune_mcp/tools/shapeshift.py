@@ -771,6 +771,58 @@ async def release(name: str) -> str:
 
 
 @mcp.tool()
+async def reload(name: str, ctx: Context | None = None) -> str:
+    """Reload a persistent connection after editing its code — the MCP REPL in one call.
+
+    reload('dev')   # release the stale process, start fresh code, remount live
+
+    Replaces the manual release() + connect() + shapeshift() cycle and removes the
+    "connect() handed back the old process" footgun (it always releases first).
+    `name` is the alias you gave connect().
+    """
+    # Locate the live connection exactly like release() does.
+    found_key = None
+    found_entry = None
+    for pool_key, entry in _process_pool.items():
+        if entry.name == name or pool_key == name:
+            found_key = pool_key
+            found_entry = entry
+            break
+
+    if found_key is None or found_entry is None:
+        active = [e.name or k for k, e in _process_pool.items()]
+        if active:
+            return f"No connection named '{name}'. Active: {', '.join(active)}"
+        return "No active connections. connect(...) to start one first."
+
+    # The launch command, stored at connect() time, is what lets us restart fresh code.
+    conn = session["connections"].get(found_key, {})
+    command = conn.get("command")
+    label = found_entry.name or name
+    if not command:
+        return (
+            f"Cannot reload '{label}': no stored launch command (connection predates "
+            f"reload support). release('{label}') and connect(...) manually."
+        )
+
+    old_pid = found_entry.pid()
+
+    # 1. Kill the stale process. 2. Start fresh code. 3. Remount so the client
+    # sees the new schemas — the step users forget in the manual loop.
+    await release(label)
+    connect_out = await connect(command, name=label)
+    if not connect_out.startswith("Connected:"):
+        return f"reload('{label}') could not restart the process:\n{connect_out}"
+
+    mount_out = await shapeshift(label, ctx)
+    return (
+        f"Reloaded: {label} (was PID {old_pid} — killed, restarted, remounted)\n\n"
+        f"{connect_out}\n\n"
+        f"Remounted:\n{mount_out}"
+    )
+
+
+@mcp.tool()
 async def prewarm(server_id: str, confirm: bool = False, server_args: list[str] | None = None) -> str:
     """Start a server's subprocess in the pool WITHOUT mounting its tools.
 

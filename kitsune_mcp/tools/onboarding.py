@@ -161,10 +161,11 @@ async def auto(
     # Core lean-profile tools always available; forge extras only with KITSUNE_TOOLS=all
     _KITSUNE_LEAN: frozenset[str] = frozenset({
         "auth", "auto", "call", "search", "shapeshift", "status",
+        "connect", "release", "reload",
     })
     _KITSUNE_FORGE: frozenset[str] = frozenset({
-        "bench", "compare", "connect", "craft", "fetch",
-        "inspect", "key", "login", "onboard", "release", "run",
+        "bench", "compare", "craft", "fetch",
+        "inspect", "key", "login", "onboard", "run",
         "setup", "shiftback", "skill", "test",
     })
     _KITSUNE_BUILTINS = _KITSUNE_LEAN | _KITSUNE_FORGE

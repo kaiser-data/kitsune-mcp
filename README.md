@@ -39,7 +39,7 @@ connect → edit → release → connect → call     # MCP REPL (forge profile)
 |---|---|
 | You're building an MCP and need an edit/reload loop | You only need 1–3 trusted servers (configure them natively) |
 | A task needs a server that isn't in your config | Every turn hits the same server (keep it always-on) |
-| CLI flag-guessing on a long-tail API is too risky | You want cheaper tokens — floor is **~1,358 tokens/turn**, additive on modern clients |
+| CLI flag-guessing on a long-tail API is too risky | You want cheaper tokens — floor is **~1,685 tokens/turn**, additive on modern clients |
 | You want to evaluate community MCP code safely | Unattended prod admin/billing/security keys ([Safety](#safety-model)) |
 | You're consolidating a crowded MCP config ([GATEWAY](#gateway-consolidate-always-on-servers)) | You need sub-second first call (cold mount ~1–15s — `prewarm` or always-on) |
 
@@ -98,7 +98,7 @@ Add once to your MCP client config:
 
 Also works with OpenClaw, Zed, and any MCP-compatible client.
 
-Lean profile at rest: **6 tools · ~1,358 tokens/turn** (`status`, `search`, `auth`, `shapeshift`, `call`, `auto`) — measured via `python examples/benchmark.py`.
+Lean profile at rest: **9 tools · ~1,685 tokens/turn** (`status`, `search`, `auth`, `shapeshift`, `call`, `auto`, plus the `connect` / `release` / `reload` REPL trio) — measured via `python examples/benchmark.py`.
 
 ---
 
@@ -152,20 +152,7 @@ Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 
 ## Developing an MCP server live
 
-Building an MCP normally means: edit → restart client → lose session → re-test. Kitsune turns that into an **MCP REPL** in one session.
-
-`connect` / `release` are forge tools — enable them:
-
-```json
-{
-  "mcpServers": {
-    "kitsune": {
-      "command": "kitsune-mcp",
-      "env": { "KITSUNE_TOOLS": "all" }
-    }
-  }
-}
-```
+Building an MCP normally means: edit → restart client → lose session → re-test. Kitsune turns that into an **MCP REPL** in one session — and `connect` / `release` / `reload` are in the **default lean profile**, so this works on a plain `pip install` with no `KITSUNE_TOOLS=all`.
 
 ```python
 connect("uvx --from . my-mcp-server", name="dev")       # start child process
@@ -174,13 +161,11 @@ call("summarize", arguments={"url": "https://example.com"})
 
 # … edit the tool in your editor …
 
-release("dev")                                          # kill stale process first
-connect("uvx --from . my-mcp-server", name="dev")      # fresh code
-shapeshift("dev")                                       # remount new schemas live
+reload("dev")                                           # release → restart fresh code → remount, one call
 call("summarize", arguments={"url": "https://example.com"})
 ```
 
-> **Footgun:** `connect()` pools by command. Calling it again after an edit *without* `release()` returns the old process. Kitsune warns: *"Changed the code? release('dev') first."* Always `release()` before reconnecting.
+`reload("dev")` folds the whole cycle — kill the stale process, start your edited code, remount so the client sees the new schemas — into a single call. It also removes the classic footgun: calling `connect()` again after an edit *without* releasing first hands you back the **old** process; `reload` always releases first.
 
 Local `connect()` targets are untrusted (`confirm` / `KITSUNE_TRUST` apply). Process isolation ≠ security sandbox — see [Safety model](#safety-model). Companion skill: `kitsune-dev`.
 
@@ -331,7 +316,7 @@ Use `prewarm` (forge) when you know you'll need a server soon.
 
 > Real vs **fully-mounted always-on** or clients **without** Tool Search. On Claude Code 2.1.7+ with native deferral, this is mostly not a Kitsune-specific win. Product pitch is reach + REPL above — not this table.
 
-Every Kitsune figure **includes** the ~1,358 floor. Reproduce: `python examples/benchmark.py`. Methodology: [`docs/benchmarks.md`](docs/benchmarks.md).
+Every Kitsune figure **includes** the ~1,685 floor. Reproduce: `python examples/benchmark.py`. Methodology: [`docs/benchmarks.md`](docs/benchmarks.md).
 
 <div align="center">
   <picture>
@@ -344,15 +329,15 @@ Every Kitsune figure **includes** the ~1,358 floor. Reproduce: `python examples/
 
 | Server | Always-on | Surgical + floor | vs always-on |
 |---|---:|---:|---:|
-| `mcp-server-time` | 261 | ~1,619 | always-on cheaper ¹ |
-| `mcp-server-git` | 1,242 | ~1,668 | always-on cheaper ¹ |
-| `server-memory` | 2,615 | ~1,938 | 26% |
-| `server-filesystem` | 3,207 | ~2,048 | 36% |
-| `brave` | 3,612 | ~1,808 | 50% |
-| `server-github` | 4,229 | ~1,658 | 61% |
-| `notion-hosted` | 13,707 | ~3,308 | 76% |
+| `mcp-server-time` | 261 | ~1,946 | always-on cheaper ¹ |
+| `mcp-server-git` | 1,242 | ~1,995 | always-on cheaper ¹ |
+| `server-memory` | 2,615 | ~2,265 | 13% |
+| `server-filesystem` | 3,207 | ~2,375 | 26% |
+| `brave` | 3,612 | ~2,135 | 41% |
+| `server-github` | 4,229 | ~1,985 | 53% |
+| `notion-hosted` | 13,707 | ~3,635 | 73% |
 
-¹ Break-even: Kitsune pays off past one medium server, or two-plus small ones sharing the single floor. Multi-server stack (GitHub+fs+git → Notion suite): **76–93%** vs fully-mounted always-on — same caveat as above.
+¹ Break-even: Kitsune pays off past one medium server, or two-plus small ones sharing the single floor. Multi-server stack (GitHub+fs+git → Notion suite): **~77–85%** vs fully-mounted always-on — same caveat as above.
 
 Fewer visible tools also helps selection reliability (Gorilla / ToolBench); on modern clients Tool Search delivers much of that focus for *configured* servers. Kitsune-specific accuracy bench: not yet — contributions welcome.
 
