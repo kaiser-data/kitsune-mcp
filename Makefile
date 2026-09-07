@@ -10,10 +10,11 @@ test:
 	uv run --extra dev -m pytest tests/ -v
 
 lint:
-	uv run --extra dev -m ruff check server.py server_forge.py kitsune_mcp/ tests/
+	uv run --extra dev -m ruff check .
+	uv run --extra dev -m ruff format --check .
 
 format:
-	uv run --extra dev -m ruff format server.py server_forge.py kitsune_mcp/ tests/
+	uv run --extra dev -m ruff format .
 
 build:
 	uv run -m build

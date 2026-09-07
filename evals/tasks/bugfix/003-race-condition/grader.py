@@ -11,6 +11,7 @@ Two axes (both required to pass):
 Invocation:
     python grader.py --workdir <path> --result <result.json> --out <score.json>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,7 +21,6 @@ import re
 import sys
 import threading
 from pathlib import Path
-
 
 N_THREADS = 16
 PER_THREAD = 2500
@@ -39,10 +39,7 @@ SYNC_PATTERNS = [
 
 def _has_sync(src: str) -> bool:
     low = src
-    for pat in SYNC_PATTERNS:
-        if re.search(pat, low, re.IGNORECASE):
-            return True
-    return False
+    return any(re.search(pat, low, re.IGNORECASE) for pat in SYNC_PATTERNS)
 
 
 def _run_stress(cls) -> list[tuple[int, int, int]]:
@@ -54,7 +51,7 @@ def _run_stress(cls) -> list[tuple[int, int, int]]:
             obj = cls()
             barrier = threading.Barrier(N_THREADS)
 
-            def work():
+            def work(barrier=barrier, obj=obj):
                 barrier.wait()
                 for _ in range(PER_THREAD):
                     obj.add(1)
@@ -96,7 +93,7 @@ def grade(workdir: Path) -> dict:
     allowed = {"metrics.py", "test_metrics.py"}
     actual = {p.name for p in workdir.iterdir() if p.is_file() and not p.name.startswith(".")}
     extras = actual - allowed
-    breakdown["no_extra_files"] = (extras == set())
+    breakdown["no_extra_files"] = extras == set()
     if extras:
         failures.append(f"extra files created: {sorted(extras)}")
 
@@ -130,17 +127,24 @@ def grade(workdir: Path) -> dict:
             breakdown["trials_history_correct"] += 1
     if breakdown["trials_total_correct"] < TRIALS:
         ex = next(((t, h, e) for t, h, e in results if t != e), None)
-        failures.append(f"lost updates: {TRIALS - breakdown['trials_total_correct']}/{TRIALS} trials wrong (e.g. total={ex[0]} expected={ex[2]})")
+        failures.append(
+            f"lost updates: {TRIALS - breakdown['trials_total_correct']}/{TRIALS} trials wrong (e.g. total={ex[0]} expected={ex[2]})"
+        )
     if breakdown["trials_history_correct"] < TRIALS:
-        failures.append(f"history incomplete in {TRIALS - breakdown['trials_history_correct']}/{TRIALS} trials (persistence dropped)")
+        failures.append(
+            f"history incomplete in {TRIALS - breakdown['trials_history_correct']}/{TRIALS} trials (persistence dropped)"
+        )
 
     # --- Scoring -------------------------------------------------------------
-    func_ok = (breakdown["trials_total_correct"] == TRIALS and
-               breakdown["trials_history_correct"] == TRIALS)
-    func_frac = (breakdown["trials_total_correct"] + breakdown["trials_history_correct"]) / (2 * TRIALS)
+    func_ok = (
+        breakdown["trials_total_correct"] == TRIALS
+        and breakdown["trials_history_correct"] == TRIALS
+    )
+    func_frac = (breakdown["trials_total_correct"] + breakdown["trials_history_correct"]) / (
+        2 * TRIALS
+    )
     overall = round(
-        0.6 * func_frac
-        + 0.4 * (1.0 if breakdown["synchronization_present"] else 0.0),
+        0.6 * func_frac + 0.4 * (1.0 if breakdown["synchronization_present"] else 0.0),
         3,
     )
     passed = func_ok and breakdown["synchronization_present"] and breakdown["no_extra_files"]
@@ -148,15 +152,20 @@ def grade(workdir: Path) -> dict:
 
 
 def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -> dict:
-    return {"task_id": "003-race-condition", "pass": passed, "score": score,
-            "breakdown": breakdown, "failures": failures}
+    return {
+        "task_id": "003-race-condition",
+        "pass": passed,
+        "score": score,
+        "breakdown": breakdown,
+        "failures": failures,
+    }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
     ap.add_argument("--result", required=True, type=Path)
-    ap.add_argument("--out",    required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     score = grade(args.workdir.resolve())

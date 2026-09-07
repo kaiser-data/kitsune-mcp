@@ -21,30 +21,29 @@ Score JSON schema (a separate concern from result.schema.json):
   "failures": [str, ...]      # human-readable reasons, empty on pass
 }
 """
+
 from __future__ import annotations
 
 import argparse
 import ast
 import importlib.util
 import json
-import subprocess
 import sys
 from pathlib import Path
 
-
 SEALED_TESTS = [
     # (input, max_length, expected) — covers normal, edge, unicode, truncation
-    ("Hello World",      50, "hello-world"),
+    ("Hello World", 50, "hello-world"),
     ("  spaces   here ", 50, "spaces-here"),
-    ("UPPER lower",      50, "upper-lower"),
-    ("a!@#$%b",          50, "a-b"),
-    ("---leading---",    50, "leading"),
-    ("",                 50, ""),
-    ("!!!---!!!",        50, ""),
-    ("multi   spaces",   50, "multi-spaces"),
+    ("UPPER lower", 50, "upper-lower"),
+    ("a!@#$%b", 50, "a-b"),
+    ("---leading---", 50, "leading"),
+    ("", 50, ""),
+    ("!!!---!!!", 50, ""),
+    ("multi   spaces", 50, "multi-spaces"),
     ("This is a longer string that exceeds the limit", 20, "this-is-a-longer"),
     ("nobreakwithinlimit", 10, "nobreakwit"),  # forced cut, no hyphen boundary available
-    ("café latte",       50, "caf-latte"),   # non-ASCII handled as non-alphanumeric (acceptable)
+    ("café latte", 50, "caf-latte"),  # non-ASCII handled as non-alphanumeric (acceptable)
     ("trailing-hyphen-", 50, "trailing-hyphen"),
 ]
 
@@ -59,12 +58,14 @@ def _no_comments(slugify_src: str) -> bool:
     if ast.get_docstring(tree):
         return False
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if ast.get_docstring(node):
-                return False
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ) and ast.get_docstring(node):
+            return False
     # Check for # comments by re-tokenising.
-    import tokenize
     import io
+    import tokenize
+
     try:
         for tok in tokenize.generate_tokens(io.StringIO(slugify_src).readline):
             if tok.type == tokenize.COMMENT:
@@ -99,7 +100,7 @@ def grade(workdir: Path) -> dict:
     allowed = {"slugify.py"}
     actual = {p.name for p in workdir.iterdir() if p.is_file() and not p.name.startswith(".")}
     extras = actual - allowed
-    breakdown["no_extra_files"] = (extras == set())
+    breakdown["no_extra_files"] = extras == set()
     if extras:
         failures.append(f"extra files created: {sorted(extras)}")
 
@@ -152,7 +153,12 @@ def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
-    ap.add_argument("--result", required=True, type=Path, help="result.json from the runner (for diff-line check)")
+    ap.add_argument(
+        "--result",
+        required=True,
+        type=Path,
+        help="result.json from the runner (for diff-line check)",
+    )
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 

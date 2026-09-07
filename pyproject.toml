@@ -38,10 +38,13 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "fastmcp>=0.1.0",
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
-    "mcp>=1.0.0",
+    # UPPER BOUND IS LOAD-BEARING: mcp 2.x renamed the bundled FastMCP to
+    # MCPServer and deleted `mcp.server.fastmcp`, which app.py/shapeshift.py
+    # import. Without <2 a fresh `pip install kitsune-mcp` resolves mcp 2.x
+    # and dies at import. Lift only together with the v2 migration.
+    "mcp>=1.0.0,<2",
     # mcp 1.26's bundled FastMCP uses a create_model() pattern that pydantic
     # <2.10 rejects ("non-annotated attribute") and pydantic >=2.13 also rejects
     # (stricter inspect_namespace). Pin to the known-good 2.10–2.12 range.
@@ -49,12 +52,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The WebSocket transport (README's ws:// / wss:// row) imports `websockets`
+# lazily and degrades with a friendly message when it is absent, so it stays
+# optional. It was previously undeclared and only present by accident, as a
+# transitive dependency of the unused `fastmcp` package.
+ws = [
+    "websockets>=12.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.3.0",
     "ruff>=0.6.0",
     "respx>=0.21.0",
+    # Needed so the suite actually exercises the WebSocket transport rather
+    # than skipping it (tests patch `websockets.connect`).
+    "websockets>=12.0",
 ]
 
 [project.scripts]
@@ -68,8 +81,14 @@ Issues = "https://github.com/kaiser-data/kitsune-mcp/issues"
 Documentation = "https://github.com/kaiser-data/kitsune-mcp/tree/main/docs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
-include = ["server.py", "server_forge.py", "kitsune_mcp/*.py"]
+# Ship ONLY the package plus the two entry-point shims. `packages = ["."]` used
+# to pull the whole repo root into site-packages (tests/, docs/, evals/,
+# .github/, PLAN.md, .gitignore ...) and silently made `include` a no-op.
+packages = ["kitsune_mcp"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"server.py" = "server.py"
+"server_forge.py" = "server_forge.py"
 
 [tool.ruff]
 line-length = 100

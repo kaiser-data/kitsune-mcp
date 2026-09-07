@@ -8,6 +8,7 @@ Three axes:
 Invocation:
     python grader.py --workdir <path> --result <result.json> --out <score.json>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,13 +19,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 PURE_CASES = [
-    ([1, 2, 3, 4],   {"total": 10, "mean": 2.5,  "max": 4,    "count": 4}),
-    ([42],           {"total": 42, "mean": 42.0, "max": 42,   "count": 1}),
-    ([],             {"total": 0,  "mean": 0.0,  "max": None, "count": 0}),
-    ([5, 5, 5],      {"total": 15, "mean": 5.0,  "max": 5,    "count": 3}),
-    ([-3, 3],        {"total": 0,  "mean": 0.0,  "max": 3,    "count": 2}),
+    ([1, 2, 3, 4], {"total": 10, "mean": 2.5, "max": 4, "count": 4}),
+    ([42], {"total": 42, "mean": 42.0, "max": 42, "count": 1}),
+    ([], {"total": 0, "mean": 0.0, "max": None, "count": 0}),
+    ([5, 5, 5], {"total": 15, "mean": 5.0, "max": 5, "count": 3}),
+    ([-3, 3], {"total": 0, "mean": 0.0, "max": 3, "count": 2}),
     ([10, 20, 30, 40, 50], {"total": 150, "mean": 30.0, "max": 50, "count": 5}),
 ]
 
@@ -42,7 +42,11 @@ def _is_pure(func: ast.FunctionDef) -> tuple[bool, list[str]]:
     for node in ast.walk(func):
         if isinstance(node, ast.Call):
             fn = node.func
-            fname = fn.id if isinstance(fn, ast.Name) else (fn.attr if isinstance(fn, ast.Attribute) else "")
+            fname = (
+                fn.id
+                if isinstance(fn, ast.Name)
+                else (fn.attr if isinstance(fn, ast.Attribute) else "")
+            )
             if fname in {"open", "print", "input"}:
                 reasons.append(f"calls {fname}()")
     return (len(reasons) == 0, reasons)
@@ -75,7 +79,7 @@ def grade(workdir: Path) -> dict:
     allowed = {"stats.py", "test_stats.py"}
     actual = {p.name for p in workdir.iterdir() if p.is_file() and not p.name.startswith(".")}
     extras = actual - allowed
-    breakdown["no_extra_files"] = (extras == set())
+    breakdown["no_extra_files"] = extras == set()
     if extras:
         failures.append(f"extra files created: {sorted(extras)}")
 
@@ -121,9 +125,12 @@ def grade(workdir: Path) -> dict:
     if test_file.exists():
         proc = subprocess.run(
             [sys.executable, str(test_file)],
-            cwd=workdir, capture_output=True, text=True, timeout=30,
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
-        breakdown["existing_tests_pass"] = (proc.returncode == 0)
+        breakdown["existing_tests_pass"] = proc.returncode == 0
         if proc.returncode != 0:
             failures.append(f"existing tests fail: {proc.stderr.strip()[-200:]}")
     else:
@@ -148,15 +155,20 @@ def grade(workdir: Path) -> dict:
 
 
 def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -> dict:
-    return {"task_id": "001-pure-impure-split", "pass": passed, "score": score,
-            "breakdown": breakdown, "failures": failures}
+    return {
+        "task_id": "001-pure-impure-split",
+        "pass": passed,
+        "score": score,
+        "breakdown": breakdown,
+        "failures": failures,
+    }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
     ap.add_argument("--result", required=True, type=Path)
-    ap.add_argument("--out",    required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     score = grade(args.workdir.resolve())

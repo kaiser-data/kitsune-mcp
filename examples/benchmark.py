@@ -6,7 +6,7 @@ Measures actual token costs from registered schemas. No network access required.
 Usage:
     python examples/benchmark.py
 """
-import asyncio
+
 import json
 import os
 import sys
@@ -17,9 +17,8 @@ os.environ.setdefault("SMITHERY_API_KEY", "")  # suppress key-not-set warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server import _BASE_TOOL_NAMES, _LEAN_TOOLS, mcp
 from kitsune_mcp.utils import _estimate_tokens
-
+from server import _BASE_TOOL_NAMES, _LEAN_TOOLS, mcp
 
 # ---------------------------------------------------------------------------
 # Representative "typical server" — used to model the always-on baseline.
@@ -33,9 +32,9 @@ _TYPICAL_TOOL_SCHEMA = {
     "inputSchema": {
         "type": "object",
         "properties": {
-            "query":  {"type": "string",  "description": "The query to run"},
-            "limit":  {"type": "integer", "description": "Max results to return"},
-            "format": {"type": "string",  "description": "Output format: json|csv|text"},
+            "query": {"type": "string", "description": "The query to run"},
+            "limit": {"type": "integer", "description": "Max results to return"},
+            "format": {"type": "string", "description": "Output format: json|csv|text"},
         },
         "required": ["query"],
     },
@@ -56,14 +55,25 @@ def _tokens(tools: list) -> int:
     return _estimate_tokens([_tool_dict(t) for t in tools])
 
 
+def _note(cost: int, baseline: int) -> str:
+    """Describe `cost` relative to `baseline`.
+
+    Takes `baseline` as an explicit parameter rather than closing over the
+    enclosing loop variable (ruff B023).
+    """
+    diff = baseline - cost
+    pct = int(diff / baseline * 100) if baseline > 0 else 0
+    return f"saves {pct}%" if diff >= 0 else f"costs {-pct}% more"
+
+
 def run_benchmark():
     all_tools = list(mcp._tool_manager._tools.values())
-    tool_map  = {t.name: t for t in all_tools}
+    tool_map = {t.name: t for t in all_tools}
 
-    lean_tools  = [tool_map[n] for n in sorted(_LEAN_TOOLS)       if n in tool_map]
-    forge_tools = [tool_map[n] for n in sorted(_BASE_TOOL_NAMES)  if n in tool_map]
+    lean_tools = [tool_map[n] for n in sorted(_LEAN_TOOLS) if n in tool_map]
+    forge_tools = [tool_map[n] for n in sorted(_BASE_TOOL_NAMES) if n in tool_map]
 
-    lean_tokens  = _tokens(lean_tools)
+    lean_tokens = _tokens(lean_tools)
     forge_tokens = _tokens(forge_tools)
 
     w = 62
@@ -87,19 +97,14 @@ def run_benchmark():
     print()
 
     for n_servers in (2, 5, 10):
-        baseline   = n_servers * _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
+        baseline = n_servers * _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
         # Kitsune MCP exposes itself (lean or forge) + 1 mounted server at a time
-        with_lean  = lean_tokens  + _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
+        with_lean = lean_tokens + _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
         with_forge = forge_tokens + _TYPICAL_TOOLS_PER_SERVER * _TYPICAL_TOKENS_PER_TOOL
 
-        def _note(cost: int) -> str:
-            diff = baseline - cost
-            pct  = int(diff / baseline * 100) if baseline > 0 else 0
-            return f"saves {pct}%" if diff >= 0 else f"costs {-pct}% more"
-
         print(f"  {n_servers} servers — always-on baseline: {baseline:5d} tokens")
-        print(f"    kitsune lean:     {with_lean:5d} tokens  ({_note(with_lean)})")
-        print(f"    kitsune forge:    {with_forge:5d} tokens  ({_note(with_forge)})")
+        print(f"    kitsune lean:     {with_lean:5d} tokens  ({_note(with_lean, baseline)})")
+        print(f"    kitsune forge:    {with_forge:5d} tokens  ({_note(with_forge, baseline)})")
         print()
 
     # ── Per-tool breakdown ─────────────────────────────────────────────────
@@ -107,7 +112,7 @@ def run_benchmark():
     print(f"  {'Tool':<28} {'Tokens':>6}  Profile")
     print("  " + "-" * 44)
     for t in sorted(forge_tools, key=lambda t: _tokens([t]), reverse=True):
-        toks    = _tokens([t])
+        toks = _tokens([t])
         profile = "lean + forge" if t.name in _LEAN_TOOLS else "forge only"
         print(f"  {t.name:<28} {toks:>6}  {profile}")
 

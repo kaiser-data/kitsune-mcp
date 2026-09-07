@@ -45,14 +45,16 @@ from kitsune_mcp.utils import (
 # Install command validation
 # ---------------------------------------------------------------------------
 
-_SHELL_METACHAR_RE = re.compile(r'[&;|$`\n]')
-_PATH_TRAVERSAL_RE = re.compile(r'\.\.[/\\]')
+_SHELL_METACHAR_RE = re.compile(r"[&;|$`\n]")
+_PATH_TRAVERSAL_RE = re.compile(r"\.\.[/\\]")
 
 
 def _initialize_request(request_id: int = 1) -> dict:
     """Canonical MCP `initialize` JSON-RPC request."""
     return {
-        "jsonrpc": "2.0", "id": request_id, "method": "initialize",
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": "initialize",
         "params": {
             "protocolVersion": MCP_PROTOCOL_VERSION,
             "capabilities": {},
@@ -178,7 +180,9 @@ async def _reap(proc: asyncio.subprocess.Process, timeout: float) -> None:
     with contextlib.suppress(asyncio.TimeoutError, Exception):
         await asyncio.wait_for(
             asyncio.gather(
-                proc.wait(), _drain(proc.stdout), _drain(proc.stderr),
+                proc.wait(),
+                _drain(proc.stdout),
+                _drain(proc.stderr),
                 return_exceptions=True,
             ),
             timeout=timeout,
@@ -189,13 +193,13 @@ async def _reap(proc: asyncio.subprocess.Process, timeout: float) -> None:
 class _PoolEntry:
     proc: asyncio.subprocess.Process
     install_cmd: list
-    started_at: float           # time.monotonic()
-    next_id: int = 3            # 1=init, 2=initialized notify
+    started_at: float  # time.monotonic()
+    next_id: int = 3  # 1=init, 2=initialized notify
     call_count: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     name: str = ""
     last_used_at: float = field(default_factory=time.monotonic)
-    dotenv_revision: int = 0    # _creds._dotenv_revision at spawn time
+    dotenv_revision: int = 0  # _creds._dotenv_revision at spawn time
 
     def pid(self) -> int | None:
         return self.proc.pid
@@ -207,7 +211,7 @@ class _PoolEntry:
         return self.proc.returncode is None
 
 
-_process_pool: dict[str, _PoolEntry] = {}   # keyed by json(install_cmd, sort_keys=True)
+_process_pool: dict[str, _PoolEntry] = {}  # keyed by json(install_cmd, sort_keys=True)
 
 
 def _kill_all_pool_processes() -> None:
@@ -247,7 +251,8 @@ def _evict_stale_pool_entries(force: bool = False) -> list[str]:
         return []
     _last_evict_at = now
     to_remove = [
-        k for k, e in _process_pool.items()
+        k
+        for k, e in _process_pool.items()
         if not e.is_alive() or (now - e.last_used_at) > POOL_MAX_IDLE_SECONDS
     ]
     for k in to_remove:
@@ -258,7 +263,7 @@ def _evict_stale_pool_entries(force: bool = False) -> list[str]:
     # Hard cap: if still over limit, evict oldest by last_used_at
     if len(_process_pool) > POOL_MAX_PROCESSES:
         oldest = sorted(_process_pool.items(), key=lambda kv: kv[1].last_used_at)
-        for k, e in oldest[:len(_process_pool) - POOL_MAX_PROCESSES]:
+        for k, e in oldest[: len(_process_pool) - POOL_MAX_PROCESSES]:
             _kill_process_tree(e.proc)
             _process_pool.pop(k, None)
     return to_remove
@@ -273,7 +278,10 @@ async def _ping(entry: "_PoolEntry", timeout: float = 2.0) -> bool:
             msg_id = entry.next_id
             entry.next_id += 1
             entry.proc.stdin.write(
-                json.dumps({"jsonrpc": "2.0", "id": msg_id, "method": "tools/list", "params": {}}).encode() + b"\n"
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": msg_id, "method": "tools/list", "params": {}}
+                ).encode()
+                + b"\n"
             )
             await entry.proc.stdin.drain()
             resp = await asyncio.wait_for(
@@ -387,9 +395,7 @@ class _SmitheryAuth:
                 expires_at = datetime.datetime.fromisoformat(
                     data["expiresAt"].replace("Z", "+00:00")
                 )
-                ttl = (
-                    expires_at - datetime.datetime.now(datetime.UTC)
-                ).total_seconds()
+                ttl = (expires_at - datetime.datetime.now(datetime.UTC)).total_seconds()
                 self.token_expires = now + max(ttl - 300, 60)  # refresh 5 min early
             except Exception:
                 self.service_token = ""
@@ -426,9 +432,7 @@ def _build_mcp_url(deployment_url: str, config: dict) -> str:
     return f"{deployment_url}{sep}{qs}"
 
 
-async def _ensure_smithery_connection(
-    namespace: str, conn_id: str, mcp_url: str
-) -> bool:
+async def _ensure_smithery_connection(namespace: str, conn_id: str, mcp_url: str) -> bool:
     """Create or update a Smithery Connect connection. Returns True on success."""
     # Skip if we already set up this conn_id with the same URL this session
     if _smithery_auth.connections.get(conn_id) == mcp_url:
@@ -480,6 +484,7 @@ def _parse_sse(text: str) -> dict | None:
 # ---------------------------------------------------------------------------
 # Transports
 # ---------------------------------------------------------------------------
+
 
 class HTTPSSETransport(BaseTransport):
     """Execute tool calls against an HTTP MCP server.
@@ -569,10 +574,18 @@ class HTTPSSETransport(BaseTransport):
 
             await _post(client, _initialized_notification(), bearer, mcp_session_id, proto)
 
-            r2 = await _post(client, {
-                "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                "params": {"name": tool, "arguments": args},
-            }, bearer, mcp_session_id, proto)
+            r2 = await _post(
+                client,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": tool, "arguments": args},
+                },
+                bearer,
+                mcp_session_id,
+                proto,
+            )
             r2.raise_for_status()
 
             msg = _parse_sse(r2.text)
@@ -583,7 +596,9 @@ class HTTPSSETransport(BaseTransport):
         try:
             response = await asyncio.wait_for(_run(token), timeout=TIMEOUT_HTTP_TOOL)
         except TimeoutError:
-            return f"Timeout connecting to {self.qualified_name}. Server may be sleeping — try again."
+            return (
+                f"Timeout connecting to {self.qualified_name}. Server may be sleeping — try again."
+            )
         except PermissionError:
             # Direct OAuth: drop stale token, re-run ensure_token (may re-auth), retry once.
             if self.direct:
@@ -670,9 +685,18 @@ class HTTPSSETransport(BaseTransport):
 
             await _post(client, _initialized_notification(), bearer, mcp_session_id, proto)
 
-            r2 = await _post(client, {
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
-            }, bearer, mcp_session_id, proto)
+            r2 = await _post(
+                client,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/list",
+                    "params": {},
+                },
+                bearer,
+                mcp_session_id,
+                proto,
+            )
             r2.raise_for_status()
             msg = _parse_sse(r2.text)
             if msg and "result" in msg:
@@ -733,7 +757,9 @@ class StdioTransport(BaseTransport):
             proc.stdin.write(self._frame(_initialize_request()))
             await proc.stdin.drain()
 
-            init_resp = await self._read_response(proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT)
+            init_resp = await self._read_response(
+                proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
+            )
             if init_resp is None:
                 return f"No initialize response from {self.install_cmd[0]}"
             if "error" in init_resp:
@@ -741,13 +767,21 @@ class StdioTransport(BaseTransport):
 
             # 2. Notify initialized + 3. Call tool — batched into one flush
             proc.stdin.write(self._frame(_initialized_notification()))
-            proc.stdin.write(self._frame({
-                "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                "params": {"name": tool, "arguments": args},
-            }))
+            proc.stdin.write(
+                self._frame(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": tool, "arguments": args},
+                    }
+                )
+            )
             await proc.stdin.drain()
 
-            tool_resp = await self._read_response(proc.stdout, expected_id=2, timeout=TIMEOUT_STDIO_TOOL)
+            tool_resp = await self._read_response(
+                proc.stdout, expected_id=2, timeout=TIMEOUT_STDIO_TOOL
+            )
             if tool_resp is None:
                 return f"No response from {self.install_cmd[0]} for tool '{tool}'"
             if "error" in tool_resp:
@@ -778,6 +812,7 @@ class StdioTransport(BaseTransport):
 # ---------------------------------------------------------------------------
 # Persistent Stdio Transport
 # ---------------------------------------------------------------------------
+
 
 class PersistentStdioTransport(BaseTransport):
     """Execute tool calls on a long-lived stdio subprocess.
@@ -837,7 +872,9 @@ class PersistentStdioTransport(BaseTransport):
         proc.stdin.write(self._frame(_initialize_request()))
         await proc.stdin.drain()
 
-        init_resp = await StdioTransport._read_response(proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT)
+        init_resp = await StdioTransport._read_response(
+            proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
+        )
         if init_resp is None:
             _kill_process_tree(proc)
             raise RuntimeError(f"No initialize response from {self.install_cmd[0]}")
@@ -875,9 +912,9 @@ class PersistentStdioTransport(BaseTransport):
         async with entry.lock:
             msg_id = entry.next_id
             entry.next_id += 1
-            entry.proc.stdin.write(self._frame(
-                {"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params}
-            ))
+            entry.proc.stdin.write(
+                self._frame({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params})
+            )
             await entry.proc.stdin.drain()
             resp = await _read_stdio_response(
                 entry.proc.stdout, expected_id=msg_id, timeout=timeout
@@ -932,10 +969,16 @@ class PersistentStdioTransport(BaseTransport):
                 entry.next_id += 1
 
                 try:
-                    entry.proc.stdin.write(self._frame({
-                        "jsonrpc": "2.0", "id": msg_id, "method": "tools/call",
-                        "params": {"name": tool, "arguments": args},
-                    }))
+                    entry.proc.stdin.write(
+                        self._frame(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": msg_id,
+                                "method": "tools/call",
+                                "params": {"name": tool, "arguments": args},
+                            }
+                        )
+                    )
                     await entry.proc.stdin.drain()
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     if attempt == 0:
@@ -996,31 +1039,49 @@ class WebSocketTransport(BaseTransport):
         try:
             import websockets  # type: ignore[import]
         except ImportError:
-            return "WebSocket transport requires 'websockets': pip install websockets"
+            return "WebSocket transport requires 'websockets': pip install 'kitsune-mcp[ws]'"
 
         try:
             async with websockets.connect(self.url, open_timeout=TIMEOUT_STDIO_INIT) as ws:
                 # Initialize handshake
-                await ws.send(json.dumps({
-                    "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                    "params": {
-                        "protocolVersion": MCP_PROTOCOL_VERSION,
-                        "clientInfo": MCP_CLIENT_INFO,
-                        "capabilities": {},
-                    },
-                }))
+                await ws.send(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "initialize",
+                            "params": {
+                                "protocolVersion": MCP_PROTOCOL_VERSION,
+                                "clientInfo": MCP_CLIENT_INFO,
+                                "capabilities": {},
+                            },
+                        }
+                    )
+                )
                 await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_STDIO_INIT)
 
                 # Initialized notification
-                await ws.send(json.dumps({
-                    "jsonrpc": "2.0", "method": "notifications/initialized", "params": {},
-                }))
+                await ws.send(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "method": "notifications/initialized",
+                            "params": {},
+                        }
+                    )
+                )
 
                 # Tool call
-                await ws.send(json.dumps({
-                    "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                    "params": {"name": tool, "arguments": args},
-                }))
+                await ws.send(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 2,
+                            "method": "tools/call",
+                            "params": {"name": tool, "arguments": args},
+                        }
+                    )
+                )
                 raw = await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_HTTP_TOOL)
         except Exception as e:
             return f"WebSocket error ({self.url}): {e}"
@@ -1059,13 +1120,18 @@ def _hardened_docker_flags(config: dict, tmpfs_exec: bool = False) -> list[str]:
     memory = str(config.get("memory") or DOCKER_DEFAULT_MEMORY)
     pids_limit = str(config.get("pids_limit") or DOCKER_DEFAULT_PIDS)
     flags = [
-        "--label", "kitsune-mcp=1",
-        "--memory", memory,
-        "--pids-limit", pids_limit,
-        "--security-opt", "no-new-privileges",
-        "--cap-drop", "ALL",
+        "--label",
+        "kitsune-mcp=1",
+        "--memory",
+        memory,
+        "--pids-limit",
+        pids_limit,
+        "--security-opt",
+        "no-new-privileges",
+        "--cap-drop",
+        "ALL",
     ]
-    for cap in (config.get("cap_add") or []):
+    for cap in config.get("cap_add") or []:
         flags += ["--cap-add", str(cap)]
     # Read-only root filesystem unless the server explicitly needs to write.
     # Always give it a small writable tmpfs so well-behaved servers can scratch.
@@ -1088,7 +1154,9 @@ _SANDBOX_LAUNCHERS = {
 }
 
 
-def sandbox_wrap_cmd(cmd: list[str], env_names: list[str] | None = None, config: dict | None = None) -> list[str]:
+def sandbox_wrap_cmd(
+    cmd: list[str], env_names: list[str] | None = None, config: dict | None = None
+) -> list[str]:
     """Wrap a local `npx`/`uvx` launch in the hardened `docker run` profile.
 
     The container gets no host filesystem, no capabilities, a read-only rootfs,

@@ -3,6 +3,7 @@
 Invocation:
     python grader.py --workdir <path> --result <result.json> --out <score.json>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -12,21 +13,20 @@ import json
 import sys
 from pathlib import Path
 
-
 SEALED_TESTS = [
     # (nums, target, expected)  — covers found/not-found/boundary/single
-    ([1, 2, 3, 4, 5], 3,  2),   # found in middle
-    ([1, 2, 3, 4, 5], 1,  0),   # found at start
-    ([1, 2, 3, 4, 5], 5,  4),   # found at end
-    ([1, 2, 3, 4, 5], 6, -1),   # not found — larger than all (the bug case)
-    ([1, 2, 3, 4, 5], 0, -1),   # not found — smaller than all
-    ([42],            42, 0),   # single element, found
-    ([42],             1,-1),   # single element, not found
-    ([1, 3, 5, 7, 9], 7,  3),   # odd-length, found right half
-    ([1, 2, 3, 4],    2,  1),   # even-length, found left half
-    ([1, 2, 3, 4],    3,  2),   # even-length, found right half
-    ([1, 2, 3, 4],    5, -1),   # even-length, not found larger (bug case)
-    ([2, 4, 6, 8, 10],10, 4),   # found last in larger list
+    ([1, 2, 3, 4, 5], 3, 2),  # found in middle
+    ([1, 2, 3, 4, 5], 1, 0),  # found at start
+    ([1, 2, 3, 4, 5], 5, 4),  # found at end
+    ([1, 2, 3, 4, 5], 6, -1),  # not found — larger than all (the bug case)
+    ([1, 2, 3, 4, 5], 0, -1),  # not found — smaller than all
+    ([42], 42, 0),  # single element, found
+    ([42], 1, -1),  # single element, not found
+    ([1, 3, 5, 7, 9], 7, 3),  # odd-length, found right half
+    ([1, 2, 3, 4], 2, 1),  # even-length, found left half
+    ([1, 2, 3, 4], 3, 2),  # even-length, found right half
+    ([1, 2, 3, 4], 5, -1),  # even-length, not found larger (bug case)
+    ([2, 4, 6, 8, 10], 10, 4),  # found last in larger list
 ]
 
 
@@ -69,7 +69,7 @@ def grade(workdir: Path) -> dict:
     allowed = {"binary_search.py", "test_binary_search.py"}
     actual = {p.name for p in workdir.iterdir() if p.is_file() and not p.name.startswith(".")}
     extras = actual - allowed
-    breakdown["no_extra_files"] = (extras == set())
+    breakdown["no_extra_files"] = extras == set()
     if extras:
         failures.append(f"extra files created: {sorted(extras)}")
 
@@ -118,8 +118,7 @@ def grade(workdir: Path) -> dict:
     # handler from the AST walk.
     try:
         tree = ast.parse(src)
-        breakdown["no_exception_masking"] = not any(
-            _is_masking_node(n) for n in ast.walk(tree))
+        breakdown["no_exception_masking"] = not any(_is_masking_node(n) for n in ast.walk(tree))
     except SyntaxError:
         breakdown["no_exception_masking"] = False
     if not breakdown["no_exception_masking"]:
@@ -129,8 +128,12 @@ def grade(workdir: Path) -> dict:
     # Reward minimal fix; penalise (but don't fail) verbose rewrites
     style = 1.0 if breakdown["minimal_diff"] and breakdown["no_extra_files"] else 0.85
     overall = round(test_score * style, 3)
-    passed = (test_score == 1.0) and breakdown["no_extra_files"] \
-        and breakdown["no_exception_masking"] and breakdown["no_out_of_bounds_reads"]
+    passed = (
+        (test_score == 1.0)
+        and breakdown["no_extra_files"]
+        and breakdown["no_exception_masking"]
+        and breakdown["no_out_of_bounds_reads"]
+    )
     return _verdict(passed, overall, breakdown, failures)
 
 
@@ -145,15 +148,20 @@ def _is_masking_node(node: ast.AST) -> bool:
 
 
 def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -> dict:
-    return {"task_id": "001-off-by-one", "pass": passed, "score": score,
-            "breakdown": breakdown, "failures": failures}
+    return {
+        "task_id": "001-off-by-one",
+        "pass": passed,
+        "score": score,
+        "breakdown": breakdown,
+        "failures": failures,
+    }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
     ap.add_argument("--result", required=True, type=Path)
-    ap.add_argument("--out",    required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     score = grade(args.workdir.resolve())

@@ -11,6 +11,7 @@ if the code imports fine — that's the whole point.
 Invocation:
     python grader.py --workdir <path> --result <result.json> --out <score.json>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-
 
 OLD = "PaymentGateway"
 NEW = "StripeGateway"
@@ -48,7 +48,7 @@ def _scan_residual(workdir: Path) -> list[tuple[str, int, str]]:
     return hits
 
 
-SEALED_TEST = '''
+SEALED_TEST = """
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -83,7 +83,7 @@ def run():
 
 if __name__ == "__main__":
     run()
-'''
+"""
 
 
 def grade(workdir: Path) -> dict:
@@ -98,7 +98,7 @@ def grade(workdir: Path) -> dict:
     # --- Axis 1: completeness scan ------------------------------------------
     hits = _scan_residual(workdir)
     breakdown["residual_old_name"] = len(hits)
-    breakdown["rename_complete"] = (len(hits) == 0)
+    breakdown["rename_complete"] = len(hits) == 0
     if hits:
         for rel, lineno, snippet in hits[:8]:
             failures.append(f"residual '{OLD}' at {rel}:{lineno}: {snippet}")
@@ -111,9 +111,12 @@ def grade(workdir: Path) -> dict:
     try:
         proc = subprocess.run(
             [sys.executable, str(sealed)],
-            cwd=workdir, capture_output=True, text=True, timeout=30,
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
-        breakdown["sealed_test_pass"] = (proc.returncode == 0 and "SEALED_OK" in proc.stdout)
+        breakdown["sealed_test_pass"] = proc.returncode == 0 and "SEALED_OK" in proc.stdout
         if not breakdown["sealed_test_pass"]:
             msg = (proc.stderr.strip() or proc.stdout.strip())[-220:]
             failures.append(f"sealed test failed: {msg}")
@@ -131,15 +134,20 @@ def grade(workdir: Path) -> dict:
 
 
 def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -> dict:
-    return {"task_id": "001-cross-file-rename", "pass": passed, "score": score,
-            "breakdown": breakdown, "failures": failures}
+    return {
+        "task_id": "001-cross-file-rename",
+        "pass": passed,
+        "score": score,
+        "breakdown": breakdown,
+        "failures": failures,
+    }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
     ap.add_argument("--result", required=True, type=Path)
-    ap.add_argument("--out",    required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     score = grade(args.workdir.resolve())
