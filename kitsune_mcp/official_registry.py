@@ -178,18 +178,20 @@ async def _fetch_live_servers() -> list[ServerInfo]:
             install_cmd = ["npx", "-y", pkg_id]
         if pkg_id in seen_ids:
             continue
-        servers.append(ServerInfo(
-            id=pkg_id,
-            name=dirname.replace("-", " ").title(),
-            description=f"Official MCP server: {dirname}",
-            source="official",
-            transport="stdio",
-            url="",
-            install_cmd=install_cmd,
-            credentials={},
-            tools=[],
-            token_cost=0,
-        ))
+        servers.append(
+            ServerInfo(
+                id=pkg_id,
+                name=dirname.replace("-", " ").title(),
+                description=f"Official MCP server: {dirname}",
+                source="official",
+                transport="stdio",
+                url="",
+                install_cmd=install_cmd,
+                credentials={},
+                tools=[],
+                token_cost=0,
+            )
+        )
         seen_ids.add(pkg_id)
 
     _live_cache.set(servers)

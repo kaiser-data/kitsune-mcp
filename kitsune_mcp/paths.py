@@ -5,6 +5,7 @@ tokens, session/skills) must derive its paths from kitsune_home() so that
 KITSUNE_HOME=/some/dir yields a fully self-contained state directory —
 required for benchmarks, CI, and multi-tenant isolation.
 """
+
 import os
 from pathlib import Path
 

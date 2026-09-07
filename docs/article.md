@@ -23,11 +23,11 @@ Kitsune is a single always-on MCP gateway. One config entry. Behind it: 130,000+
 The core verb is `shapeshift()`: mount a server's tools at runtime, use them, release them.
 
 ```python
-status()                                               # what form am I in?
+status()  # what form am I in?
 
-shapeshift("github", tools=["search_repositories"])    # mount ONE tool, not all 26
+shapeshift("github", tools=["search_repositories"])  # mount ONE tool, not all 26
 call("search_repositories", {"query": "mcp servers"})  # real call, real data
-shapeshift()                                            # release — tools gone, process killed
+shapeshift()  # release — tools gone, process killed
 ```
 
 Don't know which server you need? Prefer `search()` first, or `auto(..., server_hint=...)` when you already know the id:

@@ -80,9 +80,15 @@ exposed in lean. This is the single highest-ROI change in the entire plan.
 
 Also update the guard inside `auto()` itself (`onboarding.py:150-152`):
 ```python
-_KITSUNE_LEAN: frozenset[str] = frozenset({
-    "auth", "call", "search", "shapeshift", "status",  # ← add "auto"
-})
+_KITSUNE_LEAN: frozenset[str] = frozenset(
+    {
+        "auth",
+        "call",
+        "search",
+        "shapeshift",
+        "status",  # ← add "auto"
+    }
+)
 ```
 
 ### Decision 2: Category-based intent routing
@@ -147,18 +153,21 @@ kitsune_mcp/adapters/
 
 Each adapter exports:
 ```python
-CATEGORY: str                              # e.g. "web_search"
-KNOWN_IDS: set[str]                        # exact server IDs this adapter handles
-KEYWORDS: frozenset[str]                   # task keywords that suggest this category
-CREDENTIAL_PATTERN: str                    # e.g. "API_KEY", "OAUTH", "CONNECTION_STRING"
+CATEGORY: str  # e.g. "web_search"
+KNOWN_IDS: set[str]  # exact server IDs this adapter handles
+KEYWORDS: frozenset[str]  # task keywords that suggest this category
+CREDENTIAL_PATTERN: str  # e.g. "API_KEY", "OAUTH", "CONNECTION_STRING"
+
 
 def infer_args(task: str, tool_schema: dict) -> dict | None:
     """Return inferred args or None to fall through to generic inference."""
     ...
 
+
 def setup_hint(server_id: str, missing_creds: list[str]) -> str:
     """Return category-appropriate setup guidance."""
     ...
+
 
 def error_hint(server_id: str, error: str) -> str | None:
     """Translate a server error to a human/agent-readable hint. None = no match."""
@@ -252,43 +261,141 @@ or a single exact next step.
 
 ```python
 _CATEGORY_KEYWORDS: dict[str, frozenset[str]] = {
-    "web_search": frozenset({
-        "search", "find", "look up", "google", "web", "internet", "news",
-        "results", "query", "browse",
-    }),
-    "file_ops": frozenset({
-        "file", "files", "directory", "folder", "path", "read", "write",
-        "list", "filesystem", "disk", "local",
-    }),
-    "code_ops": frozenset({
-        "github", "gitlab", "repo", "repository", "commit", "pull request",
-        "pr", "issue", "branch", "code", "git", "diff", "merge",
-    }),
-    "shell": frozenset({
-        "run", "execute", "shell", "bash", "command", "terminal", "script",
-        "process", "install", "build", "compile", "test", "deploy",
-    }),
-    "database": frozenset({
-        "sql", "query", "database", "db", "postgres", "mysql", "sqlite",
-        "table", "select", "insert", "update", "schema",
-    }),
-    "productivity": frozenset({
-        "notion", "linear", "jira", "asana", "task", "project", "ticket",
-        "document", "page", "workspace", "note",
-    }),
-    "communication": frozenset({
-        "slack", "email", "gmail", "message", "send", "notify", "channel",
-        "team", "chat", "discord",
-    }),
-    "memory": frozenset({
-        "remember", "recall", "memory", "store", "retrieve", "note",
-        "knowledge", "context", "history",
-    }),
-    "time_util": frozenset({
-        "time", "timezone", "clock", "date", "weather", "currency",
-        "convert", "calculate",
-    }),
+    "web_search": frozenset(
+        {
+            "search",
+            "find",
+            "look up",
+            "google",
+            "web",
+            "internet",
+            "news",
+            "results",
+            "query",
+            "browse",
+        }
+    ),
+    "file_ops": frozenset(
+        {
+            "file",
+            "files",
+            "directory",
+            "folder",
+            "path",
+            "read",
+            "write",
+            "list",
+            "filesystem",
+            "disk",
+            "local",
+        }
+    ),
+    "code_ops": frozenset(
+        {
+            "github",
+            "gitlab",
+            "repo",
+            "repository",
+            "commit",
+            "pull request",
+            "pr",
+            "issue",
+            "branch",
+            "code",
+            "git",
+            "diff",
+            "merge",
+        }
+    ),
+    "shell": frozenset(
+        {
+            "run",
+            "execute",
+            "shell",
+            "bash",
+            "command",
+            "terminal",
+            "script",
+            "process",
+            "install",
+            "build",
+            "compile",
+            "test",
+            "deploy",
+        }
+    ),
+    "database": frozenset(
+        {
+            "sql",
+            "query",
+            "database",
+            "db",
+            "postgres",
+            "mysql",
+            "sqlite",
+            "table",
+            "select",
+            "insert",
+            "update",
+            "schema",
+        }
+    ),
+    "productivity": frozenset(
+        {
+            "notion",
+            "linear",
+            "jira",
+            "asana",
+            "task",
+            "project",
+            "ticket",
+            "document",
+            "page",
+            "workspace",
+            "note",
+        }
+    ),
+    "communication": frozenset(
+        {
+            "slack",
+            "email",
+            "gmail",
+            "message",
+            "send",
+            "notify",
+            "channel",
+            "team",
+            "chat",
+            "discord",
+        }
+    ),
+    "memory": frozenset(
+        {
+            "remember",
+            "recall",
+            "memory",
+            "store",
+            "retrieve",
+            "note",
+            "knowledge",
+            "context",
+            "history",
+        }
+    ),
+    "time_util": frozenset(
+        {
+            "time",
+            "timezone",
+            "clock",
+            "date",
+            "weather",
+            "currency",
+            "convert",
+            "calculate",
+        }
+    ),
 }
+
 
 def _classify_task(task: str) -> str | None:
     task_lc = task.lower()
@@ -364,6 +471,7 @@ Adapter lookup in `auto()`:
 ```python
 # onboarding.py, inside auto(), before _infer_args_from_task()
 from kitsune_mcp.adapters import get_adapter
+
 adapter = get_adapter(server_id) or get_adapter_for_category(_classify_task(task))
 if adapter:
     inferred = adapter.infer_args(task, selected_tool_schema)
@@ -381,6 +489,7 @@ Add to `registry.py`:
 def _works_now_score(srv: "ServerInfo") -> float:
     """Higher = more likely to work right now without setup."""
     from kitsune_mcp.credentials import _resolve_config
+
     score = 0.0
     # All required creds set → big boost
     _, missing = _resolve_config(srv.credentials or {}, {})
@@ -388,8 +497,12 @@ def _works_now_score(srv: "ServerInfo") -> float:
         score += 0.4
     # Source tier
     tier_bonus = {
-        "official": 0.3, "mcpregistry": 0.2, "glama": 0.2,
-        "smithery": 0.1, "npm": 0.05, "pypi": 0.05,
+        "official": 0.3,
+        "mcpregistry": 0.2,
+        "glama": 0.2,
+        "smithery": 0.1,
+        "npm": 0.05,
+        "pypi": 0.05,
     }
     score += tier_bonus.get(srv.source, 0.0)
     # Local stdio preferred over HTTP (no API key, no rate limits)
@@ -584,12 +697,12 @@ _restore_config(client: str) -> bool
 ```python
 @dataclass
 class AbsorbedServer:
-    id: str          # name from mcpServers key, e.g. "brave-search"
-    command: str     # e.g. "npx"
+    id: str  # name from mcpServers key, e.g. "brave-search"
+    command: str  # e.g. "npx"
     args: list[str]  # e.g. ["-y", "@modelcontextprotocol/server-brave-search"]
-    env: dict        # original env vars from config block
-    client: str      # "claude-desktop" | "claude-code" | "cursor"
-    absorbed_at: str # ISO timestamp
+    env: dict  # original env vars from config block
+    client: str  # "claude-desktop" | "claude-code" | "cursor"
+    absorbed_at: str  # ISO timestamp
 ```
 
 ### 2. New `AbsorbedRegistry` class in `kitsune_mcp/registry.py`
@@ -638,14 +751,15 @@ for cfg in configs:
     competing = [s for s in cfg.servers if s.id != "kitsune"]
     if competing:
         tool_count_est = sum(s.estimated_tools for s in competing)
-        lines.append(f"⚠ {len(competing)} other servers active in {cfg.client} "
-                     f"(~{tool_count_est} extra tools in context)")
+        lines.append(
+            f"⚠ {len(competing)} other servers active in {cfg.client} "
+            f"(~{tool_count_est} extra tools in context)"
+        )
         lines.append(f"  Run setup() to harvest their credentials and reduce bloat")
 
 absorbed = _load_absorbed_servers()
 if absorbed:
-    lines.append(f"✓ Absorbed: {', '.join(s.id for s in absorbed)} "
-                 f"(available via shapeshift)")
+    lines.append(f"✓ Absorbed: {', '.join(s.id for s in absorbed)} (available via shapeshift)")
 ```
 
 Keep this fast: read only the config JSON, don't probe any servers.
@@ -683,9 +797,9 @@ Keep this fast: read only the config JSON, don't probe any servers.
 ```python
 _CLIENT_CONFIGS = {
     "claude-desktop": {
-        "darwin":  Path.home() / "Library/Application Support/Claude/claude_desktop_config.json",
-        "win32":   Path(os.environ.get("APPDATA", "")) / "Claude/claude_desktop_config.json",
-        "linux":   Path.home() / ".config/Claude/claude_desktop_config.json",
+        "darwin": Path.home() / "Library/Application Support/Claude/claude_desktop_config.json",
+        "win32": Path(os.environ.get("APPDATA", "")) / "Claude/claude_desktop_config.json",
+        "linux": Path.home() / ".config/Claude/claude_desktop_config.json",
     },
     "claude-code": {
         "all": Path.home() / ".claude/mcp.json",

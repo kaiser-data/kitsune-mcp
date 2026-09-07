@@ -7,31 +7,31 @@ boundary cases — that divergence is the signal.
 Invocation:
     python grader.py --workdir <path> --result <result.json> --out <score.json>
 """
+
 from __future__ import annotations
 
 import argparse
 import importlib.util
 import json
 import sys
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-
 
 # Inputs chosen so float repr error makes naive round() return the wrong cent
 # on several of them (the *_boundary cases).
 SEALED_INPUTS = [
-    (19.99, 3, 0.0),       # simple
-    (2.675, 1, 0.0),       # boundary: naive→2.67, correct→2.68
-    (1.005, 1, 0.0),       # boundary: naive→1.0,  correct→1.01
-    (0.125, 1, 0.0),       # boundary: banker's→0.12, half-up→0.13
-    (0.005, 1, 0.0),       # boundary: naive→0.0,  correct→0.01
-    (10.00, 1, 0.085),     # tax
-    (9.99, 2, 0.07),       # tax, three-dp intermediate
-    (100.00, 1, 0.0),      # round number
-    (3.33, 3, 0.0),        # repeating-ish
-    (1234.565, 1, 0.0),    # boundary at larger magnitude
-    (49.95, 4, 0.20),      # tax multi-quantity
-    (2.46, 1, 0.0),        # already 2dp
+    (19.99, 3, 0.0),  # simple
+    (2.675, 1, 0.0),  # boundary: naive→2.67, correct→2.68
+    (1.005, 1, 0.0),  # boundary: naive→1.0,  correct→1.01
+    (0.125, 1, 0.0),  # boundary: banker's→0.12, half-up→0.13
+    (0.005, 1, 0.0),  # boundary: naive→0.0,  correct→0.01
+    (10.00, 1, 0.085),  # tax
+    (9.99, 2, 0.07),  # tax, three-dp intermediate
+    (100.00, 1, 0.0),  # round number
+    (3.33, 3, 0.0),  # repeating-ish
+    (1234.565, 1, 0.0),  # boundary at larger magnitude
+    (49.95, 4, 0.20),  # tax multi-quantity
+    (2.46, 1, 0.0),  # already 2dp
 ]
 
 
@@ -60,7 +60,7 @@ def grade(workdir: Path) -> dict:
     allowed = {"invoice.py", "test_invoice.py"}
     actual = {p.name for p in workdir.iterdir() if p.is_file() and not p.name.startswith(".")}
     extras = actual - allowed
-    breakdown["no_extra_files"] = (extras == set())
+    breakdown["no_extra_files"] = extras == set()
     if extras:
         failures.append(f"extra files created: {sorted(extras)}")
 
@@ -102,15 +102,20 @@ def grade(workdir: Path) -> dict:
 
 
 def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -> dict:
-    return {"task_id": "002-decimal-precision", "pass": passed, "score": score,
-            "breakdown": breakdown, "failures": failures}
+    return {
+        "task_id": "002-decimal-precision",
+        "pass": passed,
+        "score": score,
+        "breakdown": breakdown,
+        "failures": failures,
+    }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
     ap.add_argument("--result", required=True, type=Path)
-    ap.add_argument("--out",    required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     score = grade(args.workdir.resolve())

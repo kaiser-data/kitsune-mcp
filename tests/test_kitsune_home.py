@@ -4,6 +4,7 @@ Before this fix only session.py read KITSUNE_HOME; credentials, gateway,
 oauth, and the skills path hardcoded ~/.kitsune, breaking isolation for
 benchmarks, CI, and multi-tenant testing.
 """
+
 import json
 import os
 import subprocess
@@ -19,11 +20,13 @@ class TestKitsuneHomeHelper:
     def test_default_is_home_dot_kitsune(self, monkeypatch):
         monkeypatch.delenv("KITSUNE_HOME", raising=False)
         from kitsune_mcp.paths import kitsune_home
+
         assert kitsune_home() == Path.home() / ".kitsune"
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("KITSUNE_HOME", "/tmp/kitsune-iso")
         from kitsune_mcp.paths import kitsune_home
+
         assert kitsune_home() == Path("/tmp/kitsune-iso")
 
 
@@ -52,7 +55,11 @@ class TestAllModulesHonorKitsuneHome:
         env = {**os.environ, "KITSUNE_HOME": str(iso)}
         out = subprocess.run(
             [sys.executable, "-c", code],
-            capture_output=True, text=True, env=env, cwd=_REPO_ROOT, timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=_REPO_ROOT,
+            timeout=60,
         )
         assert out.returncode == 0, out.stderr
         paths = json.loads(out.stdout.strip().splitlines()[-1])
@@ -65,16 +72,16 @@ class TestAllModulesHonorKitsuneHome:
         iso = tmp_path / "iso-home"
         iso.mkdir()
         (iso / ".env").write_text("KITSUNE_ISO_MARKER_KEY=from-iso-home\n")
-        code = (
-            "import os\n"
-            "import server\n"
-            "print(os.getenv('KITSUNE_ISO_MARKER_KEY', 'MISSING'))\n"
-        )
+        code = "import os\nimport server\nprint(os.getenv('KITSUNE_ISO_MARKER_KEY', 'MISSING'))\n"
         env = {**os.environ, "KITSUNE_HOME": str(iso), "KITSUNE_TOOLS": "lean"}
         env.pop("KITSUNE_ISO_MARKER_KEY", None)
         out = subprocess.run(
             [sys.executable, "-c", code],
-            capture_output=True, text=True, env=env, cwd=_REPO_ROOT, timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=_REPO_ROOT,
+            timeout=60,
         )
         assert out.returncode == 0, out.stderr
         assert out.stdout.strip().splitlines()[-1] == "from-iso-home"

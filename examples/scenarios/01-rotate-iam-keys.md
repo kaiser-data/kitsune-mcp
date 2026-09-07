@@ -62,8 +62,7 @@ search("aws iam")
 # 2. Surgical mount — only the four tools we need.
 shapeshift(
     "aws-mcp",
-    tools=["list_access_keys", "create_access_key",
-           "update_access_key", "delete_access_key"],
+    tools=["list_access_keys", "create_access_key", "update_access_key", "delete_access_key"],
     confirm=True,
 )
 # → Shapeshifted into 'aws-mcp' (lean: 4 tools) — 4 tool(s) registered.
@@ -76,18 +75,24 @@ call("list_access_keys", {"user_name": "sarah"})
 #     - AccessKeyId: AKIANEWKEY...  CreateDate: 2026-04-01  Status: Active
 
 # 4. Deactivate the compromised key (the one tied to the stolen laptop).
-call("update_access_key", {
-    "user_name": "sarah",
-    "access_key_id": "AKIAOLDKEY...",
-    "status": "Inactive",     # schema enum: Active | Inactive — validated
-})
+call(
+    "update_access_key",
+    {
+        "user_name": "sarah",
+        "access_key_id": "AKIAOLDKEY...",
+        "status": "Inactive",  # schema enum: Active | Inactive — validated
+    },
+)
 # → ✓ AccessKey AKIAOLDKEY... marked Inactive
 
 # 5. Hard-delete it after 24h grace (or now, if policy says immediate).
-call("delete_access_key", {
-    "user_name": "sarah",
-    "access_key_id": "AKIAOLDKEY...",
-})
+call(
+    "delete_access_key",
+    {
+        "user_name": "sarah",
+        "access_key_id": "AKIAOLDKEY...",
+    },
+)
 # → ✓ AccessKey AKIAOLDKEY... deleted
 
 # 6. Unmount. The 4 tools disappear from context.

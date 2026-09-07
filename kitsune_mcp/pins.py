@@ -17,6 +17,7 @@ Only concrete `npx`/`uvx` specs carry a version, so only they are pinnable;
 `github:` targets, bare-name local installs, and hand-written `connect()`
 commands pass through untouched (documented limit — no version to record).
 """
+
 import json
 import os
 from pathlib import Path
@@ -99,13 +100,14 @@ def _parse_spec(install_cmd: list[str]) -> tuple[int, str, str, str] | None:
         at = spec.rfind("@")
         if at <= 0:  # -1 (no @) or 0 (leading @scope with no version)
             return None
-        name, version = spec[:at], spec[at + 1:]
+        name, version = spec[:at], spec[at + 1 :]
         return (spec_index, name, version, "@") if name and version else None
     return None
 
 
-def reconcile(server_id: str, install_cmd: list[str], source: str,
-              repin: bool | None = None) -> tuple[list[str], str]:
+def reconcile(
+    server_id: str, install_cmd: list[str], source: str, repin: bool | None = None
+) -> tuple[list[str], str]:
     """Apply TOFU pinning to a resolved install command.
 
     Returns (install_cmd, note): the command to actually launch (rewritten to
@@ -127,7 +129,10 @@ def reconcile(server_id: str, install_cmd: list[str], source: str,
     if repin:
         record_pin(server_id, source, name, resolved)
         if existing and existing.get("version") != resolved:
-            return install_cmd, f"🔒 Repinned {name} {existing.get('version')} → {resolved} (KITSUNE_REPIN)."
+            return (
+                install_cmd,
+                f"🔒 Repinned {name} {existing.get('version')} → {resolved} (KITSUNE_REPIN).",
+            )
         return install_cmd, f"🔒 Pinned {name} to {resolved} (KITSUNE_REPIN)."
 
     if existing is None:

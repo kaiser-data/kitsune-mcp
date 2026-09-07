@@ -13,6 +13,7 @@ A working runner needs to implement:
   6. run_grader     — invoke grader.py → score.json
   7. aggregate      — collapse n_runs into one summary row
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from typing import Protocol
 @dataclass
 class TaskSpec:
     """Parsed task.yaml. Mirrors task.schema.json."""
+
     id: str
     category: str
     version: str
@@ -40,6 +42,7 @@ class TaskSpec:
 @dataclass
 class SystemConfig:
     """How to invoke the system under test."""
+
     adapter: str  # 'api_only' | 'agentic' | 'ide_interactive'
     name: str
     version: str
@@ -50,6 +53,7 @@ class SystemConfig:
 @dataclass
 class RunArtifact:
     """What a single run produces — maps 1:1 to result.schema.json."""
+
     workdir: Path
     diff: str
     metrics: dict
@@ -88,14 +92,14 @@ def capture_diff(workdir: Path, fixture: Path) -> str:
     raise NotImplementedError
 
 
-def write_result(artifact: RunArtifact, task: TaskSpec, system: SystemConfig,
-                 run_meta: dict, out_path: Path) -> None:
+def write_result(
+    artifact: RunArtifact, task: TaskSpec, system: SystemConfig, run_meta: dict, out_path: Path
+) -> None:
     """Serialise to result.json, validating against result.schema.json."""
     raise NotImplementedError
 
 
-def run_grader(task: TaskSpec, result_path: Path, workdir: Path,
-               score_out: Path) -> dict:
+def run_grader(task: TaskSpec, result_path: Path, workdir: Path, score_out: Path) -> dict:
     """Subprocess: python grader.py --workdir … --result … --out …"""
     raise NotImplementedError
 
@@ -107,9 +111,10 @@ def aggregate(score_paths: list[Path]) -> dict:
 
 # Entry point sketch ---------------------------------------------------------
 
+
 def main_sketch(task_yaml: Path, system_yaml: Path, n_runs: int, out_dir: Path) -> None:
     """Pseudo-code only — do not call. Shows the flow."""
-    task = load_task(task_yaml)
+    # task = load_task(task_yaml)
     # system = load_system(system_yaml)         # YAML matching SystemConfig
     # adapter = ADAPTERS[system.adapter]()      # registry pattern
     # if not adapter.supports(task): skip

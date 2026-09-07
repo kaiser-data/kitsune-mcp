@@ -48,9 +48,12 @@ shapeshift("postgres-mcp", tools=["select_query", "describe_table"])
 # in its menu.
 
 # 2. Normal operation — read-only is fine.
-call("select_query", {
-    "sql": "SELECT id, email, status FROM users WHERE email = 's@old.com'",
-})
+call(
+    "select_query",
+    {
+        "sql": "SELECT id, email, status FROM users WHERE email = 's@old.com'",
+    },
+)
 # → {id: 4421, email: "s@old.com", status: "active"}
 
 # 3. User asks for a write. The agent CANNOT execute it.
@@ -66,9 +69,12 @@ call("select_query", {
 shapeshift("postgres-mcp", tools=["update_query"])
 # → Previous form's tools dropped. 1 tool(s) registered: update_query
 
-call("update_query", {
-    "sql": "UPDATE users SET email = 's@new.com' WHERE id = 4421",
-})
+call(
+    "update_query",
+    {
+        "sql": "UPDATE users SET email = 's@new.com' WHERE id = 4421",
+    },
+)
 
 # 5. Immediately drop back to read-only.
 shapeshift("postgres-mcp", tools=["select_query", "describe_table"])

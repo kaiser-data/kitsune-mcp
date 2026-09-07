@@ -14,12 +14,14 @@ _SETUP_HINTS: dict[str, str] = {
 
 class DatabaseAdapter(Adapter):
     CATEGORY = "database"
-    KNOWN_IDS = frozenset({
-        "server-postgres",
-        "mcp-server-sqlite",
-        "postgres-mcp-server",
-        "mcp-mysql",
-    })
+    KNOWN_IDS = frozenset(
+        {
+            "server-postgres",
+            "mcp-server-sqlite",
+            "postgres-mcp-server",
+            "mcp-mysql",
+        }
+    )
 
     def setup_hint(self, server_id: str, missing_creds: list[str]) -> str:
         for cred in missing_creds:

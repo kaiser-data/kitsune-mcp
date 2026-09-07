@@ -1,4 +1,5 @@
 """Tests for shapeshift-related helpers: _make_proxy, collision detection, _BASE_TOOL_NAMES."""
+
 import inspect
 import os
 import sys
@@ -202,7 +203,8 @@ class TestCollisionDetection:
         """Verify the collision logic: if name in _BASE_TOOL_NAMES, it gets prefixed."""
         server_id = "test-org/my-server"
         import re
-        sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())
+
+        sanitized = re.sub(r"[^a-z0-9_]", "_", server_id.lower())
 
         for base_tool in _BASE_TOOL_NAMES:
             proxy_name = f"{sanitized}_{base_tool}" if base_tool in _BASE_TOOL_NAMES else base_tool
@@ -212,11 +214,14 @@ class TestCollisionDetection:
     def test_non_collision_name_unchanged(self):
         """Tool names not in _BASE_TOOL_NAMES pass through unchanged."""
         import re
+
         server_id = "test-org/my-server"
-        sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())
+        sanitized = re.sub(r"[^a-z0-9_]", "_", server_id.lower())
 
         for unique_name in ["unique_tool_xyz", "get_weather", "list_files"]:
-            proxy_name = f"{sanitized}_{unique_name}" if unique_name in _BASE_TOOL_NAMES else unique_name
+            proxy_name = (
+                f"{sanitized}_{unique_name}" if unique_name in _BASE_TOOL_NAMES else unique_name
+            )
             assert proxy_name == unique_name
 
 
@@ -230,10 +235,16 @@ class TestMorphUsesPersistentTransport:
         from server import ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
-            id="test-org/pool-server", name="pool-server", description="",
-            source="npm", transport="stdio", url="",
+            id="test-org/pool-server",
+            name="pool-server",
+            description="",
+            source="npm",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "pool-server"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
         captured = {}
@@ -246,13 +257,15 @@ class TestMorphUsesPersistentTransport:
         ctx.session = MagicMock()
         ctx.session.send_tool_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", side_effect=fake_register), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPersistent:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("kitsune_mcp.tools._state._register_proxy_tools", side_effect=fake_register),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPersistent,
+        ):
             mock_transport = MagicMock()
-            mock_transport.list_tools = AsyncMock(return_value=[
-                {"name": "pool_tool", "description": "a tool", "inputSchema": {}}
-            ])
+            mock_transport.list_tools = AsyncMock(
+                return_value=[{"name": "pool_tool", "description": "a tool", "inputSchema": {}}]
+            )
             MockPersistent.return_value = mock_transport
 
             await shapeshift("test-org/pool-server", ctx, confirm=True)
@@ -265,19 +278,24 @@ class TestMorphUsesPersistentTransport:
 # Phase 1: _register_proxy_resources
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterProxyResources:
     """Tests for _register_proxy_resources()."""
 
     def _make_transport(self):
         from unittest.mock import AsyncMock, MagicMock
+
         t = MagicMock()
         t.read_resource = AsyncMock(return_value="resource content")
         return t
 
     async def test_registers_static_resource(self):
         from server import _register_proxy_resources
+
         transport = self._make_transport()
-        resources = [{"uri": "config://my-server/settings", "name": "settings", "description": "config"}]
+        resources = [
+            {"uri": "config://my-server/settings", "name": "settings", "description": "config"}
+        ]
         registered = _register_proxy_resources(transport, resources)
         assert len(registered) == 1
         assert "config://my-server/settings" in registered[0]
@@ -285,6 +303,7 @@ class TestRegisterProxyResources:
     async def test_skips_uri_template(self):
         """Resources with {param} placeholders are skipped — they require parameter binding."""
         from server import _register_proxy_resources
+
         transport = self._make_transport()
         resources = [{"uri": "file:///{path}", "name": "file"}]
         registered = _register_proxy_resources(transport, resources)
@@ -292,6 +311,7 @@ class TestRegisterProxyResources:
 
     async def test_skips_missing_uri(self):
         from server import _register_proxy_resources
+
         transport = self._make_transport()
         resources = [{"name": "no_uri"}]
         registered = _register_proxy_resources(transport, resources)
@@ -301,6 +321,7 @@ class TestRegisterProxyResources:
         """The registered proxy function calls transport.read_resource with the correct URI."""
         from kitsune_mcp.app import mcp
         from server import _register_proxy_resources
+
         transport = self._make_transport()
         uri = "config://proxy-test-srv/doc"
         resources = [{"uri": uri, "name": "doc", "description": "docs"}]
@@ -324,6 +345,7 @@ class TestRegisterProxyResources:
 
         from kitsune_mcp.app import mcp
         from server import _register_proxy_resources
+
         transport = MagicMock()
         transport.read_resource = AsyncMock(side_effect=RuntimeError("server died"))
         uri = "config://error-test/settings"
@@ -344,20 +366,25 @@ class TestRegisterProxyResources:
 # Phase 1: _register_proxy_prompts
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterProxyPrompts:
     """Tests for _register_proxy_prompts()."""
 
     def _make_transport(self):
         from unittest.mock import AsyncMock, MagicMock
+
         t = MagicMock()
-        t.get_prompt = AsyncMock(return_value=[
-            {"role": "user", "content": {"text": "hello"}},
-        ])
+        t.get_prompt = AsyncMock(
+            return_value=[
+                {"role": "user", "content": {"text": "hello"}},
+            ]
+        )
         return t
 
     async def test_registers_prompt(self):
         from kitsune_mcp.app import mcp
         from server import _register_proxy_prompts
+
         transport = self._make_transport()
         prompts = [{"name": "greet_user", "description": "greet the user", "arguments": []}]
         registered = _register_proxy_prompts(transport, prompts)
@@ -368,6 +395,7 @@ class TestRegisterProxyPrompts:
 
     async def test_skips_empty_name(self):
         from server import _register_proxy_prompts
+
         transport = self._make_transport()
         prompts = [{"name": "", "description": "nameless"}]
         registered = _register_proxy_prompts(transport, prompts)
@@ -379,15 +407,18 @@ class TestRegisterProxyPrompts:
 
         from kitsune_mcp.app import mcp
         from server import _register_proxy_prompts
+
         transport = self._make_transport()
-        prompts = [{
-            "name": "test_sig_prompt",
-            "description": "test",
-            "arguments": [
-                {"name": "topic", "required": True},
-                {"name": "style", "required": False},
-            ],
-        }]
+        prompts = [
+            {
+                "name": "test_sig_prompt",
+                "description": "test",
+                "arguments": [
+                    {"name": "topic", "required": True},
+                    {"name": "style", "required": False},
+                ],
+            }
+        ]
         registered = _register_proxy_prompts(transport, prompts)
         assert "test_sig_prompt" in registered
 
@@ -405,6 +436,7 @@ class TestRegisterProxyPrompts:
         """Proxy function forwards call to transport.get_prompt."""
         from kitsune_mcp.app import mcp
         from server import _register_proxy_prompts
+
         transport = self._make_transport()
         prompts = [{"name": "forward_test_prompt", "description": "fwd", "arguments": []}]
         registered = _register_proxy_prompts(transport, prompts)
@@ -423,11 +455,14 @@ class TestRegisterProxyPrompts:
 
         from kitsune_mcp.app import mcp
         from server import _register_proxy_prompts
+
         transport = MagicMock()
-        transport.get_prompt = AsyncMock(return_value=[
-            {"role": "user", "content": {"text": "What is X?"}},
-            {"role": "assistant", "content": {"text": "X is Y."}},
-        ])
+        transport.get_prompt = AsyncMock(
+            return_value=[
+                {"role": "user", "content": {"text": "What is X?"}},
+                {"role": "assistant", "content": {"text": "X is Y."}},
+            ]
+        )
         prompts = [{"name": "msg_format_test", "description": "", "arguments": []}]
         _register_proxy_prompts(transport, prompts)
         p = mcp._prompt_manager._prompts["msg_format_test"]
@@ -442,6 +477,7 @@ class TestRegisterProxyPrompts:
 # ---------------------------------------------------------------------------
 # Phase 1: _do_shed cleans up resources + prompts
 # ---------------------------------------------------------------------------
+
 
 class TestDoShedAll:
     """_do_shed() must remove tools, resources, and prompts."""
@@ -473,6 +509,7 @@ class TestDoShedAll:
         _do_shed()
 
         from kitsune_mcp.app import mcp
+
         for uri in reg_res:
             assert uri not in mcp._resource_manager._resources
         for pname in reg_prom:
@@ -483,6 +520,7 @@ class TestDoShedAll:
     async def test_shed_tolerates_already_removed(self):
         """_do_shed() should not raise if resources/prompts were already removed."""
         from server import _do_shed, session
+
         session["shapeshift_resources"] = ["config://nonexistent/r"]
         session["shapeshift_prompts"] = ["nonexistent_prompt"]
         _do_shed()  # should not raise
@@ -494,6 +532,7 @@ class TestDoShedAll:
 # Phase 1: morph() registers resources when transport supports it
 # ---------------------------------------------------------------------------
 
+
 class TestMorphRegistersAll:
     """shapeshift() should register resources+prompts when transport supports them."""
 
@@ -504,10 +543,16 @@ class TestMorphRegistersAll:
         from server import ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
-            id="org/res-server", name="res-server", description="",
-            source="npm", transport="stdio", url="",
+            id="org/res-server",
+            name="res-server",
+            description="",
+            source="npm",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "res-server"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
         ctx = MagicMock()
@@ -522,14 +567,22 @@ class TestMorphRegistersAll:
             registered_resources.extend(resources)
             return []
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["a_tool"], [])), \
-             patch("kitsune_mcp.tools._state._register_proxy_resources", side_effect=fake_reg_resources) as mock_rr, \
-             patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["a_tool"], [])),
+            patch(
+                "kitsune_mcp.tools._state._register_proxy_resources", side_effect=fake_reg_resources
+            ) as mock_rr,
+            patch("kitsune_mcp.tools._state._register_proxy_prompts", return_value=[]),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST,
+        ):
             mock_t = MagicMock()
-            mock_t.list_tools = AsyncMock(return_value=[{"name": "a_tool", "description": "", "inputSchema": {}}])
-            mock_t.list_resources = AsyncMock(return_value=[{"uri": "config://org/cfg", "name": "cfg"}])
+            mock_t.list_tools = AsyncMock(
+                return_value=[{"name": "a_tool", "description": "", "inputSchema": {}}]
+            )
+            mock_t.list_resources = AsyncMock(
+                return_value=[{"uri": "config://org/cfg", "name": "cfg"}]
+            )
             mock_t.list_prompts = AsyncMock(return_value=[])
             MockPST.return_value = mock_t
             await shapeshift("org/res-server", ctx, confirm=True)
@@ -545,11 +598,16 @@ class TestMorphRegistersAll:
         from server import ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
-            id="http-org/http-server", name="http-server", description="",
-            source="smithery", transport="http", url="http-org/http-server",
-            install_cmd=None, credentials={}, tools=[
-                {"name": "http_tool", "description": "", "inputSchema": {}}
-            ], token_cost=0,
+            id="http-org/http-server",
+            name="http-server",
+            description="",
+            source="smithery",
+            transport="http",
+            url="http-org/http-server",
+            install_cmd=None,
+            credentials={},
+            tools=[{"name": "http_tool", "description": "", "inputSchema": {}}],
+            token_cost=0,
         )
 
         ctx = MagicMock()
@@ -558,11 +616,15 @@ class TestMorphRegistersAll:
         ctx.session.send_resource_list_changed = AsyncMock()
         ctx.session.send_prompt_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["http_tool"], [])), \
-             patch("kitsune_mcp.tools._state._register_proxy_resources") as mock_rr, \
-             patch("kitsune_mcp.tools._state._register_proxy_prompts") as mock_rp, \
-             patch("kitsune_mcp.tools._state.HTTPSSETransport"):
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch(
+                "kitsune_mcp.tools._state._register_proxy_tools", return_value=(["http_tool"], [])
+            ),
+            patch("kitsune_mcp.tools._state._register_proxy_resources") as mock_rr,
+            patch("kitsune_mcp.tools._state._register_proxy_prompts") as mock_rp,
+            patch("kitsune_mcp.tools._state.HTTPSSETransport"),
+        ):
             await shapeshift("http-org/http-server", ctx)
 
         mock_rr.assert_not_called()
@@ -575,10 +637,16 @@ class TestMorphRegistersAll:
         from server import ServerInfo, _registry, shapeshift
 
         srv = ServerInfo(
-            id="org/exc-server", name="exc-server", description="",
-            source="npm", transport="stdio", url="",
+            id="org/exc-server",
+            name="exc-server",
+            description="",
+            source="npm",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "exc-server"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
         ctx = MagicMock()
@@ -587,11 +655,17 @@ class TestMorphRegistersAll:
         ctx.session.send_resource_list_changed = AsyncMock()
         ctx.session.send_prompt_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._register_proxy_tools", return_value=(["exc_tool"], [])), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch(
+                "kitsune_mcp.tools._state._register_proxy_tools", return_value=(["exc_tool"], [])
+            ),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockPST,
+        ):
             mock_t = MagicMock()
-            mock_t.list_tools = AsyncMock(return_value=[{"name": "exc_tool", "description": "", "inputSchema": {}}])
+            mock_t.list_tools = AsyncMock(
+                return_value=[{"name": "exc_tool", "description": "", "inputSchema": {}}]
+            )
             mock_t.list_resources = AsyncMock(side_effect=RuntimeError("timeout"))
             mock_t.list_prompts = AsyncMock(return_value=[])
             MockPST.return_value = mock_t

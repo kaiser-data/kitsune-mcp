@@ -1,4 +1,5 @@
 """Shared test fixtures for Chameleon MCP tests."""
+
 import json
 import shutil
 from unittest.mock import AsyncMock, MagicMock
@@ -35,9 +36,11 @@ def _no_host_docker(request, monkeypatch):
 
     monkeypatch.setattr(shutil, "which", _which)
 
+
 # ---------------------------------------------------------------------------
 # Shared subprocess mock helpers (importable or usable as fixtures)
 # ---------------------------------------------------------------------------
+
 
 def make_mock_process(returncode=None):
     """Create a mock asyncio subprocess with working stdin/stdout."""
@@ -79,6 +82,7 @@ def mock_process():
 # Mock subprocess helpers
 # ---------------------------------------------------------------------------
 
+
 class MockProcess:
     """Minimal asyncio subprocess mock for stdio transport tests."""
 
@@ -110,9 +114,7 @@ class MockStdin:
 
 class MockStdout:
     def __init__(self, responses: list[dict]):
-        self._lines = iter(
-            (json.dumps(r) + "\n").encode() for r in responses
-        )
+        self._lines = iter((json.dumps(r) + "\n").encode() for r in responses)
 
     async def readline(self) -> bytes:
         try:
@@ -125,6 +127,7 @@ class MockStdout:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_smithery_server():
     """Mock Smithery registry responses."""
@@ -136,13 +139,7 @@ def mock_smithery_server():
                 "description": "A test MCP server for unit tests",
                 "remote": False,
                 "connections": [
-                    {
-                        "configSchema": {
-                            "properties": {
-                                "apiKey": {"description": "Your API key"}
-                            }
-                        }
-                    }
+                    {"configSchema": {"properties": {"apiKey": {"description": "Your API key"}}}}
                 ],
             }
         ]
@@ -153,13 +150,7 @@ def mock_smithery_server():
         "description": "A test MCP server for unit tests",
         "remote": False,
         "connections": [
-            {
-                "configSchema": {
-                    "properties": {
-                        "apiKey": {"description": "Your API key"}
-                    }
-                }
-            }
+            {"configSchema": {"properties": {"apiKey": {"description": "Your API key"}}}}
         ],
         "tools": [
             {
@@ -201,9 +192,7 @@ def mock_npm_server():
         "name": "mcp-server-test",
         "description": "A test npm MCP server",
         "dist-tags": {"latest": "1.0.0"},
-        "versions": {
-            "1.0.0": {"description": "A test npm MCP server"}
-        },
+        "versions": {"1.0.0": {"description": "A test npm MCP server"}},
     }
     with respx.mock:
         respx.get("https://registry.npmjs.org/-/v1/search").mock(
@@ -264,9 +253,7 @@ def stdio_tool_call_responses():
         {
             "jsonrpc": "2.0",
             "id": 2,
-            "result": {
-                "content": [{"type": "text", "text": "Hello, world!"}]
-            },
+            "result": {"content": [{"type": "text", "text": "Hello, world!"}]},
         },
     ]
 
@@ -286,6 +273,7 @@ def _clear_process_pool():
     yield
     try:
         from kitsune_mcp.transport import _process_pool
+
         _process_pool.clear()
     except Exception:
         pass

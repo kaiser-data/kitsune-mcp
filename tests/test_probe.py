@@ -1,4 +1,5 @@
 """Tests for kitsune_mcp/probe.py — readiness probing and setup guide formatting."""
+
 import os
 import sys
 
@@ -15,6 +16,7 @@ from kitsune_mcp.probe import (
 # ---------------------------------------------------------------------------
 # _doc_uri_priority
 # ---------------------------------------------------------------------------
+
 
 class TestDocUriPriority:
     def test_env_is_highest_priority(self):
@@ -45,6 +47,7 @@ class TestDocUriPriority:
 # ---------------------------------------------------------------------------
 # _probe_requirements
 # ---------------------------------------------------------------------------
+
 
 class TestProbeRequirements:
     def test_missing_env_var_detected(self, monkeypatch):
@@ -79,14 +82,16 @@ class TestProbeRequirements:
         assert "OPENAI_API_KEY" in reqs["set_env"]
 
     def test_schema_creds_detected(self):
-        tools = [{
-            "description": "",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"apiKey": {"type": "string"}, "query": {"type": "string"}},
-                "required": ["apiKey"],
+        tools = [
+            {
+                "description": "",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"apiKey": {"type": "string"}, "query": {"type": "string"}},
+                    "required": ["apiKey"],
+                },
             }
-        }]
+        ]
         reqs = _probe_requirements(tools)
         assert "apiKey" in reqs["schema_creds"]
         assert "query" not in reqs["schema_creds"]
@@ -107,15 +112,17 @@ class TestProbeRequirements:
         assert "http://127.0.0.1:19999" in reqs["unreachable"]
 
     def test_provider_enums_extracted(self):
-        tools = [{
-            "description": "",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "provider": {"type": "string", "enum": ["openai", "anthropic", "local"]},
+        tools = [
+            {
+                "description": "",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "provider": {"type": "string", "enum": ["openai", "anthropic", "local"]},
+                    },
                 },
             }
-        }]
+        ]
         reqs = _probe_requirements(tools)
         assert "provider" in reqs["providers"]
         assert set(reqs["providers"]["provider"]) == {"openai", "anthropic", "local"}
@@ -139,6 +146,7 @@ class TestProbeRequirements:
 # _classify_provider
 # ---------------------------------------------------------------------------
 
+
 class TestClassifyProvider:
     def test_cloud_ready_when_cred_set(self):
         result = _classify_provider("openai", [], ["OPENAI_API_KEY"], [])
@@ -160,6 +168,7 @@ class TestClassifyProvider:
 # ---------------------------------------------------------------------------
 # _format_setup_guide
 # ---------------------------------------------------------------------------
+
 
 class TestFormatSetupGuide:
     def _reqs(self, **overrides):

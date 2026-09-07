@@ -108,9 +108,9 @@ Lean profile at rest: **9 tools · ~1,774 tokens/turn** (`status`, `search`, `au
 
 ```python
 search("web scraping")
-shapeshift("firecrawl", tools=["scrape_url"])   # surgical: one tool, not the whole surface
+shapeshift("firecrawl", tools=["scrape_url"])  # surgical: one tool, not the whole surface
 call("scrape_url", arguments={"url": "https://example.com"})
-shapeshift()                                    # drop form — session stays up
+shapeshift()  # drop form — session stays up
 ```
 
 **Community / long-tail (confirm; caged by default):**
@@ -156,13 +156,13 @@ Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 Building an MCP normally means: edit → restart client → lose session → re-test. Kitsune turns that into an **MCP REPL** in one session — and `connect` / `release` / `reload` are in the **default lean profile**, so this works on a plain `pip install` with no `KITSUNE_TOOLS=all`.
 
 ```python
-connect("uvx --from . my-mcp-server", name="dev")       # start child process
-shapeshift("dev")                                       # mount tools → client sees them
+connect("uvx --from . my-mcp-server", name="dev")  # start child process
+shapeshift("dev")  # mount tools → client sees them
 call("summarize", arguments={"url": "https://example.com"})
 
 # … edit the tool in your editor …
 
-reload("dev")                                           # release → restart fresh code → remount, one call
+reload("dev")  # release → restart fresh code → remount, one call
 call("summarize", arguments={"url": "https://example.com"})
 ```
 
@@ -289,10 +289,10 @@ GATEWAY
 ```
 
 ```python
-setup()                    # preview
-setup(action="harvest")    # keys → ~/.kitsune/.env (non-destructive)
-setup(action="absorb")     # register for shapeshift()
-setup(project=True)        # project mcp.json with only Kitsune
+setup()  # preview
+setup(action="harvest")  # keys → ~/.kitsune/.env (non-destructive)
+setup(action="absorb")  # register for shapeshift()
+setup(project=True)  # project mcp.json with only Kitsune
 ```
 
 Never modifies existing configs without explicit confirmation. (`setup` is forge-profile.)
@@ -397,16 +397,18 @@ shapeshift("mcp-server-fetch")
 shapeshift("@modelcontextprotocol/server-memory", tools=["read_graph", "search_nodes"])
 
 # Code
-shapeshift("@modelcontextprotocol/server-filesystem",
-           tools=["read_file", "write_file", "edit_file"],
-           server_args=["/path/to/project"])
+shapeshift(
+    "@modelcontextprotocol/server-filesystem",
+    tools=["read_file", "write_file", "edit_file"],
+    server_args=["/path/to/project"],
+)
 shapeshift("mcp-server-git", tools=["git_status", "git_diff", "git_log"])
 
 # Notes
 shapeshift("notion-hosted", tools=["notion-search", "notion-append-block-children"])
 shapeshift("@modelcontextprotocol/server-memory", tools=["add_memory", "search_nodes"])
 
-shapeshift()   # always drop when the task is done
+shapeshift()  # always drop when the task is done
 ```
 
 ---

@@ -18,6 +18,7 @@ SysRq-W (D-state kernel stacks) + SysRq-M (memory report) via pre-opened fds.
 Usage: ci-hang-watcher.py <test-log> <exit-file> <repo> <pr-number> <label>
 Env:   GH_TOKEN_FILE (path to token file), WATCH_SECONDS (default 480)
 """
+
 import json
 import os
 import sys
@@ -35,12 +36,15 @@ WATCH_SECONDS = int(os.environ.get("WATCH_SECONDS", "480"))
 FREEZE_SECONDS = int(os.environ.get("FREEZE_SECONDS", "120"))
 BEAT_SECONDS = 15
 try:
-    TOKEN = open(os.environ.get("GH_TOKEN_FILE", ".ghtoken")).read().strip()
+    with open(os.environ.get("GH_TOKEN_FILE", ".ghtoken")) as _tf:
+        TOKEN = _tf.read().strip()
 except OSError:
     TOKEN = ""
 
+
 def note(*a):
     print(f"[{time.strftime('%H:%M:%S')}]", *a, flush=True)
+
 
 def api(method, path, body=None, timeout=20):
     if not (TOKEN and PR):
@@ -62,7 +66,9 @@ def api(method, path, body=None, timeout=20):
         note(f"api {method} {path} failed:", e)
         return None
 
+
 note("armed — token:", "present" if TOKEN else "MISSING", "| pr:", PR or "(none)")
+
 
 # --- pre-armed fds ------------------------------------------------------------
 def _pre_open(path, flags):
@@ -72,12 +78,14 @@ def _pre_open(path, flags):
         note(path, "unavailable:", e)
         return -1
 
+
 kmsg = _pre_open("/dev/kmsg", os.O_RDONLY | os.O_NONBLOCK)
 sysrq = _pre_open("/proc/sysrq-trigger", os.O_WRONLY)
 meminfo_fd = _pre_open("/proc/meminfo", os.O_RDONLY)
 loadavg_fd = _pre_open("/proc/loadavg", os.O_RDONLY)
 psi_io_fd = _pre_open("/proc/pressure/io", os.O_RDONLY)
 psi_mem_fd = _pre_open("/proc/pressure/memory", os.O_RDONLY)
+
 
 def read_fd(fd, n=4096):
     if fd < 0:
@@ -88,6 +96,7 @@ def read_fd(fd, n=4096):
     except OSError as e:
         return f"(read failed: {e})"
 
+
 def vitals():
     mem = {}
     for line in read_fd(meminfo_fd).splitlines():
@@ -96,12 +105,16 @@ def vitals():
             mem[k] = line.split()[1]  # kB
     psi = " ".join(
         f"psi_{n}={read_fd(fd).splitlines()[0].split()[1] if read_fd(fd) else '?'}"
-        for n, fd in (("io", psi_io_fd), ("mem", psi_mem_fd)))
-    return f"loadavg={read_fd(loadavg_fd).strip()} | {psi} | " + \
-           " ".join(f"{k}={int(v)//1024}M" for k, v in mem.items())
+        for n, fd in (("io", psi_io_fd), ("mem", psi_mem_fd))
+    )
+    return f"loadavg={read_fd(loadavg_fd).strip()} | {psi} | " + " ".join(
+        f"{k}={int(v) // 1024}M" for k, v in mem.items()
+    )
+
 
 # --- kmsg ring (drained continuously; keep last ~200 lines) --------------------
 kmsg_ring: list = []
+
 
 def drain_kmsg():
     while kmsg >= 0:
@@ -116,6 +129,7 @@ def drain_kmsg():
         kmsg_ring.append(rec.decode(errors="replace"))
         del kmsg_ring[:-200]
 
+
 drain_kmsg()
 kmsg_ring.clear()  # discard boot backlog
 
@@ -123,11 +137,14 @@ kmsg_ring.clear()  # discard boot backlog
 tail_buf: list = []
 tail_lock = threading.Lock()
 
+
 def _tailer():
     f = None
     while f is None:
         try:
-            f = open(LOG, "rb")
+            # noqa rationale: the handle must outlive this block — the tailer
+            # thread is deliberately expendable and may block forever post-wedge.
+            f = open(LOG, "rb")  # noqa: SIM115
         except OSError:
             time.sleep(0.5)
     while True:
@@ -143,35 +160,42 @@ def _tailer():
         else:
             time.sleep(1)
 
+
 threading.Thread(target=_tailer, daemon=True).start()
+
 
 def collected_tail(n):
     with tail_lock:
         data = b"".join(tail_buf)
     return data[-n:].decode(errors="replace") or "(nothing collected yet)"
 
+
 # --- heartbeat: every network call is fire-and-forget --------------------------
-hb = api("POST", f"/issues/{PR}/comments",
-         {"body": f"🫀 flight recorder `{LABEL}` armed"})
+hb = api("POST", f"/issues/{PR}/comments", {"body": f"🫀 flight recorder `{LABEL}` armed"})
 hb_id = hb.get("id") if hb else None
 note("heartbeat comment id:", hb_id)
 beats: list = []  # rolling status lines, newest last
 
+
 def _patch(body):
     api("PATCH", f"/issues/comments/{hb_id}", {"body": body})
+
 
 def heartbeat(status):
     if not hb_id:
         return
     beats.append(status)
     del beats[:-15]
-    body = (f"🫀 flight recorder `{LABEL}` — newest last, each line ~{BEAT_SECONDS}s apart\n\n"
-            f"```\n" + "\n".join(beats) + "\n```\n"
-            f"<details><summary>collected test.log tail</summary>\n\n"
-            f"```\n{collected_tail(2500)}\n```\n</details>\n"
-            f"<details><summary>recent kmsg</summary>\n\n"
-            f"```\n{''.join(kmsg_ring)[-2500:] or '(quiet)'}\n```\n</details>")
+    body = (
+        f"🫀 flight recorder `{LABEL}` — newest last, each line ~{BEAT_SECONDS}s apart\n\n"
+        f"```\n" + "\n".join(beats) + "\n```\n"
+        f"<details><summary>collected test.log tail</summary>\n\n"
+        f"```\n{collected_tail(2500)}\n```\n</details>\n"
+        f"<details><summary>recent kmsg</summary>\n\n"
+        f"```\n{''.join(kmsg_ring)[-2500:] or '(quiet)'}\n```\n</details>"
+    )
     threading.Thread(target=_patch, args=(body,), daemon=True).start()
+
 
 # --- main loop: stat + pre-opened fds only --------------------------------------
 start = time.time()
@@ -181,7 +205,7 @@ frozen = False
 while time.time() - start < WATCH_SECONDS:
     if os.path.exists(EXIT_FILE):
         note("pytest exited cleanly")
-        heartbeat(f"t+{int(time.time()-start)}s CLEAN EXIT — suite finished")
+        heartbeat(f"t+{int(time.time() - start)}s CLEAN EXIT — suite finished")
         time.sleep(5)
         os._exit(0)
     try:
@@ -196,8 +220,10 @@ while time.time() - start < WATCH_SECONDS:
     drain_kmsg()
     if time.time() - last_beat >= BEAT_SECONDS:
         last_beat = time.time()
-        heartbeat(f"t+{int(time.time()-start):>3}s log={last_size}B "
-                  f"frozen={int(time.time()-last_change)}s | {vitals()}")
+        heartbeat(
+            f"t+{int(time.time() - start):>3}s log={last_size}B "
+            f"frozen={int(time.time() - last_change)}s | {vitals()}"
+        )
     time.sleep(2)
 
 state = "FROZEN" if frozen else "WATCH WINDOW EXPIRED"

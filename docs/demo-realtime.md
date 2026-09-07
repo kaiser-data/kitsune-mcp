@@ -118,7 +118,7 @@ Registered 7 tools: extract_text, extract_tables, get_metadata, …
 
 ```python
 call("extract_text", arguments={"path": "q3-report.pdf"})
-shapeshift()        # done — process released, tools dropped
+shapeshift()  # done — process released, tools dropped
 ```
 
 **[CUT]** — now a **hosted** server via Smithery (HTTP, no local install; needs a
@@ -126,7 +126,7 @@ free `SMITHERY_API_KEY`):
 
 ```python
 search("web search", registry="smithery")
-shapeshift("exa")                     # medium trust — no confirm needed
+shapeshift("exa")  # medium trust — no confirm needed
 call("web_search_exa", arguments={"query": "MCP registry growth 2026"})
 shapeshift()
 ```

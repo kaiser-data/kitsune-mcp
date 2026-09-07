@@ -7,6 +7,7 @@ Two independent failure axes:
 Invocation:
     python grader.py --workdir <path> --result <result.json> --out <score.json>
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,21 +17,20 @@ import json
 import sys
 from pathlib import Path
 
-
 SEALED_TESTS = [
     # (input, expected)
-    ("a,b,c",                       [["a", "b", "c"]]),
-    ("a,b,c\n",                     [["a", "b", "c"]]),                 # trailing newline ignored
-    ("",                            []),                                # empty input
-    ("1,2\n3,4",                    [["1", "2"], ["3", "4"]]),          # two rows
-    ('"hello, world",x',           [["hello, world", "x"]]),           # comma inside quotes
-    ('"a""b",c',                    [['a"b', "c"]]),                    # escaped double-quote
-    ('"line1\nline2",z',           [["line1\nline2", "z"]]),           # newline inside quotes
-    ("a,,c",                        [["a", "", "c"]]),                  # empty middle field
-    (",a,",                         [["", "a", ""]]),                   # leading/trailing empties
-    ('"",x',                        [["", "x"]]),                       # empty quoted field
-    ('a,"b,c",d\ne,f,g',           [["a", "b,c", "d"], ["e", "f", "g"]]),  # mixed
-    ('"with ""quotes"" inside",1', [['with "quotes" inside', "1"]]),   # multiple escaped quotes
+    ("a,b,c", [["a", "b", "c"]]),
+    ("a,b,c\n", [["a", "b", "c"]]),  # trailing newline ignored
+    ("", []),  # empty input
+    ("1,2\n3,4", [["1", "2"], ["3", "4"]]),  # two rows
+    ('"hello, world",x', [["hello, world", "x"]]),  # comma inside quotes
+    ('"a""b",c', [['a"b', "c"]]),  # escaped double-quote
+    ('"line1\nline2",z', [["line1\nline2", "z"]]),  # newline inside quotes
+    ("a,,c", [["a", "", "c"]]),  # empty middle field
+    (",a,", [["", "a", ""]]),  # leading/trailing empties
+    ('"",x', [["", "x"]]),  # empty quoted field
+    ('a,"b,c",d\ne,f,g', [["a", "b,c", "d"], ["e", "f", "g"]]),  # mixed
+    ('"with ""quotes"" inside",1', [['with "quotes" inside', "1"]]),  # multiple escaped quotes
 ]
 
 FORBIDDEN_MODULES = {"csv", "pandas"}
@@ -49,16 +49,17 @@ def _imports_forbidden(src: str) -> set[str]:
                 top = alias.name.split(".")[0]
                 if top in FORBIDDEN_MODULES:
                     found.add(top)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                top = node.module.split(".")[0]
-                if top in FORBIDDEN_MODULES:
-                    found.add(top)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            top = node.module.split(".")[0]
+            if top in FORBIDDEN_MODULES:
+                found.add(top)
     return found
 
 
 def _no_comments(src: str) -> bool:
-    import tokenize, io
+    import io
+    import tokenize
+
     try:
         tree = ast.parse(src)
     except SyntaxError:
@@ -66,9 +67,10 @@ def _no_comments(src: str) -> bool:
     if ast.get_docstring(tree):
         return False
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if ast.get_docstring(node):
-                return False
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ) and ast.get_docstring(node):
+            return False
     try:
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
             if tok.type == tokenize.COMMENT:
@@ -98,7 +100,7 @@ def grade(workdir: Path) -> dict:
 
     # --- Constraint check (the headline axis) -------------------------------
     violated = _imports_forbidden(src)
-    breakdown["constraint_respected"] = (violated == set())
+    breakdown["constraint_respected"] = violated == set()
     if violated:
         failures.append(f"FORBIDDEN import used: {sorted(violated)} — automatic fail")
 
@@ -109,7 +111,7 @@ def grade(workdir: Path) -> dict:
     allowed = {"csv_parser.py"}
     actual = {p.name for p in workdir.iterdir() if p.is_file() and not p.name.startswith(".")}
     extras = actual - allowed
-    breakdown["no_extra_files"] = (extras == set())
+    breakdown["no_extra_files"] = extras == set()
     if extras:
         failures.append(f"extra files created: {sorted(extras)}")
 
@@ -154,15 +156,20 @@ def grade(workdir: Path) -> dict:
 
 
 def _verdict(passed: bool, score: float, breakdown: dict, failures: list[str]) -> dict:
-    return {"task_id": "001-forbidden-library", "pass": passed, "score": score,
-            "breakdown": breakdown, "failures": failures}
+    return {
+        "task_id": "001-forbidden-library",
+        "pass": passed,
+        "score": score,
+        "breakdown": breakdown,
+        "failures": failures,
+    }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True, type=Path)
     ap.add_argument("--result", required=True, type=Path)
-    ap.add_argument("--out",    required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     score = grade(args.workdir.resolve())

@@ -6,6 +6,7 @@ which doesn't exist; the canonical id is `mcp-server-time`. Auto-resolution
 should turn that into a successful shapeshift on the first call, no second turn
 required.
 """
+
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,9 +20,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # _normalize_for_match: pure string normalization
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizeForMatch:
     def _fn(self):
         from kitsune_mcp.tools._state import _normalize_for_match
+
         return _normalize_for_match
 
     def test_strips_at_scope_prefix(self):
@@ -65,18 +68,24 @@ class TestNormalizeForMatch:
 # _resolve_server_id: registry-backed fuzzy lookup
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestResolveServerId:
     @staticmethod
     def _srv(server_id: str, source: str = "official"):
         from kitsune_mcp.registry import ServerInfo
+
         return ServerInfo(
-            id=server_id, name=server_id.rsplit("/", 1)[-1],
-            description="", source=source, transport="stdio",
+            id=server_id,
+            name=server_id.rsplit("/", 1)[-1],
+            description="",
+            source=source,
+            transport="stdio",
         )
 
     async def test_returns_none_when_input_normalizes_empty(self):
         from kitsune_mcp.tools._state import _resolve_server_id
+
         # All-punctuation input normalizes to "" — short-circuit, no registry call
         rid, cands = await _resolve_server_id("---")
         assert rid is None
@@ -117,8 +126,8 @@ class TestResolveServerId:
 
         # Searching "time" matches multiple substrings, no single exact normalize match
         candidates = [
-            self._srv("timely"),       # "timely" contains "time" substring
-            self._srv("wakatime"),     # "wakatime" contains "time" substring
+            self._srv("timely"),  # "timely" contains "time" substring
+            self._srv("wakatime"),  # "wakatime" contains "time" substring
             self._srv("timetracker"),  # "timetracker" contains "time" substring
         ]
         with patch.object(_state, "_registry") as mock_reg:
@@ -131,6 +140,7 @@ class TestResolveServerId:
     async def test_no_match_returns_empty(self):
         from kitsune_mcp.tools import _state
         from kitsune_mcp.tools._state import _resolve_server_id
+
         with patch.object(_state, "_registry") as mock_reg:
             mock_reg.search = AsyncMock(return_value=[])
             rid, cands = await _resolve_server_id("totally-bogus-name-xyz")
@@ -140,6 +150,7 @@ class TestResolveServerId:
     async def test_search_exception_returns_none(self):
         from kitsune_mcp.tools import _state
         from kitsune_mcp.tools._state import _resolve_server_id
+
         with patch.object(_state, "_registry") as mock_reg:
             mock_reg.search = AsyncMock(side_effect=RuntimeError("network down"))
             rid, cands = await _resolve_server_id("anything")
@@ -150,6 +161,7 @@ class TestResolveServerId:
 # ---------------------------------------------------------------------------
 # shapeshift() auto-recovery integration: end-to-end on the failure path
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestShapeshiftAutoResolve:
@@ -165,10 +177,16 @@ class TestShapeshiftAutoResolve:
     @staticmethod
     def _srv(server_id: str):
         from kitsune_mcp.registry import ServerInfo
+
         return ServerInfo(
-            id=server_id, name=server_id, description="time tools",
-            source="official", transport="stdio",
-            install_cmd=["uvx", "mcp-server-time"], credentials={}, tools=[],
+            id=server_id,
+            name=server_id,
+            description="time tools",
+            source="official",
+            transport="stdio",
+            install_cmd=["uvx", "mcp-server-time"],
+            credentials={},
+            tools=[],
         )
 
     async def test_typo_auto_resolves_to_canonical_id(self):
@@ -182,14 +200,22 @@ class TestShapeshiftAutoResolve:
         async def get_server(server_id, source_preference=None):
             return canonical if server_id == "mcp-server-time" else None
 
-        with patch.object(_registry, "get_server", AsyncMock(side_effect=get_server)), \
-             patch.object(_registry, "search", AsyncMock(return_value=[canonical])), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT, \
-             patch("kitsune_mcp.tools._state._probe_requirements", return_value={"missing_env": []}):
+        with (
+            patch.object(_registry, "get_server", AsyncMock(side_effect=get_server)),
+            patch.object(_registry, "search", AsyncMock(return_value=[canonical])),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+            patch("kitsune_mcp.tools._state._probe_requirements", return_value={"missing_env": []}),
+        ):
             mt = MagicMock()
-            mt.list_tools = AsyncMock(return_value=[
-                {"name": "get_current_time", "description": "now", "inputSchema": {"type": "object", "properties": {}}}
-            ])
+            mt.list_tools = AsyncMock(
+                return_value=[
+                    {
+                        "name": "get_current_time",
+                        "description": "now",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            )
             mt.list_resources = AsyncMock(return_value=[])
             mt.list_prompts = AsyncMock(return_value=[])
             MockT.return_value = mt
@@ -202,8 +228,10 @@ class TestShapeshiftAutoResolve:
         from kitsune_mcp.tools import shapeshift
         from kitsune_mcp.tools._state import _registry
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=None)), \
-             patch.object(_registry, "search", AsyncMock(return_value=[])):
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=None)),
+            patch.object(_registry, "search", AsyncMock(return_value=[])),
+        ):
             result = await shapeshift("totally-bogus-name-xyz", self._make_ctx())
 
         assert result.startswith("❌ shapeshift failed:")
@@ -214,14 +242,25 @@ class TestShapeshiftAutoResolve:
         from kitsune_mcp.registry import ServerInfo
         from kitsune_mcp.tools import shapeshift
         from kitsune_mcp.tools._state import _registry
+
         candidates = [
             ServerInfo(id="timely", name="timely", description="", source="npm", transport="stdio"),
-            ServerInfo(id="wakatime", name="wakatime", description="", source="npm", transport="stdio"),
-            ServerInfo(id="timetracker", name="timetracker", description="", source="npm", transport="stdio"),
+            ServerInfo(
+                id="wakatime", name="wakatime", description="", source="npm", transport="stdio"
+            ),
+            ServerInfo(
+                id="timetracker",
+                name="timetracker",
+                description="",
+                source="npm",
+                transport="stdio",
+            ),
         ]
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=None)), \
-             patch.object(_registry, "search", AsyncMock(return_value=candidates)):
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=None)),
+            patch.object(_registry, "search", AsyncMock(return_value=candidates)),
+        ):
             result = await shapeshift("time", self._make_ctx())
 
         assert result.startswith("❌ shapeshift failed:")
@@ -239,7 +278,9 @@ class TestShapeshiftAutoResolve:
         assert result.startswith("❌")
 
         # Server-not-found path (no candidates either)
-        with patch.object(_registry, "get_server", AsyncMock(return_value=None)), \
-             patch.object(_registry, "search", AsyncMock(return_value=[])):
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=None)),
+            patch.object(_registry, "search", AsyncMock(return_value=[])),
+        ):
             result = await shapeshift("totally-bogus-zzz", self._make_ctx())
         assert result.startswith("❌")

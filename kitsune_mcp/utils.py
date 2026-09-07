@@ -114,20 +114,25 @@ def _truncate(text: str, max_tokens: int = MAX_RESPONSE_TOKENS) -> str:
 
 
 def _clean_response(text: str) -> str:
-    text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)  # strip markdown links, keep label
-    text = re.sub(r'!\[[^\]]*\]', '', text)                # strip images
-    text = re.sub(r'\n{3,}', '\n\n', text)                 # collapse blank lines
-    text = re.sub(r'[ \t]{2,}', ' ', text)                 # collapse spaces
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)  # strip markdown links, keep label
+    text = re.sub(r"!\[[^\]]*\]", "", text)  # strip images
+    text = re.sub(r"\n{3,}", "\n\n", text)  # collapse blank lines
+    text = re.sub(r"[ \t]{2,}", " ", text)  # collapse spaces
     return text.strip()
 
 
 def _strip_html(text: str) -> str:
-    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<[^>]+>', ' ', text)
-    text = (text
-            .replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-            .replace('&quot;', '"').replace('&#39;', "'").replace('&nbsp;', ' '))
+    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = (
+        text.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ")
+    )
     return _clean_response(text)
 
 
@@ -156,7 +161,10 @@ def _rss_mb(pid: int | None) -> str:
         # macOS / BSD: use ps (no shell — pid passed as argv)
         out = subprocess.run(
             ["ps", "-o", "rss=", "-p", str(pid)],
-            capture_output=True, text=True, timeout=2, check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
         ).stdout.strip()
         if out:
             return f"{int(out) // 1024}MB"

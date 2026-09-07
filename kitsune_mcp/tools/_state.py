@@ -54,23 +54,57 @@ from kitsune_mcp.transport import (
 )
 
 # JSON-schema type → example value, for the `call(...)` hint shown to users.
-_EXAMPLE_VALUES = {"string": "hello world", "integer": 1, "number": 1.0, "boolean": True, "array": [], "object": {}}
+_EXAMPLE_VALUES = {
+    "string": "hello world",
+    "integer": 1,
+    "number": 1.0,
+    "boolean": True,
+    "array": [],
+    "object": {},
+}
 # JSON-schema type → dummy value, for fabricating args in inspect() full-mode probes.
 _DUMMY_VALUES = {"string": "test", "integer": 0, "boolean": False, "number": 0.0}
 
 # Base tool names — used for collision detection in shapeshift()
 _BASE_TOOL_NAMES = {
-    "auth", "search", "inspect", "call", "run", "fetch",
-    "skill", "key", "login", "auto", "status", "shapeshift", "shiftback", "craft",
-    "connect", "release", "reload", "test", "bench", "setup", "compare", "onboard", "prewarm",
+    "auth",
+    "search",
+    "inspect",
+    "call",
+    "run",
+    "fetch",
+    "skill",
+    "key",
+    "login",
+    "auto",
+    "status",
+    "shapeshift",
+    "shiftback",
+    "craft",
+    "connect",
+    "release",
+    "reload",
+    "test",
+    "bench",
+    "setup",
+    "compare",
+    "onboard",
+    "prewarm",
 }
 
 # Default (lean) profile — server.py prunes to this set when KITSUNE_TOOLS is unset.
 # The connect/release/reload trio is lean so the MCP REPL (Kitsune's headline
 # developer loop) works on a default install without KITSUNE_TOOLS=all.
 _LEAN_TOOL_NAMES = {
-    "status", "search", "auth", "shapeshift", "call", "auto",
-    "connect", "release", "reload",
+    "status",
+    "search",
+    "auth",
+    "shapeshift",
+    "call",
+    "auto",
+    "connect",
+    "release",
+    "reload",
 }
 
 
@@ -87,6 +121,7 @@ def _active_tool_names() -> set[str]:
     if env:
         return {t.strip() for t in env.split(",")} & _BASE_TOOL_NAMES
     return set(_LEAN_TOOL_NAMES)
+
 
 # Used by compare() to estimate token cost when a probe is gated/failed but
 # the registry knows the tool count. Calibrated from measured probes:
@@ -113,7 +148,7 @@ def _track_call(server_id: str, tool_name: str) -> None:
 def _get_transport(server_id: str, srv) -> "BaseTransport":
     """Select the right transport for a server_id + optional ServerInfo."""
     if server_id.startswith("docker:"):
-        return DockerTransport(server_id[len("docker:"):])
+        return DockerTransport(server_id[len("docker:") :])
     if server_id.startswith(("ws://", "wss://")):
         return WebSocketTransport(server_id)
     if server_id.startswith(("http://", "https://")):
@@ -152,7 +187,10 @@ async def _fetch_resource_docs(transport: "BaseTransport") -> str:
             key=_doc_uri_priority,
         )[:MAX_RESOURCE_DOCS]
         parts = await asyncio.gather(
-            *[asyncio.wait_for(transport.read_resource(u), timeout=TIMEOUT_RESOURCE_READ) for u in doc_uris],
+            *[
+                asyncio.wait_for(transport.read_resource(u), timeout=TIMEOUT_RESOURCE_READ)
+                for u in doc_uris
+            ],
             return_exceptions=True,
         )
         return "\n".join(p for p in parts if isinstance(p, str))
@@ -180,7 +218,7 @@ def _compare_missing_creds(srv) -> list[str]:
     in declaration order.
     """
     missing = []
-    for cred_key in (srv.credentials or {}):
+    for cred_key in srv.credentials or {}:
         var = _to_env_var(cred_key)
         if not os.getenv(var):
             missing.append(var)
@@ -207,6 +245,7 @@ def _synthetic_http_server(url: str):
     from urllib.parse import urlparse
 
     from kitsune_mcp.registry import ServerInfo
+
     host = urlparse(url).netloc or url
     return ServerInfo(
         id=url,
@@ -274,9 +313,7 @@ def _sandbox_env_names(srv) -> list[str]:
     if srv is None:
         return []
     names = [_to_env_var(c) for c in (srv.credentials or {})]
-    haystack = {
-        tok for tok in re.findall(r"[a-z0-9]{4,}", (srv.id + " " + srv.name).lower())
-    }
+    haystack = {tok for tok in re.findall(r"[a-z0-9]{4,}", (srv.id + " " + srv.name).lower())}
     if haystack:
         for var in os.environ:
             if var in names or not var.endswith(_PROBE_CRED_SUFFIXES):
@@ -367,7 +404,7 @@ def transport_for_exec(server_id: str, srv, explicit_sandbox: bool = False):
     if srv is not None and getattr(srv, "transport", None) not in (None, "stdio"):
         return _get_transport(server_id, srv), ""
     source = getattr(srv, "source", "") or ""
-    cmd = (getattr(srv, "install_cmd", None) or _infer_install_cmd(server_id))
+    cmd = getattr(srv, "install_cmd", None) or _infer_install_cmd(server_id)
     if cmd and cmd[0] in ("npx", "uvx") and _sandbox_default_for_exec(explicit_sandbox, source):
         if shutil.which("docker"):
             wrapped = sandbox_wrap_cmd(cmd, env_names=_sandbox_env_names(srv))
@@ -392,6 +429,7 @@ def _probe_env(srv) -> dict:
     ~/.aws). Real isolation is the deferred Docker-sandbox follow-up.
     """
     import tempfile
+
     tmpdir = tempfile.mkdtemp(prefix="kitsune-probe-")
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -404,9 +442,7 @@ def _probe_env(srv) -> dict:
         if val is not None:
             env[var] = val
     # Heuristic passthrough — match host env vars to server identity.
-    haystack = {
-        tok for tok in re.findall(r"[a-z0-9]{4,}", (srv.id + " " + srv.name).lower())
-    }
+    haystack = {tok for tok in re.findall(r"[a-z0-9]{4,}", (srv.id + " " + srv.name).lower())}
     if haystack:
         for var, val in os.environ.items():
             if var in env or not var.endswith(_PROBE_CRED_SUFFIXES):
@@ -464,7 +500,7 @@ def _normalize_for_match(s: str) -> str:
         s = s.split("/", 1)[1]
     for prefix in _RESOLVE_PREFIXES:
         if s.startswith(prefix):
-            s = s[len(prefix):]
+            s = s[len(prefix) :]
             break
     for suffix in _RESOLVE_SUFFIXES:
         if s.endswith(suffix):
@@ -513,7 +549,8 @@ async def _resolve_server_id(server_id: str) -> tuple[str | None, list[str]]:
         return None, [s.id for s in exact[:3]]
 
     substr = [
-        s for s in deduped
+        s
+        for s in deduped
         if needle in _normalize_for_match(s.id) or _normalize_for_match(s.id) in needle
     ]
     if len(substr) == 1:

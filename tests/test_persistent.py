@@ -1,4 +1,5 @@
 """Tests for _PoolEntry, PersistentStdioTransport, connect(), release()."""
+
 import asyncio
 import json
 import os
@@ -19,6 +20,7 @@ from server import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_process(returncode=None):
     """Create a mock asyncio subprocess with working stdin/stdout."""
@@ -53,6 +55,7 @@ def _make_stdout_with_responses(responses: list[dict]):
 # ---------------------------------------------------------------------------
 # _PoolEntry tests
 # ---------------------------------------------------------------------------
+
 
 class TestPoolEntry:
     def _make_entry(self, returncode=None):
@@ -92,19 +95,27 @@ class TestPoolEntry:
 # PersistentStdioTransport tests
 # ---------------------------------------------------------------------------
 
+
 class TestPersistentTransportReusesProcess:
     async def test_call_count_increments_on_reuse(self):
         """Second execute() on same pool key reuses process and increments call_count."""
         init_resp = {
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
         }
         tool_resp = {
-            "jsonrpc": "2.0", "id": 3,  # id=3 because next_id starts at 3
+            "jsonrpc": "2.0",
+            "id": 3,  # id=3 because next_id starts at 3
             "result": {"content": [{"type": "text", "text": "ok"}]},
         }
         tool_resp2 = {
-            "jsonrpc": "2.0", "id": 4,
+            "jsonrpc": "2.0",
+            "id": 4,
             "result": {"content": [{"type": "text", "text": "ok again"}]},
         }
 
@@ -133,11 +144,17 @@ class TestPersistentTransportReusesProcess:
     async def test_persistent_transport_reconnects_on_death(self):
         """If process dies during call, transport auto-reconnects once."""
         init_resp = {
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
         }
         tool_resp = {
-            "jsonrpc": "2.0", "id": 3,
+            "jsonrpc": "2.0",
+            "id": 3,
             "result": {"content": [{"type": "text", "text": "reconnected ok"}]},
         }
 
@@ -164,6 +181,7 @@ class TestPersistentTransportReusesProcess:
 # ---------------------------------------------------------------------------
 # release() tool test
 # ---------------------------------------------------------------------------
+
 
 class TestReleaseKillsProcess:
     async def test_release_kills_process_and_removes_from_pool(self):
@@ -198,19 +216,34 @@ class TestReleaseKillsProcess:
 # connect() tool test
 # ---------------------------------------------------------------------------
 
+
 class TestConnect:
     async def test_connect_returns_tool_list(self):
         """connect() returns tool names from live process."""
         init_resp = {
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
         }
         tools_resp = {
-            "jsonrpc": "2.0", "id": 3,
+            "jsonrpc": "2.0",
+            "id": 3,
             "result": {
                 "tools": [
-                    {"name": "speak", "description": "Say something", "inputSchema": {"type": "object", "properties": {}, "required": []}},
-                    {"name": "listen", "description": "Listen", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+                    {
+                        "name": "speak",
+                        "description": "Say something",
+                        "inputSchema": {"type": "object", "properties": {}, "required": []},
+                    },
+                    {
+                        "name": "listen",
+                        "description": "Listen",
+                        "inputSchema": {"type": "object", "properties": {}, "required": []},
+                    },
                 ]
             },
         }
@@ -257,20 +290,29 @@ class TestConnect:
 # PersistentStdioTransport.list_resources() tests
 # ---------------------------------------------------------------------------
 
+
 class TestListResources:
     def _init_resp(self):
         return {
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
         }
 
     async def test_list_resources_returns_list(self):
         resources_resp = {
-            "jsonrpc": "2.0", "id": 3,
-            "result": {"resources": [
-                {"uri": "config://env/vars", "name": "Env Vars"},
-                {"uri": "docs://auth", "name": "Auth Docs"},
-            ]},
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+                "resources": [
+                    {"uri": "config://env/vars", "name": "Env Vars"},
+                    {"uri": "docs://auth", "name": "Auth Docs"},
+                ]
+            },
         }
         mock_proc = _make_mock_process(returncode=None)
         mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), resources_resp])
@@ -289,7 +331,8 @@ class TestListResources:
 
     async def test_list_resources_returns_empty_on_error(self):
         error_resp = {
-            "jsonrpc": "2.0", "id": 3,
+            "jsonrpc": "2.0",
+            "id": 3,
             "error": {"code": -32601, "message": "Method not found"},
         }
         mock_proc = _make_mock_process(returncode=None)
@@ -315,10 +358,15 @@ class TestListResources:
         _process_pool.pop(pool_key, None)
 
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
-            with patch("kitsune_mcp.transport.StdioTransport._read_response", AsyncMock(side_effect=[
-                self._init_resp(),  # init
-                None,               # resources/list → timeout
-            ])):
+            with patch(
+                "kitsune_mcp.transport.StdioTransport._read_response",
+                AsyncMock(
+                    side_effect=[
+                        self._init_resp(),  # init
+                        None,  # resources/list → timeout
+                    ]
+                ),
+            ):
                 transport = PersistentStdioTransport(["list-res-timeout-cmd"])
                 result = await transport.list_resources()
 
@@ -330,19 +378,28 @@ class TestListResources:
 # PersistentStdioTransport.read_resource() tests
 # ---------------------------------------------------------------------------
 
+
 class TestReadResource:
     def _init_resp(self):
         return {
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
         }
 
     async def test_read_resource_extracts_text(self):
         read_resp = {
-            "jsonrpc": "2.0", "id": 3,
-            "result": {"contents": [
-                {"uri": "config://env/vars", "mimeType": "text/plain", "text": "MY_KEY=abc"},
-            ]},
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+                "contents": [
+                    {"uri": "config://env/vars", "mimeType": "text/plain", "text": "MY_KEY=abc"},
+                ]
+            },
         }
         mock_proc = _make_mock_process(returncode=None)
         mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), read_resp])
@@ -359,7 +416,8 @@ class TestReadResource:
 
     async def test_read_resource_returns_empty_on_error(self):
         error_resp = {
-            "jsonrpc": "2.0", "id": 3,
+            "jsonrpc": "2.0",
+            "id": 3,
             "error": {"code": -32601, "message": "Not found"},
         }
         mock_proc = _make_mock_process(returncode=None)
@@ -380,17 +438,27 @@ class TestReadResource:
 # inherit_stderr parameter tests
 # ---------------------------------------------------------------------------
 
+
 class TestInheritStderr:
     def _init_resp(self):
         return {
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
         }
 
     async def test_inherit_stderr_true_passes_none(self):
         """Default inherit_stderr=True → stderr=None (inherit from parent process)."""
         mock_proc = _make_mock_process(returncode=None)
-        tool_resp = {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        tool_resp = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {"content": [{"type": "text", "text": "ok"}]},
+        }
         mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), tool_resp])
 
         pool_key = json.dumps(["inherit-true-cmd"], sort_keys=True)
@@ -412,7 +480,11 @@ class TestInheritStderr:
     async def test_inherit_stderr_false_passes_pipe(self):
         """inherit_stderr=False → stderr=asyncio.subprocess.PIPE."""
         mock_proc = _make_mock_process(returncode=None)
-        tool_resp = {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        tool_resp = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {"content": [{"type": "text", "text": "ok"}]},
+        }
         mock_proc.stdout = _make_stdout_with_responses([self._init_resp(), tool_resp])
 
         pool_key = json.dumps(["inherit-false-cmd"], sort_keys=True)
@@ -435,6 +507,7 @@ class TestInheritStderr:
 # ---------------------------------------------------------------------------
 # Pool eviction tests
 # ---------------------------------------------------------------------------
+
 
 class TestPoolEviction:
     """_evict_stale_pool_entries() removes dead, idle, and over-limit entries."""
@@ -460,6 +533,7 @@ class TestPoolEviction:
 
     def test_dead_process_is_evicted(self):
         from server import _evict_stale_pool_entries
+
         key, entry = self._make_entry(returncode=1)  # dead process
         _process_pool[key] = entry
 
@@ -473,7 +547,10 @@ class TestPoolEviction:
     def test_idle_process_is_evicted(self):
         from kitsune_mcp.constants import POOL_MAX_IDLE_SECONDS
         from server import _evict_stale_pool_entries
-        key, entry = self._make_entry(returncode=None, last_used_offset=-(POOL_MAX_IDLE_SECONDS + 1))
+
+        key, entry = self._make_entry(
+            returncode=None, last_used_offset=-(POOL_MAX_IDLE_SECONDS + 1)
+        )
         _process_pool[key] = entry
 
         evicted = _evict_stale_pool_entries(force=True)
@@ -483,6 +560,7 @@ class TestPoolEviction:
 
     def test_live_recent_process_is_kept(self):
         from server import _evict_stale_pool_entries
+
         key, entry = self._make_entry(returncode=None, last_used_offset=0.0)
         _process_pool[key] = entry
 
@@ -494,6 +572,7 @@ class TestPoolEviction:
     def test_hard_cap_evicts_oldest(self):
         from kitsune_mcp.constants import POOL_MAX_PROCESSES
         from server import _evict_stale_pool_entries
+
         # Fill pool beyond cap: POOL_MAX_PROCESSES + 2 entries, each with different last_used_at
         for i in range(POOL_MAX_PROCESSES + 2):
             cmd = [f"cmd-{i}"]
@@ -515,6 +594,7 @@ class TestPoolEviction:
 
     def test_debounce_skips_repeat_sweeps(self):
         from server import _evict_stale_pool_entries
+
         key, entry = self._make_entry(returncode=1)
         _process_pool[key] = entry
 
@@ -539,6 +619,7 @@ class TestMidCallReconnect:
         import time
 
         from server import _PoolEntry
+
         return _PoolEntry(proc=proc, install_cmd=["echo"], started_at=time.monotonic())
 
     async def test_broken_pipe_triggers_reconnect_and_succeeds(self):
@@ -558,12 +639,30 @@ class TestMidCallReconnect:
         dead_proc.wait = AsyncMock(return_value=1)
 
         # Fresh process returns a valid tool response
-        tool_msg = _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {
-            "content": [{"type": "text", "text": "recovered"}]
-        }}).encode() + b"\n"
-        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
-            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}
-        }}).encode() + b"\n"
+        tool_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "result": {"content": [{"type": "text", "text": "recovered"}]},
+                }
+            ).encode()
+            + b"\n"
+        )
+        init_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {"name": "t", "version": "1"},
+                    },
+                }
+            ).encode()
+            + b"\n"
+        )
 
         fresh_proc = MagicMock()
         fresh_proc.stdin = MagicMock()
@@ -607,12 +706,30 @@ class TestMidCallReconnect:
         dying_proc.kill = MagicMock()
         dying_proc.wait = AsyncMock(return_value=1)
 
-        tool_msg = _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {
-            "content": [{"type": "text", "text": "after reconnect"}]
-        }}).encode() + b"\n"
-        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
-            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}
-        }}).encode() + b"\n"
+        tool_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "result": {"content": [{"type": "text", "text": "after reconnect"}]},
+                }
+            ).encode()
+            + b"\n"
+        )
+        init_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {"name": "t", "version": "1"},
+                    },
+                }
+            ).encode()
+            + b"\n"
+        )
 
         fresh_proc = MagicMock()
         fresh_proc.stdin = MagicMock()
@@ -638,6 +755,7 @@ class TestMidCallReconnect:
 # ---------------------------------------------------------------------------
 # .env revision invariant
 # ---------------------------------------------------------------------------
+
 
 class TestDotenvRevisionInvariant:
     """_dotenv_revision must be monotonically non-decreasing across reloads.

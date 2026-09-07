@@ -81,11 +81,15 @@ async def _commit_shapeshift(
     shapeshift_prompts: list[str] = []
     if hasattr(transport, "list_resources"):
         with contextlib.suppress(Exception):
-            raw_res = await asyncio.wait_for(transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST)
+            raw_res = await asyncio.wait_for(
+                transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST
+            )
             shapeshift_resources = _state._register_proxy_resources(transport, raw_res)
     if hasattr(transport, "list_prompts"):
         with contextlib.suppress(Exception):
-            raw_prompts = await asyncio.wait_for(transport.list_prompts(), timeout=TIMEOUT_PROMPT_LIST)
+            raw_prompts = await asyncio.wait_for(
+                transport.list_prompts(), timeout=TIMEOUT_PROMPT_LIST
+            )
             shapeshift_prompts = _state._register_proxy_prompts(transport, raw_prompts)
 
     session["shapeshift_tools"] = registered
@@ -103,16 +107,20 @@ async def _commit_shapeshift(
     # don't double-count. Only counts what we actually registered (lean=subset).
     registered_names = set(registered)
     mounted_schemas = [
-        ts for ts in tool_schemas
+        ts
+        for ts in tool_schemas
         if isinstance(ts, dict)
         and _state._register_proxy_tools  # truthy guard for static analysis
         and ts.get("name")
     ]
     # Filter by lean selection — only what's currently visible counts as "avoided".
     from kitsune_mcp.shapeshift import _proxy_name_for
+
     visible_schemas = [
-        ts for ts in mounted_schemas
-        if _proxy_name_for(server_id, ts.get("name", ""), _state._BASE_TOOL_NAMES) in registered_names
+        ts
+        for ts in mounted_schemas
+        if _proxy_name_for(server_id, ts.get("name", ""), _state._BASE_TOOL_NAMES)
+        in registered_names
     ]
     mount_cost = _estimate_tokens(visible_schemas) if visible_schemas else 0
     if mount_cost > 0:
@@ -145,7 +153,9 @@ async def _commit_shapeshift(
         *[f"  {t}" for t in registered],
     ]
     if shapeshift_resources:
-        shown = ", ".join(shapeshift_resources[:3]) + (" ..." if len(shapeshift_resources) > 3 else "")
+        shown = ", ".join(shapeshift_resources[:3]) + (
+            " ..." if len(shapeshift_resources) > 3 else ""
+        )
         lines.append(f"Resources ({len(shapeshift_resources)}): {shown}")
     if shapeshift_prompts:
         shown = ", ".join(shapeshift_prompts[:3]) + (" ..." if len(shapeshift_prompts) > 3 else "")
@@ -153,11 +163,14 @@ async def _commit_shapeshift(
     example_tool = registered[0]
     example_args: dict = {}
     from kitsune_mcp.shapeshift import _proxy_name_for
+
     example_schema = next(
         (
-            ts for ts in tool_schemas
+            ts
+            for ts in tool_schemas
             if isinstance(ts, dict)
-            and _proxy_name_for(server_id, ts.get("name", ""), _state._BASE_TOOL_NAMES) == example_tool
+            and _proxy_name_for(server_id, ts.get("name", ""), _state._BASE_TOOL_NAMES)
+            == example_tool
         ),
         {},
     )
@@ -169,6 +182,7 @@ async def _commit_shapeshift(
     # the goal is to show "this is the shape of a valid call", not to invent
     # semantically-correct values.
     from kitsune_mcp.tools.onboarding import _PARAM_EXAMPLES
+
     for p in required:
         if p not in props:
             continue
@@ -189,21 +203,26 @@ async def _commit_shapeshift(
         tool_cost = _estimate_tokens(tool_schemas)
         lines.append(
             f"\n💡 {len(registered)} tools loaded (~{tool_cost:,} tokens). "
-            f"For lean mounting: shapeshift(\"{server_id}\", tools=[\"{registered[0]}\"])"
+            f'For lean mounting: shapeshift("{server_id}", tools=["{registered[0]}"])'
         )
     # Filesystem server needs allowed directories as CLI args — proactively hint
     # so users don't see a confusing "Access denied" without knowing the fix.
     if "filesystem" in server_id and pool_key:
         import json as _json
+
         cmd = _json.loads(pool_key)
         # Only show hint if no directories were passed (cmd ends at the package name)
         if not any(arg.startswith("/") or arg.startswith("~") for arg in cmd[2:]):
             from kitsune_mcp.tools.onboarding import _blocked
-            lines.append("\n" + _blocked(
-                what="filesystem server has no allowed directories — all paths denied",
-                why="no directories were passed as server_args",
-                fix=f'shapeshift("{server_id}", server_args=["/your/path"])',
-            ))
+
+            lines.append(
+                "\n"
+                + _blocked(
+                    what="filesystem server has no allowed directories — all paths denied",
+                    why="no directories were passed as server_args",
+                    fix=f'shapeshift("{server_id}", server_args=["/your/path"])',
+                )
+            )
     return "\n".join(lines)
 
 
@@ -261,7 +280,12 @@ async def shapeshift(
                 raw_tools = [{"name": n, "description": "", "inputSchema": {}} for n in tool_names]
 
             return await _commit_shapeshift(
-                server_id, transport, raw_tools, {}, tools, ctx,
+                server_id,
+                transport,
+                raw_tools,
+                {},
+                tools,
+                ctx,
                 json.dumps(cmd, sort_keys=True),
                 "\n⚠️  Source: pool connection (local — verify command before use)",
             )
@@ -270,8 +294,8 @@ async def shapeshift(
     if source == "smithery" and not _state._smithery_available():
         return (
             f"❌ shapeshift failed: source='smithery' requires SMITHERY_API_KEY (not set).\n\n"
-            f"Set it: auth(\"SMITHERY_API_KEY\", \"your-key\")\n"
-            f"Or use: shapeshift(\"{server_id}\", source=\"local\") to install locally."
+            f'Set it: auth("SMITHERY_API_KEY", "your-key")\n'
+            f'Or use: shapeshift("{server_id}", source="local") to install locally.'
         )
 
     auto_resolved_from: str | None = None
@@ -286,7 +310,9 @@ async def shapeshift(
             # multiple candidates surface as suggestions, never silently picked.
             resolved_id, candidates = await _state._resolve_server_id(server_id)
             if resolved_id and resolved_id != server_id:
-                resolved_srv = await _state._registry.get_server(resolved_id, source_preference=reg_source)
+                resolved_srv = await _state._registry.get_server(
+                    resolved_id, source_preference=reg_source
+                )
                 if resolved_srv is not None:
                     auto_resolved_from = server_id
                     server_id = resolved_id
@@ -297,7 +323,7 @@ async def shapeshift(
                     return (
                         f"❌ shapeshift failed: server '{server_id}' not found.\n"
                         f"Did you mean one of these?\n{suggestions}\n"
-                        f"Retry: shapeshift(\"{candidates[0]}\")"
+                        f'Retry: shapeshift("{candidates[0]}")'
                     )
                 return (
                     f"❌ shapeshift failed: server '{server_id}' not found in any registry.\n"
@@ -310,7 +336,7 @@ async def shapeshift(
     if source == "official" and srv_source not in ("official", "mcpregistry"):
         return (
             f"❌ shapeshift failed: no official/verified listing for '{server_id}' (resolved source: {srv_source}).\n"
-            f"Try: shapeshift(\"{server_id}\") for auto, or shapeshift(\"{server_id}\", source=\"local\")."
+            f'Try: shapeshift("{server_id}") for auto, or shapeshift("{server_id}", source="local").'
         )
 
     trust_level = (os.getenv("KITSUNE_TRUST") or "").lower()
@@ -331,17 +357,19 @@ async def shapeshift(
             f"To proceed: shapeshift('{server_id}', confirm=True)\n"
             f"  ↳ runs caged in Docker by default (no host filesystem) when Docker is available.\n"
             f"To run uncaged instead: shapeshift('{server_id}', confirm=True, sandbox=False)\n"
-            f"To always trust community: auth(\"KITSUNE_TRUST\", \"community\")"
+            f'To always trust community: auth("KITSUNE_TRUST", "community")'
         )
 
     if source == "local" and not confirm and not _trust_override:
-        install_cmd = (srv.install_cmd or _state._infer_install_cmd(server_id)) + (server_args or [])
+        install_cmd = (srv.install_cmd or _state._infer_install_cmd(server_id)) + (
+            server_args or []
+        )
         return (
             f"⚠️  source='local' will run: {' '.join(install_cmd)}\n\n"
             f"This downloads and executes the package locally.\n"
             f"Review first: inspect('{server_id}')\n\n"
             f"To proceed: shapeshift('{server_id}', source='local', confirm=True)\n"
-            f"To always trust local installs: key(\"KITSUNE_TRUST\", \"community\")"
+            f'To always trust local installs: key("KITSUNE_TRUST", "community")'
         )
 
     # Pre-flight gate: Smithery-hosted servers always need SMITHERY_API_KEY
@@ -372,8 +400,8 @@ async def shapeshift(
             f"❌ source='local' not available for '{server_id}'.\n\n"
             f"This server is HTTP-only on Smithery — no local stdio package is listed.\n"
             f"Options:\n"
-            f"  • shapeshift(\"{server_id}\") — use Smithery Connect (needs SMITHERY_API_KEY)\n"
-            f"  • search(\"{server_id.split('/')[-1]}\") — find a stdio/npm alternative\n"
+            f'  • shapeshift("{server_id}") — use Smithery Connect (needs SMITHERY_API_KEY)\n'
+            f'  • search("{server_id.split("/")[-1]}") — find a stdio/npm alternative\n'
             f"  • If an npm package exists, shapeshift it directly:\n"
             f'    shapeshift("@scope/pkg-name", source="local", confirm=True)'
         )
@@ -392,7 +420,7 @@ async def shapeshift(
         return (
             f"❌ sandbox=True needs a locally-run stdio server; '{server_id}' is {srv.transport}-hosted "
             f"(nothing executes on this machine, so there is nothing to cage).\n"
-            f"To force a local sandboxed install: shapeshift(\"{server_id}\", source=\"local\", sandbox=True)"
+            f'To force a local sandboxed install: shapeshift("{server_id}", source="local", sandbox=True)'
         )
     sandboxing = False
     if want_cage:
@@ -406,7 +434,7 @@ async def shapeshift(
             if sandbox is True:
                 return (
                     f"❌ sandbox requested but Docker is not available on PATH.\n"
-                    f"Start/install Docker, or mount unsandboxed: shapeshift(\"{server_id}\", confirm=True, sandbox=False)"
+                    f'Start/install Docker, or mount unsandboxed: shapeshift("{server_id}", confirm=True, sandbox=False)'
                 )
             # Default cage but no daemon → best-effort uncaged + nudge (never hard-fail).
             uncaged_note = _state._UNCAGED_NOTE
@@ -414,7 +442,7 @@ async def shapeshift(
             if sandbox is True:
                 return (
                     f"❌ sandbox failed: sandbox supports npx/uvx commands only, got '{planned_cmd[0]}'.\n"
-                    f"Mount unsandboxed (shapeshift(\"{server_id}\", confirm=True, sandbox=False)) or package it as a docker: image."
+                    f'Mount unsandboxed (shapeshift("{server_id}", confirm=True, sandbox=False)) or package it as a docker: image.'
                 )
             # Default cage but the launcher can't be caged (not npx/uvx) → run uncaged.
         else:
@@ -436,7 +464,10 @@ async def shapeshift(
             if not sandboxing:
                 # Sandboxed installs live inside the container's tmpfs —
                 # nothing lands on the host, so there is nothing to uninstall.
-                session["current_form_local_install"] = {"cmd": srv.install_cmd, "package": server_id}
+                session["current_form_local_install"] = {
+                    "cmd": srv.install_cmd,
+                    "package": server_id,
+                }
 
         pin_note = ""
         if srv.transport == "stdio":
@@ -464,7 +495,9 @@ async def shapeshift(
             transport = _state._get_transport(server_id, srv)
             pool_key = None
             tool_schemas = srv.tools or []
-            if (not tool_schemas or _schemas_missing_required(tool_schemas)) and hasattr(transport, "list_tools"):
+            if (not tool_schemas or _schemas_missing_required(tool_schemas)) and hasattr(
+                transport, "list_tools"
+            ):
                 with contextlib.suppress(Exception):
                     live = await transport.list_tools(resolved_config)
                     if live:
@@ -488,15 +521,24 @@ async def shapeshift(
         else:
             trust_note = f"\n⚠️  Source: {srv_source}{transport_label} (community — not verified by official MCP registry){timing}"
         if auto_resolved_from is not None:
-            trust_note = f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
+            trust_note = (
+                f"\n🦊  Auto-resolved from '{auto_resolved_from}' → '{server_id}'" + trust_note
+            )
         if pin_note:
             trust_note = trust_note + "\n" + pin_note
         if uncaged_note:
             trust_note = trust_note + uncaged_note
 
         return await _commit_shapeshift(
-            server_id, transport, tool_schemas, resolved_config, tools, ctx,
-            pool_key, trust_note, lean_eligible=True,
+            server_id,
+            transport,
+            tool_schemas,
+            resolved_config,
+            tools,
+            ctx,
+            pool_key,
+            trust_note,
+            lean_eligible=True,
         )
 
 
@@ -585,7 +627,9 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
                 result_lines.append(f"Uninstall error ({pkg}): {e}")
         else:
             # npx packages are cached, not permanently installed — no action needed
-            result_lines.append(f"Note: '{pkg}' was run via npx (cached, not permanently installed — cache expires automatically)")
+            result_lines.append(
+                f"Note: '{pkg}' was run via npx (cached, not permanently installed — cache expires automatically)"
+            )
     elif local_install and not uninstall:
         pkg = local_install["package"]
         result_lines.append(f"Local package '{pkg}' is still cached. To clean up: shapeshift()")
@@ -623,19 +667,27 @@ async def craft(
     for pname, pschema in (params or {}).items():
         json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
         ptype = _json_type_to_py(json_type)
-        py_params.append(_inspect.Parameter(
-            pname, _inspect.Parameter.KEYWORD_ONLY,
-            default=_inspect.Parameter.empty, annotation=ptype,
-        ))
+        py_params.append(
+            _inspect.Parameter(
+                pname,
+                _inspect.Parameter.KEYWORD_ONLY,
+                default=_inspect.Parameter.empty,
+                annotation=ptype,
+            )
+        )
 
     async def _endpoint_proxy(**kwargs) -> str:
         try:
             # _ssrf_safe_request validates each redirect hop to block SSRF via
             # open redirects on otherwise-trusted public hosts.
             if _method == "GET":
-                r = await _ssrf_safe_request("GET", _url, params=kwargs, headers=_headers, timeout=30.0)
+                r = await _ssrf_safe_request(
+                    "GET", _url, params=kwargs, headers=_headers, timeout=30.0
+                )
             else:
-                r = await _ssrf_safe_request(_method, _url, json_body=kwargs, headers=_headers, timeout=30.0)
+                r = await _ssrf_safe_request(
+                    _method, _url, json_body=kwargs, headers=_headers, timeout=30.0
+                )
             r.raise_for_status()
             return r.text
         except httpx.HTTPStatusError as e:
@@ -659,7 +711,10 @@ async def craft(
         return f"Failed to register tool '{name}': {e}"
 
     session["crafted_tools"][name] = {
-        "url": url, "method": _method, "description": description, "params": params or {},
+        "url": url,
+        "method": _method,
+        "description": description,
+        "params": params or {},
     }
     if name not in session["shapeshift_tools"]:
         session["shapeshift_tools"].append(name)
@@ -676,7 +731,9 @@ async def craft(
 
 
 @mcp.tool()
-async def connect(command: str, name: str = "", timeout: int = 60, inherit_stderr: bool = True) -> str:
+async def connect(
+    command: str, name: str = "", timeout: int = 60, inherit_stderr: bool = True
+) -> str:
     """Start a persistent server. command: server_id or shell cmd (e.g. 'uvx voice-mode'). name: alias for release()."""
     # Detect server_id vs shell command: if it has no spaces and doesn't start with a
     # known executor, try registry lookup first.
@@ -735,8 +792,14 @@ async def connect(command: str, name: str = "", timeout: int = 60, inherit_stder
         "tools": tool_names,
     }
 
-    tool_summary = f"Tools ({len(tool_names)}): {', '.join(tool_names)}" if tool_names else "Tools: none listed"
-    setup_guide = _format_setup_guide(_state._probe_requirements(tools, resource_text), friendly, tools=tools)
+    tool_summary = (
+        f"Tools ({len(tool_names)}): {', '.join(tool_names)}"
+        if tool_names
+        else "Tools: none listed"
+    )
+    setup_guide = _format_setup_guide(
+        _state._probe_requirements(tools, resource_text), friendly, tools=tools
+    )
 
     # Trust / source note — resolve from registry if possible, otherwise flag as local
     _conn_srv = await _state._registry.get_server(command) if not looks_like_cmd else None
@@ -880,7 +943,7 @@ async def prewarm(
     if srv.transport != "stdio" and not srv.install_cmd:
         return (
             f"Nothing to prewarm: '{server_id}' is HTTP-hosted — no local process,\n"
-            f"no cold-install latency. Just shapeshift(\"{server_id}\") directly."
+            f'no cold-install latency. Just shapeshift("{server_id}") directly.'
         )
 
     # Same trust gate as shapeshift() — prewarm downloads and executes the package.
@@ -911,7 +974,7 @@ async def prewarm(
         elif sandbox is True:
             return (
                 f"❌ prewarm sandbox requested but Docker is not available on PATH.\n"
-                f"Start/install Docker, or prewarm uncaged: prewarm(\"{server_id}\", confirm=True, sandbox=False)"
+                f'Start/install Docker, or prewarm uncaged: prewarm("{server_id}", confirm=True, sandbox=False)'
             )
         else:
             uncaged_note = _state._UNCAGED_NOTE
@@ -920,7 +983,7 @@ async def prewarm(
     if entry is not None and entry.is_alive():
         return (
             f"Already warm: '{server_id}' (PID {entry.pid()}, uptime {int(entry.uptime_seconds())}s).\n"
-            f"shapeshift(\"{server_id}\") will reuse it."
+            f'shapeshift("{server_id}") will reuse it.'
         )
 
     started = time.monotonic()
@@ -938,6 +1001,6 @@ async def prewarm(
 
     return (
         f"🔥 Prewarmed '{server_id}' — PID {entry.pid()}, {len(live_tools or [])} tools ready ({elapsed:.1f}s).\n"
-        f"No tools mounted. shapeshift(\"{server_id}\") reuses this warm process.\n"
-        f"Discard without mounting: release(\"{server_id}\").{uncaged_note}"
+        f'No tools mounted. shapeshift("{server_id}") reuses this warm process.\n'
+        f'Discard without mounting: release("{server_id}").{uncaged_note}'
     )

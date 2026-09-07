@@ -12,14 +12,16 @@ _SETUP_HINTS: dict[str, str] = {
 
 class WebSearchAdapter(Adapter):
     CATEGORY = "web_search"
-    KNOWN_IDS = frozenset({
-        "brave-search",
-        "server-brave-search",
-        "exa-mcp-server",
-        "exa-search",
-        "linkup-mcp",
-        "firecrawl-mcp",
-    })
+    KNOWN_IDS = frozenset(
+        {
+            "brave-search",
+            "server-brave-search",
+            "exa-mcp-server",
+            "exa-search",
+            "linkup-mcp",
+            "firecrawl-mcp",
+        }
+    )
 
     def setup_hint(self, server_id: str, missing_creds: list[str]) -> str:
         for cred in missing_creds:

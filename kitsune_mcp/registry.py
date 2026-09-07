@@ -97,7 +97,7 @@ def _simple_search(servers: list["ServerInfo"], query: str, limit: int) -> list[
     """
     if not query:
         return servers[:limit]
-    words = [w for w in re.split(r'\W+', query.lower()) if len(w) >= 3]
+    words = [w for w in re.split(r"\W+", query.lower()) if len(w) >= 3]
     if not words:
         return servers[:limit]
 
@@ -131,12 +131,12 @@ class ServerInfo:
     id: str
     name: str
     description: str
-    source: str           # "official" | "mcpregistry" | "glama" | "smithery" | "npm" | "pypi" | "github" | "absorbed" | "direct" | "local"
-    transport: str        # "http" | "stdio" | "websocket"
+    source: str  # "official" | "mcpregistry" | "glama" | "smithery" | "npm" | "pypi" | "github" | "absorbed" | "direct" | "local"
+    transport: str  # "http" | "stdio" | "websocket"
     url: str = ""
     install_cmd: list = field(default_factory=list)
     credentials: dict = field(default_factory=dict)  # {field: description}
-    tools: list = field(default_factory=list)         # lazy-loaded
+    tools: list = field(default_factory=list)  # lazy-loaded
     token_cost: int = 0
 
 
@@ -182,18 +182,20 @@ class SmitheryRegistry(BaseRegistry):
             deployment_url = s.get("deploymentUrl") or (
                 f"https://server.smithery.ai/{qname}" if remote else ""
             )
-            results.append(ServerInfo(
-                id=qname,
-                name=s.get("displayName") or qname,
-                description=(s.get("description") or "").strip()[:MAX_EXPLORE_DESC],
-                source="smithery",
-                transport="http" if remote else "stdio",
-                url=deployment_url,
-                install_cmd=[],
-                credentials=credentials,
-                tools=[],
-                token_cost=0,
-            ))
+            results.append(
+                ServerInfo(
+                    id=qname,
+                    name=s.get("displayName") or qname,
+                    description=(s.get("description") or "").strip()[:MAX_EXPLORE_DESC],
+                    source="smithery",
+                    transport="http" if remote else "stdio",
+                    url=deployment_url,
+                    install_cmd=[],
+                    credentials=credentials,
+                    tools=[],
+                    token_cost=0,
+                )
+            )
         return results
 
     async def get_server(self, id: str):
@@ -235,7 +237,7 @@ class NpmRegistry(BaseRegistry):
     """Search npm for MCP server packages — no auth required."""
 
     def __init__(self):
-        self._search_cache: TTLDict = TTLDict(60.0)   # 1-min — search results shift quickly
+        self._search_cache: TTLDict = TTLDict(60.0)  # 1-min — search results shift quickly
         self._server_cache: TTLDict = TTLDict(300.0)  # 5-min — package metadata is stable
 
     async def search(self, query: str, limit: int) -> list:
@@ -265,18 +267,20 @@ class NpmRegistry(BaseRegistry):
             if not any(k in ("mcp", "model-context-protocol", "mcp-server") for k in keywords):
                 continue
             desc = (pkg.get("description") or "").strip()[:MAX_EXPLORE_DESC]
-            results.append(ServerInfo(
-                id=name,
-                name=name,
-                description=desc,
-                source="npm",
-                transport="stdio",
-                url="",
-                install_cmd=["npx", "-y", name],
-                credentials={},
-                tools=[],
-                token_cost=0,
-            ))
+            results.append(
+                ServerInfo(
+                    id=name,
+                    name=name,
+                    description=desc,
+                    source="npm",
+                    transport="stdio",
+                    url="",
+                    install_cmd=["npx", "-y", name],
+                    credentials={},
+                    tools=[],
+                    token_cost=0,
+                )
+            )
             if len(results) >= limit:
                 break
         self._search_cache.set(cache_key, results)
@@ -398,6 +402,7 @@ class PyPIRegistry(BaseRegistry):
 async def _detect_github_install_cmd(owner: str, repo: str) -> list[str]:
     """Probe a GitHub repo for package.json vs pyproject.toml to pick npx vs uvx."""
     import base64 as _b64
+
     base_url = f"https://api.github.com/repos/{owner}/{repo}/contents"
     headers = {"Accept": "application/vnd.github.v3+json"}
     client = _get_http_client()
@@ -412,10 +417,12 @@ async def _detect_github_install_cmd(owner: str, repo: str) -> list[str]:
 
     # Check pyproject.toml → pip/uvx; try to extract script name
     try:
-        r = await client.get(f"{base_url}/pyproject.toml", headers=headers, timeout=TIMEOUT_FETCH_URL)
+        r = await client.get(
+            f"{base_url}/pyproject.toml", headers=headers, timeout=TIMEOUT_FETCH_URL
+        )
         if r.status_code == 200:
             content = _b64.b64decode(r.json().get("content", "")).decode(errors="replace")
-            m = re.search(r'\[project\.scripts\][^\[]*?\n(\S+)\s*=', content)
+            m = re.search(r"\[project\.scripts\][^\[]*?\n(\S+)\s*=", content)
             script = m.group(1).strip("\"'") if m else repo
             return ["uvx", "--from", f"git+https://github.com/{owner}/{repo}", script]
     except Exception:
@@ -434,7 +441,7 @@ class GitHubRegistry(BaseRegistry):
     async def get_server(self, id: str) -> ServerInfo | None:
         if not id.startswith("github:"):
             return None
-        slug = id[len("github:"):]
+        slug = id[len("github:") :]
         if slug.count("/") != 1:
             return None
         owner, repo = slug.split("/", 1)
@@ -472,8 +479,8 @@ class GitHubRegistry(BaseRegistry):
         )
 
 
-_CACHE_TTL_SERVER = 300.0   # 5 minutes — server metadata rarely changes
-_CACHE_TTL_SEARCH = 60.0    # 1 minute — search results can shift
+_CACHE_TTL_SERVER = 300.0  # 5 minutes — server metadata rarely changes
+_CACHE_TTL_SEARCH = 60.0  # 1 minute — search results can shift
 
 # Sentinel for negative caching. We want `get_server("does-not-exist")` to
 # remember the miss for ~5 min so a flurry of repeat lookups doesn't fan out
@@ -486,6 +493,7 @@ class MultiRegistry(BaseRegistry):
 
     def __init__(self):
         from kitsune_mcp.official_registry import OfficialMCPRegistry
+
         self._registries = [
             OfficialMCPRegistry(),
             McpRegistryIO(),
@@ -500,7 +508,9 @@ class MultiRegistry(BaseRegistry):
         self._server_cache: TTLDict[tuple, object] = TTLDict(_CACHE_TTL_SERVER)
         self._search_cache: TTLDict[tuple, list[ServerInfo]] = TTLDict(_CACHE_TTL_SEARCH)
         self.last_registry_errors: dict[str, str] = {}
-        self._reg_names = [type(r).__name__.replace("Registry", "").lower() for r in self._registries]
+        self._reg_names = [
+            type(r).__name__.replace("Registry", "").lower() for r in self._registries
+        ]
 
     def bust_cache(self, server_id: str | None = None) -> None:
         """Invalidate cache. Pass server_id to bust a single entry, or None for all."""
@@ -589,7 +599,7 @@ class MultiRegistry(BaseRegistry):
 
 
 _SOURCE_TIER: dict[str, int] = {
-    "absorbed": 0,   # the user's own config — never outranked by a registry
+    "absorbed": 0,  # the user's own config — never outranked by a registry
     "official": 0,
     "mcpregistry": 1,
     "smithery": 2,
@@ -600,19 +610,19 @@ _SOURCE_TIER: dict[str, int] = {
 }
 
 _STRIP_PREFIXES = re.compile(
-    r'^(?:@[^/]+/)?(?:mcp-server-|server-mcp-|mcp-|server-)?', re.IGNORECASE
+    r"^(?:@[^/]+/)?(?:mcp-server-|server-mcp-|mcp-|server-)?", re.IGNORECASE
 )
 
 
 def _dedup_key(name: str) -> str:
     """Normalize a server name for cross-registry deduplication."""
     core = _STRIP_PREFIXES.sub("", name.lower())
-    return re.sub(r'[^a-z0-9]', '', core)
+    return re.sub(r"[^a-z0-9]", "", core)
 
 
 def _relevance_score(srv: ServerInfo, query: str) -> float:
     """Higher is better. Combines name/description match quality with source tier."""
-    words = re.split(r'\W+', query.lower())
+    words = re.split(r"\W+", query.lower())
     name_lc = srv.name.lower()
     id_lc = srv.id.lower()
     desc_lc = srv.description.lower()
@@ -687,11 +697,13 @@ class AbsorbedRegistry(BaseRegistry):
 
     async def search(self, query: str, limit: int) -> list:
         from kitsune_mcp.gateway import _load_absorbed_servers, _to_server_info
+
         servers = [_to_server_info(a) for a in _load_absorbed_servers()]
         return _simple_search(servers, query, limit)
 
     async def get_server(self, id: str):
         from kitsune_mcp.gateway import _load_absorbed_servers, _to_server_info
+
         for a in _load_absorbed_servers():
             if a.id == id:
                 return _to_server_info(a)
@@ -827,6 +839,7 @@ class McpRegistryIO(_PaginatedListRegistry):
             tools=[],
             token_cost=0,
         )
+
 
 class GlamaRegistry(_PaginatedListRegistry):
     """Glama MCP server directory — no auth required."""

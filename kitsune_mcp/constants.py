@@ -4,6 +4,7 @@
 MCP_PROTOCOL_VERSION = "2025-06-18"
 try:
     import importlib.metadata as _meta
+
     _pkg_version = _meta.version("kitsune-mcp")
     del _meta
 except Exception:
@@ -11,13 +12,13 @@ except Exception:
 MCP_CLIENT_INFO = {"name": "kitsune", "version": _pkg_version}
 del _pkg_version
 
-TIMEOUT_STDIO_INIT    = 60.0
-TIMEOUT_STDIO_TOOL    = 30.0
-TIMEOUT_HTTP_TOOL     = 30.0
+TIMEOUT_STDIO_INIT = 60.0
+TIMEOUT_STDIO_TOOL = 30.0
+TIMEOUT_HTTP_TOOL = 30.0
 TIMEOUT_RESOURCE_LIST = 5.0
 TIMEOUT_RESOURCE_READ = 5.0
-TIMEOUT_TCP_PROBE     = 0.5
-TIMEOUT_FETCH_URL     = 15.0
+TIMEOUT_TCP_PROBE = 0.5
+TIMEOUT_FETCH_URL = 15.0
 # Hard ceiling for any single registry's contribution to MultiRegistry.search.
 # Each underlying registry already passes TIMEOUT_FETCH_URL to its HTTP call,
 # but a hung TCP connect or slow DNS can stall an asyncio.gather past that.
@@ -25,42 +26,51 @@ TIMEOUT_FETCH_URL     = 15.0
 TIMEOUT_REGISTRY_TASK = TIMEOUT_FETCH_URL + 5.0
 
 MAX_RESPONSE_TOKENS = 1500
-MAX_EXPLORE_DESC    = 80
-MAX_INSPECT_DESC    = 120
+MAX_EXPLORE_DESC = 80
+MAX_INSPECT_DESC = 120
 
 CRED_SUFFIXES = (
-    "_KEY", "_TOKEN", "_SECRET", "_API_KEY", "_PASSWORD",
-    "_APIKEY", "_ACCESS_KEY", "_CLIENT_ID", "_CLIENT_SECRET",
+    "_KEY",
+    "_TOKEN",
+    "_SECRET",
+    "_API_KEY",
+    "_PASSWORD",
+    "_APIKEY",
+    "_ACCESS_KEY",
+    "_CLIENT_ID",
+    "_CLIENT_SECRET",
 )
 
 RESOURCE_PRIORITY_KEYWORDS = [["env"], ["param"], ["auth", "key"], ["quick", "setup"], ["config"]]
 MAX_RESOURCE_DOCS = 4
 
-POOL_MAX_IDLE_SECONDS = 3600   # evict processes idle for longer than 1 hour
-POOL_MAX_PROCESSES    = 10     # hard cap on concurrent pool entries
+POOL_MAX_IDLE_SECONDS = 3600  # evict processes idle for longer than 1 hour
+POOL_MAX_PROCESSES = 10  # hard cap on concurrent pool entries
 
 # Docker hardening defaults — applied to every `docker run` unless overridden
 # per call via config. Untrusted MCP images run with a locked-down profile.
 DOCKER_DEFAULT_MEMORY = "512m"
-DOCKER_DEFAULT_PIDS   = 512    # cap process count to blunt fork bombs
+DOCKER_DEFAULT_PIDS = 512  # cap process count to blunt fork bombs
 
 # Base images for sandboxed local servers (shapeshift(sandbox=True) wraps
 # `npx ...` / `uvx ...` in the hardened docker profile using these). Major
 # versions pinned; digests deliberately not — registries patch CVEs in-place.
-SANDBOX_NPM_IMAGE  = "node:22-slim"                                   # provides npx
+SANDBOX_NPM_IMAGE = "node:22-slim"  # provides npx
 SANDBOX_PYPI_IMAGE = "ghcr.io/astral-sh/uv:python3.13-bookworm-slim"  # provides uvx
 
-OFFICIAL_REGISTRY_URL       = "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/servers.json"
+OFFICIAL_REGISTRY_URL = (
+    "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/servers.json"
+)
 OFFICIAL_REGISTRY_CACHE_TTL = 86400  # 24 hours — list rarely changes
 
-MCP_REGISTRY_IO_URL   = "https://registry.modelcontextprotocol.io/v0/servers"
-MCP_REGISTRY_IO_TTL   = 3600   # 1 hour — entries are published formally, stable
-GLAMA_REGISTRY_URL    = "https://glama.ai/api/mcp/v1/servers"
-GLAMA_REGISTRY_TTL    = 3600   # 1 hour
+MCP_REGISTRY_IO_URL = "https://registry.modelcontextprotocol.io/v0/servers"
+MCP_REGISTRY_IO_TTL = 3600  # 1 hour — entries are published formally, stable
+GLAMA_REGISTRY_URL = "https://glama.ai/api/mcp/v1/servers"
+GLAMA_REGISTRY_TTL = 3600  # 1 hour
 
 PROVIDER_PARAM_SUFFIXES = ("provider", "engine", "backend", "service", "mode")
 
-TIMEOUT_PROMPT_LIST  = 5.0
+TIMEOUT_PROMPT_LIST = 5.0
 
 # asyncio.StreamReader buffer limit for stdio MCP subprocesses. Default is
 # 64 KiB which is smaller than the tools/list response of many real servers
@@ -68,6 +78,6 @@ TIMEOUT_PROMPT_LIST  = 5.0
 STDIO_BUFFER_LIMIT = 8 * 1024 * 1024
 
 # Source trust tiers — used to gate warnings in shapeshift / call / connect output
-TRUST_HIGH   = {"official", "absorbed"}  # absorbed = the user's own client config
+TRUST_HIGH = {"official", "absorbed"}  # absorbed = the user's own client config
 TRUST_MEDIUM = {"mcpregistry", "glama", "smithery"}
-TRUST_LOW    = {"npm", "pypi", "github"}
+TRUST_LOW = {"npm", "pypi", "github"}

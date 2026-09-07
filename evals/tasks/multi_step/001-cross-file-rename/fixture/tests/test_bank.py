@@ -1,6 +1,6 @@
 from bank import PaymentGateway
-from bank.registry import make_gateway
 from bank.handlers import process_payment
+from bank.registry import make_gateway
 
 
 def test_direct():

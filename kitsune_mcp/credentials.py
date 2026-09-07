@@ -19,7 +19,7 @@ ENV_PATH = str(_KITSUNE_HOME / ".env")
 _DOTENV_PATHS = [
     Path.home() / ".env",
     Path(os.path.join(os.getcwd(), ".env")),  # project-local, lower priority
-    _KITSUNE_HOME / ".env",                   # canonical store, always wins
+    _KITSUNE_HOME / ".env",  # canonical store, always wins
 ]
 
 # Read at import time (server.py must call load_dotenv() before this import)
@@ -78,8 +78,8 @@ def _smithery_available() -> bool:
 
 
 def _to_env_var(k: str) -> str:
-    s = re.sub(r'([a-z])([A-Z])', r'\1_\2', k)
-    s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', s)
+    s = re.sub(r"([a-z])([A-Z])", r"\1_\2", k)
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", s)
     return s.upper()
 
 
@@ -98,10 +98,10 @@ def _save_to_env(env_var: str, value: str) -> None:
                 found = True
                 break
         if not found:
-            if lines and not lines[-1].endswith('\n'):
-                lines.append('\n')
+            if lines and not lines[-1].endswith("\n"):
+                lines.append("\n")
             lines.append(f"{env_var}={value}\n")
-        with open(ENV_PATH, 'w') as f:
+        with open(ENV_PATH, "w") as f:
             f.writelines(lines)
         os.chmod(ENV_PATH, 0o600)
     except OSError:
@@ -119,7 +119,8 @@ def _resolve_config(credentials: dict, user_config: dict) -> tuple:
     # Only block on real secrets — env vars ending in a credential suffix.
     # Optional config knobs (ENABLED_TOOLS, LOGGING_LEVEL, etc.) are not blockers.
     missing = {
-        k: v for k, v in credentials.items()
+        k: v
+        for k, v in credentials.items()
         if not resolved.get(k) and any(_to_env_var(k).endswith(sfx) for sfx in CRED_SUFFIXES)
     }
     return resolved, missing
@@ -172,7 +173,8 @@ def _credentials_ready(credentials: dict, source: str = "") -> str:
 
     _reload_dotenv()
     missing = [
-        env for k in credentials
+        env
+        for k in credentials
         for env in [_to_env_var(k)]
         if not os.getenv(env) and any(env.endswith(sfx) for sfx in CRED_SUFFIXES)
     ]

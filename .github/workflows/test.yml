@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Weekly upstream canary. This job installs dependencies UNPINNED, so a
+  # scheduled run catches an upstream release breaking us before a user does.
+  # Without it, push/PR-only triggers meant mcp 2.x (which deleted
+  # `mcp.server.fastmcp`) broke `pip install kitsune-mcp` silently in the
+  # registry for weeks — CI had simply not run since the last push.
+  # NOTE: GitHub disables cron triggers in repos with 60 days of no activity.
+  schedule:
+    - cron: "17 6 * * 1"  # Mondays, 06:17 UTC
+  # Lets us re-run the canary on demand without pushing a commit.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,7 +47,12 @@ jobs:
         run: pip install -e ".[dev]" pytest-cov
 
       - name: Lint with ruff
-        run: ruff check server.py server_forge.py kitsune_mcp/ tests/
+        # Whole repo, not just the shipped package: evals/, examples/ and
+        # .github/scripts/ were previously unlinted and had accumulated errors.
+        run: ruff check .
+
+      - name: Check formatting with ruff
+        run: ruff format --check .
 
       # The suite hangs on Linux runners in a way that is unkillable (suspected
       # uninterruptible D-state): SIGKILL, pytest-timeout, job cancellation and even

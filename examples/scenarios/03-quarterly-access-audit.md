@@ -41,26 +41,37 @@ guesses field names, and the final CSV has wrong columns.
 ```python
 # 1. Pull all users from Okta who have the "prod-engineer" group.
 shapeshift("okta-mcp", tools=["list_group_members"])
-okta_users = call("list_group_members", {
-    "group_name": "prod-engineer",
-    "fields": ["email", "status", "lastLogin"],
-})
+okta_users = call(
+    "list_group_members",
+    {
+        "group_name": "prod-engineer",
+        "fields": ["email", "status", "lastLogin"],
+    },
+)
 # → 47 users — structured list of {email, status, lastLogin}
 shiftback()
 
 # 2. Pull AWS IAM users with the "ProdWrite" managed policy attached.
 shapeshift("aws-mcp", tools=["list_entities_for_policy"])
-iam_users = call("list_entities_for_policy", {
-    "policy_arn": "arn:aws:iam::123456789:policy/ProdWrite",
-})
+iam_users = call(
+    "list_entities_for_policy",
+    {
+        "policy_arn": "arn:aws:iam::123456789:policy/ProdWrite",
+    },
+)
 # → 31 users with the policy directly or via group
 shiftback()
 
 # 3. Pull GitHub members of the "infra" team with admin rights.
 shapeshift("github-mcp", tools=["list_team_members"])
-gh_admins = call("list_team_members", {
-    "org": "acme", "team_slug": "infra", "role": "maintainer",
-})
+gh_admins = call(
+    "list_team_members",
+    {
+        "org": "acme",
+        "team_slug": "infra",
+        "role": "maintainer",
+    },
+)
 # → 18 maintainers
 shiftback()
 

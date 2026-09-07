@@ -11,14 +11,14 @@ _session: dict = {
     "explored": {},
     "skills": {},
     "grown": {},
-    "shapeshift_tools": [],      # names of dynamically registered proxy tools
+    "shapeshift_tools": [],  # names of dynamically registered proxy tools
     "shapeshift_resources": [],  # normalized URI strings registered via shapeshift()
-    "shapeshift_prompts": [],    # prompt names registered via shapeshift()
-    "crafted_tools": {},         # name -> {url, method, description, params, headers}
-    "current_form": None,        # server_id currently shapeshifted into
+    "shapeshift_prompts": [],  # prompt names registered via shapeshift()
+    "crafted_tools": {},  # name -> {url, method, description, params, headers}
+    "current_form": None,  # server_id currently shapeshifted into
     "current_form_pool_key": None,  # exact _process_pool key for shiftback(kill=True)
     "current_form_local_install": None,  # {"cmd": [...], "package": str} when source="local"
-    "connections": {},        # persistent connections: {pool_key: {name, command, pid, ...}}
+    "connections": {},  # persistent connections: {pool_key: {name, command, pid, ...}}
     "stats": {
         "total_calls": 0,
         "tokens_sent": 0,
@@ -111,10 +111,14 @@ def _restore_crafted_tools() -> None:
         for pname, pschema in params.items():
             json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
             ptype = _json_type_to_py(json_type)
-            py_params.append(_inspect.Parameter(
-                pname, _inspect.Parameter.KEYWORD_ONLY,
-                default=_inspect.Parameter.empty, annotation=ptype,
-            ))
+            py_params.append(
+                _inspect.Parameter(
+                    pname,
+                    _inspect.Parameter.KEYWORD_ONLY,
+                    default=_inspect.Parameter.empty,
+                    annotation=ptype,
+                )
+            )
         _u, _m = url, method
 
         async def _endpoint_proxy(**kwargs) -> str:

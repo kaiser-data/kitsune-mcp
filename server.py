@@ -22,8 +22,8 @@ from dotenv import load_dotenv
 # (higher priority — wins regardless of CWD so daemon launches work correctly).
 from kitsune_mcp.paths import kitsune_home  # noqa: E402
 
-load_dotenv()                                           # CWD .env (project-local)
-load_dotenv(kitsune_home() / ".env", override=True)     # canonical store wins
+load_dotenv()  # CWD .env (project-local)
+load_dotenv(kitsune_home() / ".env", override=True)  # canonical store wins
 
 from kitsune_mcp.app import mcp  # noqa: E402, F401
 from kitsune_mcp.constants import *  # noqa: E402, F401, F403

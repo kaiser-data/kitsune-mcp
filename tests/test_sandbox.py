@@ -11,6 +11,7 @@ launches through the same hardened `docker run` profile:
 - shapeshift(sandbox=True) wraps the stdio launch; KITSUNE_SANDBOX=all|community
   applies it as a session policy without the per-call flag
 """
+
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -35,7 +36,7 @@ class TestSandboxWrapCmd:
         assert SANDBOX_NPM_IMAGE in wrapped
         # Original command preserved verbatim after the image
         img_idx = wrapped.index(SANDBOX_NPM_IMAGE)
-        assert wrapped[img_idx + 1:] == ["npx", "-y", "some-pkg@1.2.3"]
+        assert wrapped[img_idx + 1 :] == ["npx", "-y", "some-pkg@1.2.3"]
 
     def test_sandbox_tmpfs_is_executable(self):
         """npx/uvx must be able to EXECUTE what they download into /tmp.
@@ -64,7 +65,7 @@ class TestSandboxWrapCmd:
         assert SANDBOX_PYPI_IMAGE in wrapped
         assert "UV_CACHE_DIR=/tmp/.uv-cache" in wrapped
         img_idx = wrapped.index(SANDBOX_PYPI_IMAGE)
-        assert wrapped[img_idx + 1:] == ["uvx", "some-pkg==1.2.3"]
+        assert wrapped[img_idx + 1 :] == ["uvx", "some-pkg==1.2.3"]
 
     def test_npx_gets_writable_home_and_npm_cache_on_tmpfs(self):
         """--read-only rootfs would break npx (writes to ~/.npm) without a
@@ -84,7 +85,7 @@ class TestSandboxWrapCmd:
     def test_server_args_preserved_in_order(self):
         wrapped = sandbox_wrap_cmd(["npx", "-y", "server-fs", "/data", "--verbose"])
         img_idx = wrapped.index(SANDBOX_NPM_IMAGE)
-        assert wrapped[img_idx + 1:] == ["npx", "-y", "server-fs", "/data", "--verbose"]
+        assert wrapped[img_idx + 1 :] == ["npx", "-y", "server-fs", "/data", "--verbose"]
 
     def test_unsupported_launcher_raises(self):
         with pytest.raises(ValueError, match="npx/uvx"):
@@ -102,23 +103,27 @@ class TestSandboxWrapCmd:
 class TestSandboxActive:
     def test_explicit_flag_wins(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_active
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         assert _sandbox_active(True, "official") is True
 
     def test_off_by_default(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_active
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         assert _sandbox_active(False, "npm") is False
 
     @pytest.mark.parametrize("mode", ["1", "true", "all", "docker"])
     def test_all_mode_sandboxes_every_source(self, monkeypatch, mode):
         from kitsune_mcp.tools._state import _sandbox_active
+
         monkeypatch.setenv("KITSUNE_SANDBOX", mode)
         assert _sandbox_active(False, "official") is True
         assert _sandbox_active(False, "npm") is True
 
     def test_community_mode_sandboxes_only_low_trust(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_active
+
         monkeypatch.setenv("KITSUNE_SANDBOX", "community")
         assert _sandbox_active(False, "npm") is True
         assert _sandbox_active(False, "pypi") is True
@@ -128,6 +133,7 @@ class TestSandboxActive:
 class TestSandboxEnvNames:
     def test_declared_credentials_first(self):
         from kitsune_mcp.tools._state import _sandbox_env_names
+
         srv = _srv(credentials={"notion_token": "Notion API token"})
         assert "NOTION_TOKEN" in _sandbox_env_names(srv)
 
@@ -135,12 +141,14 @@ class TestSandboxEnvNames:
         """Undeclared creds (npm/pypi listings declare none) still reach the
         container when the host var shares a name token with the server."""
         from kitsune_mcp.tools._state import _sandbox_env_names
+
         monkeypatch.setenv("EXAMPLECORP_API_KEY", "sk-secret")
         srv = _srv(id="examplecorp-mcp", name="examplecorp-mcp")
         assert "EXAMPLECORP_API_KEY" in _sandbox_env_names(srv)
 
     def test_unrelated_host_vars_excluded(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_env_names
+
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret")
         srv = _srv(id="examplecorp-mcp", name="examplecorp-mcp")
         assert "AWS_SECRET_ACCESS_KEY" not in _sandbox_env_names(srv)
@@ -155,17 +163,35 @@ def _ctx():
     return ctx
 
 
-_PING_TOOL = {"name": "ping", "description": "", "inputSchema": {"type": "object", "properties": {}, "required": []}}
+_PING_TOOL = {
+    "name": "ping",
+    "description": "",
+    "inputSchema": {"type": "object", "properties": {}, "required": []},
+}
 
 
-def _srv(id="some-pkg", name="some-pkg", source="npm", transport="stdio",
-         install_cmd=None, credentials=None, tools=None, url=""):
+def _srv(
+    id="some-pkg",
+    name="some-pkg",
+    source="npm",
+    transport="stdio",
+    install_cmd=None,
+    credentials=None,
+    tools=None,
+    url="",
+):
     if install_cmd is None:
         install_cmd = ["npx", "-y", f"{id}@1.2.3"]
     return ServerInfo(
-        id=id, name=name, description="test server", source=source,
-        transport=transport, url=url, install_cmd=install_cmd,
-        credentials=credentials or {}, tools=tools if tools is not None else [_PING_TOOL],
+        id=id,
+        name=name,
+        description="test server",
+        source=source,
+        transport=transport,
+        url=url,
+        install_cmd=install_cmd,
+        credentials=credentials or {},
+        tools=tools if tools is not None else [_PING_TOOL],
     )
 
 
@@ -177,6 +203,7 @@ def _fake_transport_factory(captured_cmds: list):
         t.list_resources = AsyncMock(return_value=[])
         t.list_prompts = AsyncMock(return_value=[])
         return t
+
     return factory
 
 
@@ -185,16 +212,20 @@ class TestShapeshiftSandbox:
     async def _mount(self, srv, monkeypatch, docker="/usr/local/bin/docker", **kwargs):
         from kitsune_mcp.tools import _state, shapeshift
         from kitsune_mcp.tools._state import _registry
+
         monkeypatch.delenv("KITSUNE_TRUST", raising=False)
         captured: list = []
         try:
-            with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-                 patch.object(_state, "PersistentStdioTransport", _fake_transport_factory(captured)), \
-                 patch.object(_state, "_probe_requirements", return_value={"missing_env": []}), \
-                 patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value=docker):
+            with (
+                patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+                patch.object(_state, "PersistentStdioTransport", _fake_transport_factory(captured)),
+                patch.object(_state, "_probe_requirements", return_value={"missing_env": []}),
+                patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value=docker),
+            ):
                 result = await shapeshift(srv.id, _ctx(), **kwargs)
         finally:
             from kitsune_mcp.tools._state import _do_shed
+
             _do_shed()
         return result, captured
 
@@ -254,15 +285,18 @@ class TestShapeshiftSandbox:
 
     async def test_sandbox_without_docker_fails_fast(self, monkeypatch):
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
-        result, captured = await self._mount(_srv(), monkeypatch, docker=None, confirm=True, sandbox=True)
+        result, captured = await self._mount(
+            _srv(), monkeypatch, docker=None, confirm=True, sandbox=True
+        )
         assert result.startswith("❌")
         assert "Docker" in result
         assert not captured  # no process was launched
 
     async def test_sandbox_on_http_only_server_fails_with_guidance(self, monkeypatch):
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
-        srv = _srv(source="official", transport="http", install_cmd=[],
-                   url="https://mcp.example.com")
+        srv = _srv(
+            source="official", transport="http", install_cmd=[], url="https://mcp.example.com"
+        )
         result, captured = await self._mount(srv, monkeypatch, sandbox=True)
         assert result.startswith("❌")
         assert "source" in result  # points at source='local' as the way to force stdio
@@ -305,12 +339,15 @@ class TestShapeshiftSandbox:
         monkeypatch.setenv("KITSUNE_TRUST", "community")  # skip gate; creds declared
         from kitsune_mcp.tools import _state, shapeshift
         from kitsune_mcp.tools._state import _registry
+
         captured: list = []
         try:
-            with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-                 patch.object(_state, "PersistentStdioTransport", _fake_transport_factory(captured)), \
-                 patch.object(_state, "_probe_requirements", return_value={"missing_env": []}), \
-                 patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/bin/docker"):
+            with (
+                patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+                patch.object(_state, "PersistentStdioTransport", _fake_transport_factory(captured)),
+                patch.object(_state, "_probe_requirements", return_value={"missing_env": []}),
+                patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/bin/docker"),
+            ):
                 result = await shapeshift(srv.id, _ctx(), sandbox=True)
         finally:
             _state._do_shed()

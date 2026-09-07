@@ -4,7 +4,7 @@ import re
 
 from kitsune_mcp.adapters import Adapter, _register
 
-_OWNER_REPO_RE = re.compile(r'\b([a-zA-Z0-9_-]+)/([a-zA-Z0-9_.-]+)\b')
+_OWNER_REPO_RE = re.compile(r"\b([a-zA-Z0-9_-]+)/([a-zA-Z0-9_.-]+)\b")
 
 _SETUP_HINTS: dict[str, str] = {
     "GITHUB_PERSONAL_ACCESS_TOKEN": (
@@ -19,12 +19,14 @@ _SETUP_HINTS: dict[str, str] = {
 
 class CodeOpsAdapter(Adapter):
     CATEGORY = "code_ops"
-    KNOWN_IDS = frozenset({
-        "server-github",
-        "github-mcp-server",
-        "server-gitlab",
-        "gitlab-mcp-server",
-    })
+    KNOWN_IDS = frozenset(
+        {
+            "server-github",
+            "github-mcp-server",
+            "server-gitlab",
+            "gitlab-mcp-server",
+        }
+    )
 
     def infer_args(self, task: str, tool_schema: dict) -> dict | None:
         """Extract owner + repo from task when tool requires them as separate params."""

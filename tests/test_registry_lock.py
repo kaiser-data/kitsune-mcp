@@ -1,4 +1,5 @@
 """Tests for _registry_lock — concurrent shapeshift/shiftback safety."""
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,12 +22,14 @@ def _reset_session():
 
 # --- Lock exists and is an asyncio.Lock ---
 
+
 def test_registry_lock_exists():
     assert _registry_lock is not None
     assert isinstance(_registry_lock, asyncio.Lock)
 
 
 # --- Concurrent shapeshifts are serialised ---
+
 
 @pytest.mark.asyncio
 async def test_concurrent_shapeshifts_are_serialised():
@@ -55,14 +58,16 @@ async def test_concurrent_shapeshifts_are_serialised():
     )
 
     # With the lock, one shapeshift completes fully before the other starts
-    assert order.index("server-a:shed") < order.index("server-a:register") or \
-           order.index("server-b:shed") < order.index("server-b:register")
+    assert order.index("server-a:shed") < order.index("server-a:register") or order.index(
+        "server-b:shed"
+    ) < order.index("server-b:register")
 
     # The winner runs completely before the loser starts
     a_shed, a_reg = order.index("server-a:shed"), order.index("server-a:register")
     b_shed, b_reg = order.index("server-b:shed"), order.index("server-b:register")
-    assert a_reg < b_shed or b_reg < a_shed, \
+    assert a_reg < b_shed or b_reg < a_shed, (
         f"Interleaved: {order} — lock did not serialise the operations"
+    )
 
     # Final session state is consistent with the last winner
     assert session["current_form"] in ("server-a", "server-b")
@@ -73,6 +78,7 @@ async def test_concurrent_shapeshifts_are_serialised():
 
 
 # --- shiftback sees consistent state ---
+
 
 @pytest.mark.asyncio
 async def test_shiftback_sees_post_shapeshift_tools():
@@ -101,6 +107,7 @@ async def test_shiftback_sees_post_shapeshift_tools():
 
 
 # --- source='local' + HTTP-only returns error WITHOUT shedding current form ---
+
 
 @pytest.mark.asyncio
 async def test_local_http_only_error_does_not_shed_current_form():

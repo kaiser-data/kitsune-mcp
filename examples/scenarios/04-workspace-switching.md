@@ -49,7 +49,7 @@ A user-hostile path. The agent couldn't do this on its own.
 
 ```python
 # 1. Authenticate as the personal workspace.
-auth("notion-hosted")            # opens browser → pick personal workspace
+auth("notion-hosted")  # opens browser → pick personal workspace
 # → Authenticated 'notion-hosted'. Token: a1b2c3d4...
 #   Next: shapeshift("notion-hosted")
 
@@ -64,16 +64,19 @@ auth("notion-hosted", "logout")
 #   Next: auth('notion-hosted') to re-authenticate.
 
 # 3. Authenticate again — this time the browser flow picks the team workspace.
-auth("notion-hosted")            # browser → pick "acme team" workspace
+auth("notion-hosted")  # browser → pick "acme team" workspace
 # → Authenticated 'notion-hosted'. Token: e5f6g7h8...
 
 # 4. Mount again and write into the team space.
 shapeshift("notion-hosted", tools=["create_page"])
-call("create_page", {
-    "parent_id": "<team-strategy-page-id>",
-    "title": "Q2 strategy — distilled",
-    "content": polish(content),     # model-side text transform
-})
+call(
+    "create_page",
+    {
+        "parent_id": "<team-strategy-page-id>",
+        "title": "Q2 strategy — distilled",
+        "content": polish(content),  # model-side text transform
+    },
+)
 shiftback()
 ```
 

@@ -34,8 +34,12 @@ from kitsune_mcp.utils import (
 @mcp.tool()
 async def call(
     tool_name: str,
-    server_id: Annotated[str | None, Field(description="Defaults to the currently shapeshifted form when omitted")] = None,
-    arguments: Annotated[dict | None, Field(description="Tool arguments matching its inputSchema (default {})")] = None,
+    server_id: Annotated[
+        str | None, Field(description="Defaults to the currently shapeshifted form when omitted")
+    ] = None,
+    arguments: Annotated[
+        dict | None, Field(description="Tool arguments matching its inputSchema (default {})")
+    ] = None,
     config: dict | None = None,
 ) -> str:
     """Invoke a tool on an MCP server. Returns the tool's response as text.
@@ -165,7 +169,11 @@ async def test(server_id: str, level: str = "basic") -> str:
         checks.append("✅ Registry lookup found server (+15)")
     else:
         checks.append("❌ Server not found in registry (0)")
-        return f"Score: {score}/100 (Poor)\n\n" + "\n".join(checks) + "\nGrade: Poor — server not found."
+        return (
+            f"Score: {score}/100 (Poor)\n\n"
+            + "\n".join(checks)
+            + "\nGrade: Poor — server not found."
+        )
 
     # Check 2: Known transport type (5 pts)
     if srv.transport in ("http", "stdio"):
@@ -200,13 +208,12 @@ async def test(server_id: str, level: str = "basic") -> str:
 
     # Check 5: Tool schemas valid (10 pts)
     if tools:
-        valid_schemas = sum(
-            1 for t in tools
-            if t.get("name") and t.get("inputSchema")
-        )
+        valid_schemas = sum(1 for t in tools if t.get("name") and t.get("inputSchema"))
         schema_score = min(10, int(10 * valid_schemas / len(tools)))
         score += schema_score
-        checks.append(f"✅ Schema quality: {valid_schemas}/{len(tools)} tools valid (+{schema_score})")
+        checks.append(
+            f"✅ Schema quality: {valid_schemas}/{len(tools)} tools valid (+{schema_score})"
+        )
     else:
         checks.append("⚠️  No tools to check schemas (0)")
 
@@ -216,7 +223,9 @@ async def test(server_id: str, level: str = "basic") -> str:
         score += 10
         checks.append("✅ No name collisions with Kitsune base tools (+10)")
     else:
-        checks.append(f"⚠️  Name collisions: {', '.join(collisions)} (0) — will be prefixed on shapeshift()")
+        checks.append(
+            f"⚠️  Name collisions: {', '.join(collisions)} (0) — will be prefixed on shapeshift()"
+        )
 
     # Check 7: Live tool calls (full mode only, 10 pts per tool, max 5 tools)
     if level == "full" and tools:
@@ -236,7 +245,8 @@ async def test(server_id: str, level: str = "basic") -> str:
 
             try:
                 result = await asyncio.wait_for(
-                    transport_obj.execute(tname, dummy_args, resolved_config), timeout=TIMEOUT_STDIO_TOOL
+                    transport_obj.execute(tname, dummy_args, resolved_config),
+                    timeout=TIMEOUT_STDIO_TOOL,
                 )
                 if "error" not in result.lower() and "failed" not in result.lower()[:50]:
                     call_score += 10
@@ -263,7 +273,9 @@ async def test(server_id: str, level: str = "basic") -> str:
 
 
 @mcp.tool()
-async def bench(server_id: str, tool_name: str, args: dict | None = None, iterations: int = 5) -> str:
+async def bench(
+    server_id: str, tool_name: str, args: dict | None = None, iterations: int = 5
+) -> str:
     """Benchmark tool latency — p50, p95, min, max ms. iterations: 1–20."""
     if args is None:
         args = {}
@@ -290,7 +302,10 @@ async def bench(server_id: str, tool_name: str, args: dict | None = None, iterat
             )
             elapsed_ms = (time.monotonic() - t0) * 1000
             _r = result.lower()
-            if any(kw in _r for kw in ("error", "auth failed", "failed to connect", "timeout connecting")):
+            if any(
+                kw in _r
+                for kw in ("error", "auth failed", "failed to connect", "timeout connecting")
+            ):
                 errors.append(f"call {i + 1}: tool returned error")
             elif i == 0 and isinstance(transport_obj, _state.PersistentStdioTransport):
                 boot_ms = elapsed_ms  # exclude boot from latency stats

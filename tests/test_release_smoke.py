@@ -5,6 +5,7 @@ being imported by transport.py but not committed/published, which causes
 ImportError at startup. CI runs pytest before publish, so any missing-file
 import error fails the build before reaching PyPI/npm.
 """
+
 import importlib
 
 
@@ -12,6 +13,7 @@ def test_server_module_imports():
     """server.py — the actual entry point — must import without ImportError."""
     # If this fails in CI, look for newly-untracked .py files in kitsune_mcp/
     import server
+
     assert hasattr(server, "mcp")
 
 
@@ -51,6 +53,7 @@ def test_all_kitsune_modules_import():
 def test_oauth_exports_required_symbols():
     """transport.py imports specific names from oauth — assert they exist."""
     from kitsune_mcp import oauth
+
     assert hasattr(oauth, "ensure_token")
     assert hasattr(oauth, "delete_tokens")
     assert hasattr(oauth, "_origin")

@@ -7,6 +7,7 @@ guide), stdio error paths, persistent-transport reconnect branches
 (broken pipe mid-write, death while waiting, .env-revision respawn),
 prompts/list + prompts/get, pool atexit cleanup, and _ping on a dead entry.
 """
+
 import json
 import os
 import sys
@@ -53,6 +54,7 @@ def _clean_state(monkeypatch):
 # Pure helpers
 # ---------------------------------------------------------------------------
 
+
 class TestSmitheryConnId:
     def test_sanitizes_and_prefixes(self):
         assert _smithery_conn_id("Test-Org/My Server") == "kitsune-test-org-my-server"
@@ -81,6 +83,7 @@ class TestBuildMcpUrl:
 # _SmitheryAuth
 # ---------------------------------------------------------------------------
 
+
 class TestSmitheryAuthNamespace:
     async def test_no_api_key_returns_none(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
@@ -101,9 +104,7 @@ class TestSmitheryAuthNamespace:
     async def test_http_error_returns_none(self, monkeypatch):
         monkeypatch.setenv("SMITHERY_API_KEY", "test-key")
         with respx.mock:
-            respx.get("https://api.smithery.ai/namespaces").mock(
-                return_value=httpx.Response(500)
-            )
+            respx.get("https://api.smithery.ai/namespaces").mock(return_value=httpx.Response(500))
             assert await _smithery_auth.get_namespace() is None
 
     async def test_empty_namespace_list_returns_none(self, monkeypatch):
@@ -137,9 +138,7 @@ class TestSmitheryAuthToken:
     async def test_http_error_returns_empty(self, monkeypatch):
         monkeypatch.setenv("SMITHERY_API_KEY", "test-key")
         with respx.mock:
-            respx.post("https://api.smithery.ai/tokens").mock(
-                return_value=httpx.Response(403)
-            )
+            respx.post("https://api.smithery.ai/tokens").mock(return_value=httpx.Response(403))
             assert await _smithery_auth.get_token() == ""
 
     def test_reset_clears_all_state(self):
@@ -157,6 +156,7 @@ class TestSmitheryAuthToken:
 # ---------------------------------------------------------------------------
 # _ensure_smithery_connection
 # ---------------------------------------------------------------------------
+
 
 class TestEnsureSmitheryConnection:
     URL = "https://api.smithery.ai/connect/ns/kitsune-x"
@@ -199,6 +199,7 @@ class TestEnsureSmitheryConnection:
 # ---------------------------------------------------------------------------
 # HTTPSSETransport._connect_endpoint (Smithery-mediated path)
 # ---------------------------------------------------------------------------
+
 
 class TestConnectEndpointSmithery:
     def _transport(self):
@@ -274,7 +275,11 @@ class TestHTTPExecuteErrorPaths:
         init_ok = {"jsonrpc": "2.0", "id": 1, "result": {}}
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), httpx.Response(200, text="")]
+                side_effect=[
+                    _sse(init_ok, "sid"),
+                    httpx.Response(202),
+                    httpx.Response(200, text=""),
+                ]
             )
             result = await t.execute("tool", {}, {})
         assert "Empty response" in result
@@ -301,12 +306,8 @@ class TestHTTPExecuteErrorPaths:
             patcher,
             respx.mock,
             patch.object(tp, "SmitheryRegistry", MagicMock(return_value=registry)),
-            patch.object(
-                tp, "_resolve_config", MagicMock(return_value=({}, ["apiKey"]))
-            ),
-            patch.object(
-                tp, "_credentials_guide", MagicMock(return_value="NEEDS apiKey")
-            ) as guide,
+            patch.object(tp, "_resolve_config", MagicMock(return_value=({}, ["apiKey"]))),
+            patch.object(tp, "_credentials_guide", MagicMock(return_value="NEEDS apiKey")) as guide,
         ):
             respx.post(ENDPOINT).mock(return_value=httpx.Response(401))
             result = await t.execute("tool", {}, {})
@@ -330,6 +331,7 @@ class TestHTTPExecuteErrorPaths:
 # ---------------------------------------------------------------------------
 # HTTPSSETransport.list_tools
 # ---------------------------------------------------------------------------
+
 
 class TestHTTPListTools:
     async def test_connect_failure_returns_empty(self):
@@ -377,10 +379,10 @@ class TestHTTPListTools:
         ):
             respx.post(url).mock(
                 side_effect=[
-                    httpx.Response(401),               # first init → PermissionError
-                    _sse(init_ok, "sid"),              # retry init
-                    httpx.Response(202),               # initialized notify
-                    _sse(tools),                       # tools/list
+                    httpx.Response(401),  # first init → PermissionError
+                    _sse(init_ok, "sid"),  # retry init
+                    httpx.Response(202),  # initialized notify
+                    _sse(tools),  # tools/list
                 ]
             )
             result = await t.list_tools()
@@ -415,6 +417,7 @@ class TestHTTPListTools:
 # StdioTransport error paths
 # ---------------------------------------------------------------------------
 
+
 class TestStdioErrorPaths:
     async def test_generic_spawn_exception(self):
         with patch("asyncio.create_subprocess_exec", AsyncMock(side_effect=RuntimeError("ulimit"))):
@@ -441,10 +444,12 @@ class TestStdioErrorPaths:
 
     async def test_tool_error_response(self):
         proc = make_mock_process()
-        proc.stdout = make_stdout_with_responses([
-            {"jsonrpc": "2.0", "id": 1, "result": {}},
-            {"jsonrpc": "2.0", "id": 2, "error": {"message": "tool exploded"}},
-        ])
+        proc.stdout = make_stdout_with_responses(
+            [
+                {"jsonrpc": "2.0", "id": 1, "result": {}},
+                {"jsonrpc": "2.0", "id": 2, "error": {"message": "tool exploded"}},
+            ]
+        )
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
             result = await StdioTransport(["mycmd"]).execute("tool", {}, {})
         assert "Tool error: tool exploded" in result
@@ -460,6 +465,7 @@ class TestStdioErrorPaths:
 # ---------------------------------------------------------------------------
 # PersistentStdioTransport reconnect + error paths
 # ---------------------------------------------------------------------------
+
 
 def _make_entry(proc=None) -> _PoolEntry:
     return _PoolEntry(
@@ -707,6 +713,7 @@ class TestPersistentPromptMethods:
 # Pool lifecycle helpers
 # ---------------------------------------------------------------------------
 
+
 class TestKillAllPoolProcesses:
     def test_kills_every_entry_and_clears_pool(self):
         e1, e2 = _make_entry(), _make_entry()
@@ -746,6 +753,7 @@ class TestPing:
 # Protocol version negotiation (MCP-Protocol-Version header)
 # ---------------------------------------------------------------------------
 
+
 class TestProtocolVersionNegotiation:
     def test_negotiated_version_extracted_from_init_response(self):
         msg = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05"}}
@@ -758,7 +766,11 @@ class TestProtocolVersionNegotiation:
     async def test_execute_echoes_server_version_in_header(self):
         t, patcher = _patched_transport()
         init_ok = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-03-26"}}
-        tool_ok = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "hi"}]}}
+        tool_ok = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": "hi"}]},
+        }
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
                 side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tool_ok)]
@@ -790,6 +802,7 @@ class TestProtocolVersionNegotiation:
 # ---------------------------------------------------------------------------
 # WebSocketTransport — non-JSON reply
 # ---------------------------------------------------------------------------
+
 
 class TestWebSocketNonJson:
     async def test_non_json_reply_returned_as_string(self):

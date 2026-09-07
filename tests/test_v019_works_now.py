@@ -1,4 +1,5 @@
 """Tests for _works_now_score() — Phase 4 of v0.19."""
+
 import os
 import sys
 
@@ -7,9 +8,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def _srv(**kwargs):
     from kitsune_mcp.registry import ServerInfo
+
     defaults = dict(
-        id="test-server", name="Test Server", description="", source="official",
-        transport="stdio", url="", install_cmd=[], credentials={}, tools=[], token_cost=0,
+        id="test-server",
+        name="Test Server",
+        description="",
+        source="official",
+        transport="stdio",
+        url="",
+        install_cmd=[],
+        credentials={},
+        tools=[],
+        token_cost=0,
     )
     defaults.update(kwargs)
     return ServerInfo(**defaults)
@@ -18,6 +28,7 @@ def _srv(**kwargs):
 class TestWorksNowScore:
     def _fn(self):
         from kitsune_mcp.registry import _works_now_score
+
         return _works_now_score
 
     def test_zero_config_official_stdio_is_highest(self):
@@ -27,10 +38,13 @@ class TestWorksNowScore:
 
     def test_missing_creds_lowers_score(self):
         # Key must end with a CRED_SUFFIX so _resolve_config treats it as blocking
-        score_missing = self._fn()(_srv(
-            source="official", transport="stdio",
-            credentials={"VERY_UNLIKELY_XYZ_API_KEY": "required"},
-        ))
+        score_missing = self._fn()(
+            _srv(
+                source="official",
+                transport="stdio",
+                credentials={"VERY_UNLIKELY_XYZ_API_KEY": "required"},
+            )
+        )
         score_no_creds = self._fn()(_srv(source="official", transport="stdio", credentials={}))
         assert score_missing < score_no_creds
 
@@ -64,11 +78,14 @@ class TestWorksNowScore:
         assert score <= 1.0
 
     def test_score_non_negative(self):
-        score = self._fn()(_srv(
-            source="npm", transport="http",
-            credentials={"SOME_UNLIKELY_XYZ_API_KEY": "required"},
-            token_cost=10000,
-        ))
+        score = self._fn()(
+            _srv(
+                source="npm",
+                transport="http",
+                credentials={"SOME_UNLIKELY_XYZ_API_KEY": "required"},
+                token_cost=10000,
+            )
+        )
         assert score >= 0.0
 
     def test_unknown_source_gets_zero_tier_bonus(self):
@@ -87,10 +104,12 @@ class TestCandidateSortUsesWorksNow:
 
     def test_works_now_score_exported_from_registry(self):
         from kitsune_mcp.registry import _works_now_score
+
         assert callable(_works_now_score)
 
     def test_official_stdio_sorts_before_smithery_http(self):
         from kitsune_mcp.registry import _works_now_score
+
         official = _srv(source="official", transport="stdio", credentials={})
         smithery_http = _srv(source="smithery", transport="http", credentials={})
         ranked = sorted([smithery_http, official], key=_works_now_score, reverse=True)

@@ -8,6 +8,7 @@ chat-forwarders, and simulation servers. Three-part fix:
 3. If no candidate matches, auto() returns a search()/server_hint suggestion
    instead of silently picking a wrong server.
 """
+
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,10 +20,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def _srv(**kwargs):
     from kitsune_mcp.registry import ServerInfo
+
     defaults = dict(
-        id="test-server", name="Test Server", description="", source="official",
-        transport="stdio", url="", install_cmd=["npx", "-y", "test-server"],
-        credentials={}, tools=[], token_cost=0,
+        id="test-server",
+        name="Test Server",
+        description="",
+        source="official",
+        transport="stdio",
+        url="",
+        install_cmd=["npx", "-y", "test-server"],
+        credentials={},
+        tools=[],
+        token_cost=0,
     )
     defaults.update(kwargs)
     return ServerInfo(**defaults)
@@ -32,9 +41,11 @@ def _srv(**kwargs):
 # Part 1 — _search_query_for strips generic intent verbs
 # ---------------------------------------------------------------------------
 
+
 class TestQueryStripsIntentVerbs:
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _search_query_for
+
         return _search_query_for
 
     def test_issue_repro_query(self):
@@ -59,9 +70,11 @@ class TestQueryStripsIntentVerbs:
 # Part 2 — _intent_verb / _matches_intent
 # ---------------------------------------------------------------------------
 
+
 class TestIntentVerb:
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _intent_verb
+
         return _intent_verb
 
     def test_detects_search(self):
@@ -82,6 +95,7 @@ class TestIntentVerb:
 class TestMatchesIntent:
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _matches_intent
+
         return _matches_intent
 
     def test_matches_on_description(self):
@@ -94,7 +108,8 @@ class TestMatchesIntent:
 
     def test_fetch_server_does_not_match_search(self):
         srv = _srv(
-            id="fetch", name="Fetch",
+            id="fetch",
+            name="Fetch",
             description="Web content fetching and conversion",
             tools=[{"name": "fetch", "inputSchema": {}}],
         )
@@ -129,15 +144,29 @@ class TestAutoCapabilityFilter:
         """The #34 failure: official+stdio fetch tool outranked the actual
         search server. The capability filter must drop the fetch server."""
         fetcher = _srv(
-            id="fetch", name="Fetch", source="official", transport="stdio",
+            id="fetch",
+            name="Fetch",
+            source="official",
+            transport="stdio",
             description="Web content fetching and markdown conversion",
-            tools=[{"name": "fetch", "inputSchema": {
-                "type": "object", "properties": {"url": {"type": "string"}},
-                "required": ["url"]}}],
+            tools=[
+                {
+                    "name": "fetch",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"],
+                    },
+                }
+            ],
         )
         searcher = _srv(
-            id="exa", name="Exa", source="smithery", transport="http",
-            description="Fast, intelligent web search", tools=[_SEARCH_TOOL],
+            id="exa",
+            name="Exa",
+            source="smithery",
+            transport="http",
+            description="Fast, intelligent web search",
+            tools=[_SEARCH_TOOL],
         )
         called: dict = {}
 
@@ -148,11 +177,14 @@ class TestAutoCapabilityFilter:
         transport = MagicMock()
         transport.execute = fake_execute
 
-        with patch("kitsune_mcp.tools._state._registry") as reg, \
-             patch("kitsune_mcp.tools._state._get_transport", return_value=transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as reg,
+            patch("kitsune_mcp.tools._state._get_transport", return_value=transport),
+        ):
             reg.search = AsyncMock(return_value=[fetcher, searcher])
             reg.get_server = AsyncMock(return_value=searcher)
             from kitsune_mcp.tools import auto
+
             result = await auto(task="search the web for latest mcp server releases")
 
         # The fetch server must never be chosen for a search task
@@ -163,7 +195,8 @@ class TestAutoCapabilityFilter:
     async def test_no_matching_candidate_refuses_with_suggestion(self):
         """No search-capable candidate → guidance, not a random server."""
         fetcher = _srv(
-            id="fetch", name="Fetch",
+            id="fetch",
+            name="Fetch",
             description="Web content fetching",
             tools=[{"name": "fetch", "inputSchema": {}}],
         )
@@ -172,11 +205,14 @@ class TestAutoCapabilityFilter:
         transport = MagicMock()
         transport.execute = AsyncMock(return_value="should never run")
 
-        with patch("kitsune_mcp.tools._state._registry") as reg, \
-             patch("kitsune_mcp.tools._state._get_transport", return_value=transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as reg,
+            patch("kitsune_mcp.tools._state._get_transport", return_value=transport),
+        ):
             reg.search = AsyncMock(return_value=[fetcher, git])
             reg.get_server = AsyncMock(return_value=None)
             from kitsune_mcp.tools import auto
+
             result = await auto(task="search for python frameworks")
 
         assert "Blocked" in result
@@ -188,20 +224,34 @@ class TestAutoCapabilityFilter:
     async def test_no_intent_verb_skips_filter(self):
         """Tasks without an intent verb keep the old behavior untouched."""
         clock = _srv(
-            id="time-server", name="Time", description="Timezone conversions",
-            tools=[{"name": "get_time", "inputSchema": {
-                "type": "object", "properties": {"timezone": {"type": "string"}},
-                "required": ["timezone"]}}],
+            id="time-server",
+            name="Time",
+            description="Timezone conversions",
+            tools=[
+                {
+                    "name": "get_time",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"timezone": {"type": "string"}},
+                        "required": ["timezone"],
+                    },
+                }
+            ],
         )
         transport = MagicMock()
         transport.execute = AsyncMock(return_value='{"time": "12:00"}')
 
-        with patch("kitsune_mcp.tools._state._registry") as reg, \
-             patch("kitsune_mcp.tools._state._get_transport", return_value=transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as reg,
+            patch("kitsune_mcp.tools._state._get_transport", return_value=transport),
+        ):
             reg.search = AsyncMock(return_value=[clock])
             reg.get_server = AsyncMock(return_value=clock)
             from kitsune_mcp.tools import auto
-            result = await auto(task="what time is it in Tokyo", arguments={"timezone": "Asia/Tokyo"})
+
+            result = await auto(
+                task="what time is it in Tokyo", arguments={"timezone": "Asia/Tokyo"}
+            )
 
         assert "12:00" in result
 
@@ -209,21 +259,34 @@ class TestAutoCapabilityFilter:
     async def test_server_hint_bypasses_filter(self):
         """A pinned server is the caller's explicit choice — never filtered."""
         fetcher = _srv(
-            id="fetch", name="Fetch", description="Web content fetching",
-            tools=[{"name": "fetch", "inputSchema": {
-                "type": "object", "properties": {"url": {"type": "string"}},
-                "required": ["url"]}}],
+            id="fetch",
+            name="Fetch",
+            description="Web content fetching",
+            tools=[
+                {
+                    "name": "fetch",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"],
+                    },
+                }
+            ],
         )
         transport = MagicMock()
         transport.execute = AsyncMock(return_value="fetched")
 
-        with patch("kitsune_mcp.tools._state._registry") as reg, \
-             patch("kitsune_mcp.tools._state._get_transport", return_value=transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as reg,
+            patch("kitsune_mcp.tools._state._get_transport", return_value=transport),
+        ):
             reg.search = AsyncMock(return_value=[])
             reg.get_server = AsyncMock(return_value=fetcher)
             from kitsune_mcp.tools import auto
+
             result = await auto(
-                task="search the web", server_hint="fetch",
+                task="search the web",
+                server_hint="fetch",
                 arguments={"url": "https://example.com"},
             )
 

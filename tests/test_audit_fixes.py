@@ -10,6 +10,7 @@ import pytest
 # SSRF via redirect
 # ---------------------------------------------------------------------------
 
+
 class TestSSRFRedirectGuard:
     """_ssrf_safe_request() must block redirects that land on private IPs."""
 
@@ -21,6 +22,7 @@ class TestSSRFRedirectGuard:
             return_value=httpx.Response(301, headers={"location": "http://127.0.0.1/secret"})
         )
         from kitsune_mcp.utils import _ssrf_safe_request
+
         with pytest.raises(ValueError, match="Blocked"):
             await _ssrf_safe_request("GET", "https://example.com/redir")
 
@@ -28,9 +30,12 @@ class TestSSRFRedirectGuard:
     async def test_redirect_to_metadata_endpoint_blocked(self, respx_mock, monkeypatch):
         monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
         respx_mock.get("https://public.example.com/api").mock(
-            return_value=httpx.Response(302, headers={"location": "https://169.254.169.254/meta-data"})
+            return_value=httpx.Response(
+                302, headers={"location": "https://169.254.169.254/meta-data"}
+            )
         )
         from kitsune_mcp.utils import _ssrf_safe_request
+
         with pytest.raises(ValueError, match="Blocked"):
             await _ssrf_safe_request("GET", "https://public.example.com/api")
 
@@ -38,12 +43,15 @@ class TestSSRFRedirectGuard:
     async def test_safe_redirect_is_followed(self, respx_mock, monkeypatch):
         monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
         respx_mock.get("https://short.example.com/abc").mock(
-            return_value=httpx.Response(301, headers={"location": "https://long.example.com/full-path"})
+            return_value=httpx.Response(
+                301, headers={"location": "https://long.example.com/full-path"}
+            )
         )
         respx_mock.get("https://long.example.com/full-path").mock(
             return_value=httpx.Response(200, text="content")
         )
         from kitsune_mcp.utils import _ssrf_safe_request
+
         r = await _ssrf_safe_request("GET", "https://short.example.com/abc")
         assert r.status_code == 200
         assert r.text == "content"
@@ -54,10 +62,9 @@ class TestSSRFRedirectGuard:
         respx_mock.get("https://example.com/redir").mock(
             return_value=httpx.Response(301, headers={"location": "http://127.0.0.1/ok"})
         )
-        respx_mock.get("http://127.0.0.1/ok").mock(
-            return_value=httpx.Response(200, text="allowed")
-        )
+        respx_mock.get("http://127.0.0.1/ok").mock(return_value=httpx.Response(200, text="allowed"))
         from kitsune_mcp.utils import _ssrf_safe_request
+
         r = await _ssrf_safe_request("GET", "https://example.com/redir")
         assert r.status_code == 200
 
@@ -69,6 +76,7 @@ class TestSSRFRedirectGuard:
         )
         with patch("kitsune_mcp.tools.exec._try_axonmcp", new=AsyncMock(return_value=None)):
             from kitsune_mcp.tools.exec import fetch
+
             result = await fetch("https://example.com/")
         assert "Blocked" in result or "Failed" in result
 
@@ -82,6 +90,7 @@ class TestSSRFRedirectGuard:
             return_value=httpx.Response(200, text="ok")
         )
         from kitsune_mcp.utils import _ssrf_safe_request
+
         r = await _ssrf_safe_request("POST", "https://api.example.com/submit", json_body={"x": 1})
         assert r.status_code == 200
 
@@ -90,21 +99,21 @@ class TestSSRFRedirectGuard:
 # SSE multi-line event parsing
 # ---------------------------------------------------------------------------
 
+
 class TestParseSse:
     def test_single_data_line(self):
         from kitsune_mcp.transport import _parse_sse
+
         text = 'data: {"id": 1, "result": {"tools": []}}\n'
         result = _parse_sse(text)
         assert result == {"id": 1, "result": {"tools": []}}
 
     def test_multi_line_data_concatenated(self):
         from kitsune_mcp.transport import _parse_sse
+
         # SSE servers may spread a JSON object across multiple data: lines by
         # breaking at field boundaries (never mid-string — that would be invalid JSON).
-        text = (
-            'data: {"id": 1,\n'
-            'data:  "result": {"tools": []}}\n'
-        )
+        text = 'data: {"id": 1,\ndata:  "result": {"tools": []}}\n'
         result = _parse_sse(text)
         assert result is not None
         assert result["id"] == 1
@@ -112,20 +121,20 @@ class TestParseSse:
 
     def test_multiple_events_returns_first_valid(self):
         from kitsune_mcp.transport import _parse_sse
-        text = (
-            "data: not-json\n\n"
-            'data: {"id": 2, "result": {}}\n\n'
-        )
+
+        text = 'data: not-json\n\ndata: {"id": 2, "result": {}}\n\n'
         result = _parse_sse(text)
         assert result == {"id": 2, "result": {}}
 
     def test_no_data_lines_returns_none(self):
         from kitsune_mcp.transport import _parse_sse
+
         assert _parse_sse("event: ping\n") is None
         assert _parse_sse("") is None
 
     def test_event_boundary_separates_events(self):
         from kitsune_mcp.transport import _parse_sse
+
         text = 'data: {"id": 1}\n\ndata: {"id": 2}\n'
         # First valid event should be returned
         result = _parse_sse(text)
@@ -137,11 +146,13 @@ class TestParseSse:
 # Probe tmpdir cleanup
 # ---------------------------------------------------------------------------
 
+
 class TestProbeTmpdirCleanup:
     @pytest.mark.asyncio
     async def test_tmpdir_removed_after_probe(self, tmp_path, monkeypatch):
         import os
         import tempfile
+
         created_dirs = []
 
         orig_mkdtemp = tempfile.mkdtemp
@@ -154,25 +165,35 @@ class TestProbeTmpdirCleanup:
         monkeypatch.setattr(tempfile, "mkdtemp", capturing_mkdtemp)
 
         from kitsune_mcp.registry import ServerInfo
+
         srv = ServerInfo(
-            id="test/probe-server", name="probe-server", description="",
-            source="npm", transport="stdio", url="",
+            id="test/probe-server",
+            name="probe-server",
+            description="",
+            source="npm",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "probe-server"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT, \
-             patch("kitsune_mcp.tools._state._probe_trust_ok", return_value=(True, "")):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+            patch("kitsune_mcp.tools._state._probe_trust_ok", return_value=(True, "")),
+        ):
             mock_reg.get_server = AsyncMock(return_value=srv)
             mock_t = MagicMock()
             mock_t._pool_key = "test-probe-key"
-            mock_t.list_tools = AsyncMock(return_value=[
-                {"name": "tool_a", "description": "", "inputSchema": {}}
-            ])
+            mock_t.list_tools = AsyncMock(
+                return_value=[{"name": "tool_a", "description": "", "inputSchema": {}}]
+            )
             MockT.return_value = mock_t
 
             from kitsune_mcp.tools.discovery import inspect
+
             await inspect("test/probe-server")
 
         # All created temp dirs must have been removed
@@ -184,17 +205,21 @@ class TestProbeTmpdirCleanup:
 # _restore_crafted_tools re-registers tools
 # ---------------------------------------------------------------------------
 
+
 class TestRestoreCraftedTools:
     def setup_method(self):
         from server import session
+
         session["crafted_tools"] = {}
 
     def teardown_method(self):
         from server import session
+
         session["crafted_tools"] = {}
 
     def test_restores_tools_with_correct_name(self):
         from server import mcp, session
+
         session["crafted_tools"] = {
             "my_api_tool": {
                 "url": "https://api.example.com/data",
@@ -208,6 +233,7 @@ class TestRestoreCraftedTools:
             mcp.remove_tool("my_api_tool")
 
         from kitsune_mcp.session import _restore_crafted_tools
+
         _restore_crafted_tools()
 
         # Tool should now be registered
@@ -216,9 +242,11 @@ class TestRestoreCraftedTools:
 
     def test_restore_is_noop_when_no_crafted_tools(self):
         from server import mcp, session
+
         session["crafted_tools"] = {}
         before = set(mcp._tool_manager._tools.keys())
         from kitsune_mcp.session import _restore_crafted_tools
+
         _restore_crafted_tools()
         after = set(mcp._tool_manager._tools.keys())
         assert before == after
@@ -228,15 +256,23 @@ class TestRestoreCraftedTools:
 # bench() output format
 # ---------------------------------------------------------------------------
 
+
 class TestBenchTool:
     @pytest.mark.asyncio
     async def test_bench_returns_latency_stats(self):
         from kitsune_mcp.registry import ServerInfo
+
         srv = ServerInfo(
-            id="bench-server", name="bench-server", description="",
-            source="official", transport="stdio", url="",
+            id="bench-server",
+            name="bench-server",
+            description="",
+            source="official",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "bench-server"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
         call_times = [0]
 
@@ -244,15 +280,18 @@ class TestBenchTool:
             call_times[0] += 1
             return "result"
 
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn, \
-             patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch("kitsune_mcp.tools._state._get_transport") as mock_transport_fn,
+            patch("kitsune_mcp.tools._state._resolve_config", return_value=({}, {})),
+        ):
             mock_reg.get_server = AsyncMock(return_value=srv)
             mock_t = MagicMock()
             mock_t.execute = fake_execute
             mock_transport_fn.return_value = mock_t
 
             from kitsune_mcp.tools.exec import bench
+
             result = await bench("bench-server", "my_tool", iterations=3)
 
         assert "p50" in result
@@ -264,6 +303,7 @@ class TestBenchTool:
         with patch("kitsune_mcp.tools._state._registry") as mock_reg:
             mock_reg.get_server = AsyncMock(return_value=None)
             from kitsune_mcp.tools.exec import bench
+
             result = await bench("missing-server", "tool")
         assert "not found" in result.lower()
 
@@ -272,22 +312,38 @@ class TestBenchTool:
 # test() quality scorer
 # ---------------------------------------------------------------------------
 
+
 class TestQualityScorer:
     @pytest.mark.asyncio
     async def test_scorer_returns_grade(self):
         from kitsune_mcp.registry import ServerInfo
+
         srv = ServerInfo(
-            id="quality-server", name="quality-server",
+            id="quality-server",
+            name="quality-server",
             description="A server with good description",
-            source="official", transport="stdio", url="",
+            source="official",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "quality-server"],
             credentials={},
-            tools=[{"name": "do_thing", "description": "does things", "inputSchema": {"type": "object", "properties": {"x": {"type": "string"}}, "required": []}}],
+            tools=[
+                {
+                    "name": "do_thing",
+                    "description": "does things",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"x": {"type": "string"}},
+                        "required": [],
+                    },
+                }
+            ],
             token_cost=0,
         )
         with patch("kitsune_mcp.tools._state._registry") as mock_reg:
             mock_reg.get_server = AsyncMock(return_value=srv)
             from kitsune_mcp.tools.exec import test as quality_test
+
             result = await quality_test("quality-server", level="basic")
         assert "Score:" in result
         assert "Grade:" in result
@@ -298,6 +354,7 @@ class TestQualityScorer:
         with patch("kitsune_mcp.tools._state._registry") as mock_reg:
             mock_reg.get_server = AsyncMock(return_value=None)
             from kitsune_mcp.tools.exec import test as quality_test
+
             result = await quality_test("nonexistent-server")
         assert "not found" in result.lower() or "Poor" in result
 
@@ -306,20 +363,24 @@ class TestQualityScorer:
 # run() basic path
 # ---------------------------------------------------------------------------
 
+
 class TestRunTool:
     @pytest.mark.asyncio
     async def test_run_npx_package(self):
         async def fake_execute(tool, args, config):
             return "tool result"
 
-        with patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT, \
-             patch("kitsune_mcp.tools._state.shutil.which", return_value=None), \
-             patch("kitsune_mcp.tools._state._track_call"):
+        with (
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+            patch("kitsune_mcp.tools._state.shutil.which", return_value=None),
+            patch("kitsune_mcp.tools._state._track_call"),
+        ):
             mock_t = MagicMock()
             mock_t.execute = fake_execute
             MockT.return_value = mock_t
 
             from kitsune_mcp.tools.exec import run
+
             result = await run("some-mcp-package", "do_thing", {"x": "val"})
 
         # Docker forced absent → runs uncaged, argv unchanged, nudge note appended.
@@ -331,14 +392,17 @@ class TestRunTool:
         async def fake_execute(tool, args, config):
             return "uvx result"
 
-        with patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT, \
-             patch("kitsune_mcp.tools._state.shutil.which", return_value=None), \
-             patch("kitsune_mcp.tools._state._track_call"):
+        with (
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+            patch("kitsune_mcp.tools._state.shutil.which", return_value=None),
+            patch("kitsune_mcp.tools._state._track_call"),
+        ):
             mock_t = MagicMock()
             mock_t.execute = fake_execute
             MockT.return_value = mock_t
 
             from kitsune_mcp.tools.exec import run
+
             result = await run("uvx:my-python-mcp", "analyze", {})
 
         # Docker forced absent → runs uncaged, argv unchanged, nudge note appended.
@@ -350,16 +414,23 @@ class TestRunTool:
 # crafted_tools appear in status()
 # ---------------------------------------------------------------------------
 
+
 class TestStatusShowsCraftedTools:
     @pytest.mark.asyncio
     async def test_crafted_tools_shown(self):
         from server import session
+
         session["crafted_tools"] = {
-            "weather_api": {"url": "https://weather.example.com/api", "method": "GET",
-                            "description": "Get weather", "params": {}}
+            "weather_api": {
+                "url": "https://weather.example.com/api",
+                "method": "GET",
+                "description": "Get weather",
+                "params": {},
+            }
         }
         try:
             from kitsune_mcp.tools.discovery import status
+
             result = await status()
             assert "CRAFTED TOOLS" in result
             assert "weather_api" in result
@@ -370,8 +441,10 @@ class TestStatusShowsCraftedTools:
     @pytest.mark.asyncio
     async def test_no_crafted_tools_section_when_empty(self):
         from server import session
+
         session["crafted_tools"] = {}
         from kitsune_mcp.tools.discovery import status
+
         result = await status()
         assert "CRAFTED TOOLS" not in result
 
@@ -379,6 +452,7 @@ class TestStatusShowsCraftedTools:
 # ---------------------------------------------------------------------------
 # PyPI link-based search (more robust than CSS class names)
 # ---------------------------------------------------------------------------
+
 
 class TestPyPILinkSearch:
     @pytest.mark.asyncio
@@ -390,10 +464,9 @@ class TestPyPILinkSearch:
           <a href="/other/link/">irrelevant</a>
         </html>
         """
-        respx_mock.get("https://pypi.org/search/").mock(
-            return_value=httpx.Response(200, text=html)
-        )
+        respx_mock.get("https://pypi.org/search/").mock(return_value=httpx.Response(200, text=html))
         from kitsune_mcp.registry import PyPIRegistry
+
         reg = PyPIRegistry()
         results = await reg.search("mcp", limit=5)
         names = [r.id for r in results]
@@ -408,10 +481,9 @@ class TestPyPILinkSearch:
         <a href="/project/mcp-server-fetch/"></a>
         <a href="/project/mcp-server-time/"></a>
         """
-        respx_mock.get("https://pypi.org/search/").mock(
-            return_value=httpx.Response(200, text=html)
-        )
+        respx_mock.get("https://pypi.org/search/").mock(return_value=httpx.Response(200, text=html))
         from kitsune_mcp.registry import PyPIRegistry
+
         reg = PyPIRegistry()
         results = await reg.search("mcp", limit=10)
         assert len(results) == 2  # deduplicated
@@ -421,17 +493,26 @@ class TestPyPILinkSearch:
 # NpmRegistry/PyPIRegistry caching
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryCaching:
     @pytest.mark.asyncio
     async def test_npm_search_cached(self, respx_mock):
-        npm_response = {"objects": [
-            {"package": {"name": "mcp-server-test", "description": "Test",
-                         "keywords": ["mcp-server"]}}
-        ]}
+        npm_response = {
+            "objects": [
+                {
+                    "package": {
+                        "name": "mcp-server-test",
+                        "description": "Test",
+                        "keywords": ["mcp-server"],
+                    }
+                }
+            ]
+        }
         route = respx_mock.get("https://registry.npmjs.org/-/v1/search").mock(
             return_value=httpx.Response(200, json=npm_response)
         )
         from kitsune_mcp.registry import NpmRegistry
+
         reg = NpmRegistry()
         r1 = await reg.search("test", 5)
         r2 = await reg.search("test", 5)  # should hit cache
@@ -445,6 +526,7 @@ class TestRegistryCaching:
             return_value=httpx.Response(200, json=pkg_data)
         )
         from kitsune_mcp.registry import PyPIRegistry
+
         reg = PyPIRegistry()
         r1 = await reg.get_server("mcp-tool")
         r2 = await reg.get_server("mcp-tool")
@@ -456,8 +538,10 @@ class TestRegistryCaching:
 # MCP_CLIENT_INFO version is not hardcoded to 1.0.0
 # ---------------------------------------------------------------------------
 
+
 def test_mcp_client_info_version_from_package():
     from kitsune_mcp.constants import MCP_CLIENT_INFO
+
     assert MCP_CLIENT_INFO["name"] == "kitsune"
     # Should reflect the actual package version, not the old hardcoded "1.0.0"
     assert MCP_CLIENT_INFO["version"] != "1.0.0" or True  # passes even in dev
@@ -469,8 +553,10 @@ def test_mcp_client_info_version_from_package():
 # _is_safe_url now lives in utils (not just onboarding)
 # ---------------------------------------------------------------------------
 
+
 def test_is_safe_url_importable_from_utils():
     from kitsune_mcp.utils import _is_safe_url
+
     assert _is_safe_url("https://example.com") is True
     assert _is_safe_url("http://localhost/") is False
     assert _is_safe_url("https://192.168.1.1/") is False

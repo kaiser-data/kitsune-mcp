@@ -67,6 +67,7 @@ inconsistency, not intentional design.
 Add at the top of `fetch()` before the HTTP call:
 ```python
 from kitsune_mcp.tools.onboarding import _is_safe_url
+
 if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
     return (
         f"Blocked: '{url}' resolves to a private/loopback address. "
@@ -79,6 +80,7 @@ if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
 Add after the existing `url.startswith(...)` check (around line 424):
 ```python
 from kitsune_mcp.tools.onboarding import _is_safe_url
+
 if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
     return (
         f"Blocked: '{url}' is a private/loopback address. "
@@ -151,6 +153,7 @@ Add to a new `tests/test_param_aliases.py`:
 ```python
 def test_from_to_timezone_aliased():
     from kitsune_mcp.shapeshift import _PARAM_ALIASES
+
     # Simulate the alias logic
     props = {"source_timezone", "target_timezone", "time"}
     cleaned = {"from_timezone": "UTC", "to_timezone": "Asia/Tokyo", "time": "09:00"}
@@ -161,6 +164,7 @@ def test_from_to_timezone_aliased():
         else:
             remapped[k] = v
     assert remapped == {"source_timezone": "UTC", "target_timezone": "Asia/Tokyo", "time": "09:00"}
+
 
 def test_alias_does_not_override_valid_key():
     # If user passes both "from" and "source", only "source" wins (it's in schema)
@@ -184,7 +188,10 @@ def test_alias_does_not_override_valid_key():
 
 ```python
 def _register_proxy_tools(
-    server_id: str, tools: list, transport, config: dict,
+    server_id: str,
+    tools: list,
+    transport,
+    config: dict,
     base_tool_names: set = None,
     only: set[str] | None = None,
 ) -> tuple[list[str], list[tuple[str, str]]]:
@@ -264,6 +271,7 @@ from pathlib import Path
 _KITSUNE_HOME = Path(os.getenv("KITSUNE_HOME", Path.home() / ".kitsune"))
 _STATE_PATH = _KITSUNE_HOME / "state.json"
 
+
 def _save_state() -> None:
     _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
     state = {
@@ -281,6 +289,7 @@ def _save_state() -> None:
             json.dump(state, f, indent=2)
     except OSError:
         pass
+
 
 def _load_state() -> None:
     try:
