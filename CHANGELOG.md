@@ -6,6 +6,72 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.21.1] — 2026-09-07
+
+### Fixed — `pip install kitsune-mcp` was broken by mcp 2.x
+
+The `mcp` dependency had no upper bound, so a fresh resolve picked up mcp 2.x,
+which renamed the bundled FastMCP to `MCPServer` and removed
+`mcp.server.fastmcp` — imported by `app.py`, `shapeshift.py` and
+`tools/shapeshift.py`. Every fresh install died at import:
+
+```
+$ kitsune-mcp --help
+ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+```
+
+Now pinned `mcp>=1.0.0,<2`; the upper bound is load-bearing until a deliberate
+v2 migration. Three things had hidden it: `uv.lock` was gitignored so CI
+resolved fresh every run, local virtualenvs held older pins, and `test.yml`
+triggered only on push/PR — CI had not run since the previous release.
+
+### Fixed — the wheel shipped the entire repo into `site-packages`
+
+`packages = ["."]` silently made the `include` list a no-op, so the wheel
+carried `tests/`, `docs/`, `evals/`, `examples/`, `bin/`, `.github/`,
+`.gitignore`, `Makefile` and the `plan_*.md` files — installing them at the
+root of the user's `site-packages`, where top-level `tests/` and `docs/`
+collide with any other package doing the same. The wheel now ships only the
+package plus the two entry-point shims: **203 entries / 469K → 35 / 122K**.
+
+### Fixed — `websockets` was an undeclared dependency
+
+The WebSocket transport (`ws://` / `wss://`) imports `websockets`, and three
+test modules patch `websockets.connect`, but it was declared nowhere — it was
+present only as a transitive dependency of `fastmcp`. Removing that unused
+package (never imported anywhere; the code uses the mcp SDK's *bundled*
+`mcp.server.fastmcp`, a different project) exposed the gap.
+
+### Added — `[ws]` extra
+
+`pip install 'kitsune-mcp[ws]'` installs the WebSocket transport's dependency.
+It stays optional because the production import is lazy and degrades with a
+clear message; the runtime hint now names the extra. `websockets` is also in
+`dev`, so the suite exercises the transport instead of failing on it.
+
+### Added — `uv.lock` is committed
+
+Reproducible dev and CI environments. Previously gitignored, which is why
+every CI run re-resolved dependencies from scratch.
+
+### Changed — lint the whole repo, enforce formatting, weekly upstream canary
+
+- `ruff check .` replaces four hand-listed paths. `evals/`, `examples/` and
+  `.github/scripts/` had been outside the lint scope and accumulated 37
+  errors; all fixed. Two were `B023` loop-variable captures (in
+  `examples/benchmark.py` and the race-condition grader's thread stress
+  harness) — latent rather than active, since both closures ran within the
+  same iteration; benchmark output verified byte-identical. The `SIM115` in
+  the hang-watcher's tailer got a documented `noqa`: that handle must outlive
+  its block by design.
+- `ruff format --check` is now enforced, and the tree was formatted to match
+  (75 files, in a separate commit).
+- `test.yml` gains a weekly `schedule` and `workflow_dispatch`. The job
+  installs unpinned, so a scheduled run catches an upstream break like the mcp
+  2.x one before a user does.
+
 ### Docs — remount lean floor to v0.21.0 measured (~1,774 / ~3,561)
 
 PR C's tri-state `sandbox` docstring grew `shapeshift`'s schema cost; live
