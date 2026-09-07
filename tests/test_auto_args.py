@@ -4,6 +4,7 @@ Reproduces and fixes the failure mode: auto() with empty arguments would
 auto-select a tool and call it with {}, causing the inner server to reject
 with "query: undefined". Auto-fills the primary string param from `task`.
 """
+
 import os
 import sys
 
@@ -17,6 +18,7 @@ class TestInferArgsFromTask:
 
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _infer_args_from_task
+
         return _infer_args_from_task
 
     def test_picks_query_param_when_required_and_string(self):
@@ -134,18 +136,24 @@ class TestAutoFillsArgs:
         from kitsune_mcp.registry import ServerInfo
 
         srv = ServerInfo(
-            id="example-search", name="Example Search", description="search server",
-            source="official", transport="stdio",
-            install_cmd=["npx", "-y", "example-search"], credentials={},
-            tools=[{
-                "name": "search",
-                "description": "Search the web",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            }],
+            id="example-search",
+            name="Example Search",
+            description="search server",
+            source="official",
+            transport="stdio",
+            install_cmd=["npx", "-y", "example-search"],
+            credentials={},
+            tools=[
+                {
+                    "name": "search",
+                    "description": "Search the web",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ],
         )
 
         captured: dict = {}
@@ -158,11 +166,14 @@ class TestAutoFillsArgs:
         fake_transport = AsyncMock()
         fake_transport.execute = fake_execute
 
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state._get_transport", return_value=fake_transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch("kitsune_mcp.tools._state._get_transport", return_value=fake_transport),
+        ):
             mock_reg.search = AsyncMock(return_value=[srv])
             mock_reg.get_server = AsyncMock(return_value=srv)
             from kitsune_mcp.tools import auto
+
             await auto(task="kitsune mcp")
 
         assert captured["tool"] == "search"
@@ -177,30 +188,42 @@ class TestAutoFillsArgs:
         from kitsune_mcp.registry import ServerInfo
 
         srv_a = ServerInfo(
-            id="provider-a", name="provider-a", description="",
-            source="smithery", transport="http",
-            install_cmd=[], credentials={},
-            tools=[{
-                "name": "search",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            }],
+            id="provider-a",
+            name="provider-a",
+            description="",
+            source="smithery",
+            transport="http",
+            install_cmd=[],
+            credentials={},
+            tools=[
+                {
+                    "name": "search",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ],
         )
         srv_b = ServerInfo(
-            id="provider-b", name="provider-b", description="",
-            source="npm", transport="stdio",
-            install_cmd=["npx", "-y", "provider-b"], credentials={},
-            tools=[{
-                "name": "search",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            }],
+            id="provider-b",
+            name="provider-b",
+            description="",
+            source="npm",
+            transport="stdio",
+            install_cmd=["npx", "-y", "provider-b"],
+            credentials={},
+            tools=[
+                {
+                    "name": "search",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ],
         )
 
         # Track which server was tried in which order
@@ -212,6 +235,7 @@ class TestAutoFillsArgs:
                 if server_id == "provider-a":
                     return "Auth failed: SMITHERY_API_KEY invalid"
                 return '{"results": ["ok"]}'
+
             return fake_execute
 
         async def get_transport_side_effect(server_id, srv):
@@ -225,16 +249,22 @@ class TestAutoFillsArgs:
         # Wrap _get_transport to set execute properly per call (test scaffolding)
         async def _gt(server_id, srv):
             t = AsyncMock()
+
             async def _exec(tool, args, config):
                 call_log.append(server_id)
                 if server_id == "provider-a":
                     return "Auth failed: SMITHERY_API_KEY invalid"
                 return '{"results": ["ok"]}'
+
             t.execute = _exec
             return t
 
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state._get_transport", side_effect=lambda sid, s: _gt(sid, s)) as _:
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch(
+                "kitsune_mcp.tools._state._get_transport", side_effect=lambda sid, s: _gt(sid, s)
+            ) as _,
+        ):
             mock_reg.search = AsyncMock(return_value=[srv_a, srv_b])
             mock_reg.get_server = AsyncMock(side_effect=get_server_side_effect)
 
@@ -254,13 +284,16 @@ class TestAutoFillsArgs:
             async def _exec(tool, args, config):
                 call_log.append(server_id)
                 return results_per_id[server_id]
+
             return _exec
 
         def make_transport(server_id, srv):
             t = MagicMock()
+
             async def _exec(tool, args, config):
                 call_log.append(server_id)
                 return results_per_id[server_id]
+
             t.execute = _exec
             return t
 
@@ -268,12 +301,15 @@ class TestAutoFillsArgs:
         # Force Docker absent so transport_for_exec delegates provider-b (npm/stdio)
         # to the mocked _get_transport instead of Docker-wrapping the real launch
         # (CI runners have docker on PATH; dev machines may not).
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state.shutil.which", return_value=None), \
-             patch("kitsune_mcp.tools._state._get_transport", side_effect=make_transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch("kitsune_mcp.tools._state.shutil.which", return_value=None),
+            patch("kitsune_mcp.tools._state._get_transport", side_effect=make_transport),
+        ):
             mock_reg.search = AsyncMock(return_value=[srv_a, srv_b])
             mock_reg.get_server = AsyncMock(side_effect=get_server_side_effect)
             from kitsune_mcp.tools import auto
+
             result = await auto(task="web search", arguments={"query": "x"})
 
         # provider-b (npm/stdio, no creds) is now ranked above provider-a (smithery/http)
@@ -289,33 +325,46 @@ class TestAutoFillsArgs:
         from kitsune_mcp.registry import ServerInfo
 
         srv = ServerInfo(
-            id="pinned", name="pinned", description="",
-            source="smithery", transport="http",
-            install_cmd=[], credentials={},
-            tools=[{
-                "name": "search",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            }],
+            id="pinned",
+            name="pinned",
+            description="",
+            source="smithery",
+            transport="http",
+            install_cmd=[],
+            credentials={},
+            tools=[
+                {
+                    "name": "search",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"],
+                    },
+                }
+            ],
         )
         call_log: list[str] = []
 
         def make_transport(server_id, s):
             t = MagicMock()
+
             async def _exec(tool, args, config):
                 call_log.append(server_id)
                 return "Auth failed"
+
             t.execute = _exec
             return t
 
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state._get_transport", side_effect=make_transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch("kitsune_mcp.tools._state._get_transport", side_effect=make_transport),
+        ):
             mock_reg.get_server = AsyncMock(return_value=srv)
             from kitsune_mcp.tools import auto
-            result = await auto(task="x", tool_name="search", arguments={"query": "x"}, server_hint="pinned")
+
+            result = await auto(
+                task="x", tool_name="search", arguments={"query": "x"}, server_hint="pinned"
+            )
 
         # Only one call — no fallback when pinned
         assert call_log == ["pinned"]
@@ -327,17 +376,23 @@ class TestAutoFillsArgs:
         from kitsune_mcp.registry import ServerInfo
 
         srv = ServerInfo(
-            id="example-search", name="Example", description="",
-            source="official", transport="stdio",
-            install_cmd=["npx", "-y", "x"], credentials={},
-            tools=[{
-                "name": "search",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
-                    "required": ["query"],
-                },
-            }],
+            id="example-search",
+            name="Example",
+            description="",
+            source="official",
+            transport="stdio",
+            install_cmd=["npx", "-y", "x"],
+            credentials={},
+            tools=[
+                {
+                    "name": "search",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                        "required": ["query"],
+                    },
+                }
+            ],
         )
         captured: dict = {}
 
@@ -348,11 +403,14 @@ class TestAutoFillsArgs:
         fake_transport = AsyncMock()
         fake_transport.execute = fake_execute
 
-        with patch("kitsune_mcp.tools._state._registry") as mock_reg, \
-             patch("kitsune_mcp.tools._state._get_transport", return_value=fake_transport):
+        with (
+            patch("kitsune_mcp.tools._state._registry") as mock_reg,
+            patch("kitsune_mcp.tools._state._get_transport", return_value=fake_transport),
+        ):
             mock_reg.search = AsyncMock(return_value=[srv])
             mock_reg.get_server = AsyncMock(return_value=srv)
             from kitsune_mcp.tools import auto
+
             # Caller supplied explicit args — must NOT be overridden by inference
             await auto(task="search the web", arguments={"query": "explicit", "limit": 10})
 

@@ -1,4 +1,5 @@
 """Tests for issues #12, #13, #14, #15."""
+
 import os
 import stat
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,23 +8,28 @@ import pytest
 
 # --- #12: __version__ ---
 
+
 def test_version_attr_exists():
     import kitsune_mcp
+
     assert kitsune_mcp.__version__ is not None
     assert kitsune_mcp.__version__ != ""
 
 
 def test_version_is_string():
     import kitsune_mcp
+
     assert isinstance(kitsune_mcp.__version__, str)
 
 
 # --- #13: .env file permissions and key() masking ---
 
+
 def test_save_to_env_sets_restrictive_permissions(tmp_path):
     env_file = tmp_path / ".env"
     with patch("kitsune_mcp.credentials.ENV_PATH", str(env_file)):
         from kitsune_mcp.credentials import _save_to_env
+
         _save_to_env("TEST_KEY", "secret123")
         mode = stat.S_IMODE(os.stat(str(env_file)).st_mode)
         assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
@@ -35,6 +41,7 @@ def test_save_to_env_chmod_on_update(tmp_path):
     os.chmod(str(env_file), 0o644)  # start with loose permissions
     with patch("kitsune_mcp.credentials.ENV_PATH", str(env_file)):
         from kitsune_mcp.credentials import _save_to_env
+
         _save_to_env("NEW_KEY", "newval")
         mode = stat.S_IMODE(os.stat(str(env_file)).st_mode)
         assert mode == 0o600
@@ -43,6 +50,7 @@ def test_save_to_env_chmod_on_update(tmp_path):
 @pytest.mark.asyncio
 async def test_key_tool_returns_masked_value():
     from kitsune_mcp.tools.onboarding import key
+
     with (
         patch("kitsune_mcp.tools.onboarding._save_to_env"),
         patch("kitsune_mcp.tools.onboarding._state") as mock_state,
@@ -58,6 +66,7 @@ async def test_key_tool_returns_masked_value():
 @pytest.mark.asyncio
 async def test_key_tool_short_value_masked():
     from kitsune_mcp.tools.onboarding import key
+
     with (
         patch("kitsune_mcp.tools.onboarding._save_to_env"),
         patch("kitsune_mcp.tools.onboarding._state") as mock_state,
@@ -70,8 +79,10 @@ async def test_key_tool_short_value_masked():
 
 # --- #14: _infer_args_from_task multiple required strings ---
 
+
 def test_infer_returns_empty_for_multiple_required_strings():
     from kitsune_mcp.tools.onboarding import _infer_args_from_task
+
     schema = {
         "name": "translate",
         "inputSchema": {
@@ -88,6 +99,7 @@ def test_infer_returns_empty_for_multiple_required_strings():
 
 def test_infer_still_works_for_single_required_string():
     from kitsune_mcp.tools.onboarding import _infer_args_from_task
+
     schema = {
         "name": "search",
         "inputSchema": {
@@ -101,6 +113,7 @@ def test_infer_still_works_for_single_required_string():
 
 def test_infer_returns_empty_for_zero_required_strings():
     from kitsune_mcp.tools.onboarding import _infer_args_from_task
+
     schema = {
         "name": "ping",
         "inputSchema": {"properties": {}, "required": []},
@@ -111,6 +124,7 @@ def test_infer_returns_empty_for_zero_required_strings():
 
 def test_infer_common_name_beats_fallback_for_single():
     from kitsune_mcp.tools.onboarding import _infer_args_from_task
+
     schema = {
         "name": "find",
         "inputSchema": {
@@ -123,6 +137,7 @@ def test_infer_common_name_beats_fallback_for_single():
 
 
 # --- #15: auto() surfaces registry failures ---
+
 
 @pytest.mark.asyncio
 async def test_auto_surfaces_registry_errors_on_no_tools():
@@ -138,7 +153,10 @@ async def test_auto_surfaces_registry_errors_on_no_tools():
 
     mock_registry = AsyncMock()
     mock_registry.get_server = AsyncMock(return_value=mock_srv)
-    mock_registry.last_registry_errors = {"glama": "HTTPStatusError", "mcpregistry": "HTTPStatusError"}
+    mock_registry.last_registry_errors = {
+        "glama": "HTTPStatusError",
+        "mcpregistry": "HTTPStatusError",
+    }
 
     with (
         patch("kitsune_mcp.tools.onboarding._state") as mock_state,

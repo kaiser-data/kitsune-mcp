@@ -7,16 +7,18 @@ from kitsune_mcp.adapters import Adapter, _register
 
 def _extract_paths(task: str) -> list[str]:
     """Extract all path-like substrings from a task string."""
-    return re.findall(r'(?:^|\s)((?:/|~|\.{1,2}/)\S+)', task)
+    return re.findall(r"(?:^|\s)((?:/|~|\.{1,2}/)\S+)", task)
 
 
 class FileOpsAdapter(Adapter):
     CATEGORY = "file_ops"
-    KNOWN_IDS = frozenset({
-        "server-filesystem",
-        "server-git",
-        "mcp-server-git",
-    })
+    KNOWN_IDS = frozenset(
+        {
+            "server-filesystem",
+            "server-git",
+            "mcp-server-git",
+        }
+    )
 
     def infer_args(self, task: str, tool_schema: dict) -> dict | None:
         schema = tool_schema.get("inputSchema") or {}

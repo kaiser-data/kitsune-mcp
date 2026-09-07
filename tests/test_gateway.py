@@ -11,11 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 class TestClientConfigPaths:
     def test_returns_dict(self):
         from kitsune_mcp.gateway import _client_config_paths
+
         result = _client_config_paths()
         assert isinstance(result, dict)
 
     def test_only_existing_paths_returned(self):
         from kitsune_mcp.gateway import _client_config_paths
+
         result = _client_config_paths()
         for path in result.values():
             assert path.exists(), f"{path} does not exist"
@@ -24,6 +26,7 @@ class TestClientConfigPaths:
 class TestParseMcpServers:
     def test_extracts_servers(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         config = {
             "mcpServers": {
                 "brave-search": {
@@ -44,6 +47,7 @@ class TestParseMcpServers:
 
     def test_client_field_set(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers(
             {"mcpServers": {"x": {"command": "npx", "args": []}}}, "cursor"
         )
@@ -51,6 +55,7 @@ class TestParseMcpServers:
 
     def test_env_captured(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers(
             {"mcpServers": {"s": {"command": "npx", "env": {"MY_API_KEY": "val"}}}},
             "claude-code",
@@ -59,10 +64,12 @@ class TestParseMcpServers:
 
     def test_empty_mcpservers(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         assert _parse_mcp_servers({}, "claude-desktop") == []
 
     def test_non_dict_entry_skipped(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers({"mcpServers": {"bad": "string"}}, "x")
         assert servers == []
 
@@ -70,10 +77,16 @@ class TestParseMcpServers:
         # Remote servers ({"url": ..., "type": "http"}) live in ~/.claude.json —
         # they must keep their URL, not degrade to an empty stdio command.
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers(
-            {"mcpServers": {"acme-internal": {
-                "url": "https://mcp.acme.example/mcp", "type": "http",
-            }}},
+            {
+                "mcpServers": {
+                    "acme-internal": {
+                        "url": "https://mcp.acme.example/mcp",
+                        "type": "http",
+                    }
+                }
+            },
             "claude-code-user",
         )
         assert len(servers) == 1
@@ -83,6 +96,7 @@ class TestParseMcpServers:
 
     def test_sse_type_url_server_maps_to_http(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers(
             {"mcpServers": {"s": {"url": "https://mcp.example.com/sse", "type": "sse"}}},
             "claude-code-user",
@@ -91,6 +105,7 @@ class TestParseMcpServers:
 
     def test_ws_url_server_maps_to_websocket(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers(
             {"mcpServers": {"s": {"url": "wss://mcp.example.com/ws"}}},
             "claude-code-user",
@@ -99,6 +114,7 @@ class TestParseMcpServers:
 
     def test_command_server_defaults_to_stdio(self):
         from kitsune_mcp.gateway import _parse_mcp_servers
+
         servers = _parse_mcp_servers(
             {"mcpServers": {"s": {"command": "npx", "args": ["-y", "pkg"]}}}, "x"
         )
@@ -108,15 +124,15 @@ class TestParseMcpServers:
         # An unlaunchable stub must not be absorbed — shapeshift would fall back
         # to executing `npx -y <id>`, running an arbitrary same-named npm package.
         from kitsune_mcp.gateway import _parse_mcp_servers
-        servers = _parse_mcp_servers(
-            {"mcpServers": {"broken": {"env": {"X_API_KEY": "v"}}}}, "x"
-        )
+
+        servers = _parse_mcp_servers({"mcpServers": {"broken": {"env": {"X_API_KEY": "v"}}}}, "x")
         assert servers == []
 
 
 class TestFindMcpConfigs:
     def test_returns_list(self):
         from kitsune_mcp.gateway import _find_mcp_configs
+
         result = _find_mcp_configs()
         assert isinstance(result, list)
 
@@ -126,6 +142,7 @@ class TestFindMcpConfigs:
         cfg_file.write_text(json.dumps(config))
 
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"fake-client": cfg_file},
@@ -142,6 +159,7 @@ class TestFindMcpConfigs:
         bad_file.write_text("not json{{")
 
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"bad-client": bad_file},
@@ -161,6 +179,7 @@ class TestClaudeCodeUserConfig:
 
     def test_client_config_paths_includes_claude_json(self, tmp_path):
         from kitsune_mcp.gateway import _client_config_paths
+
         self._write_claude_json(tmp_path, {"mcpServers": {}})
         with patch("kitsune_mcp.gateway.Path.home", return_value=tmp_path):
             result = _client_config_paths()
@@ -172,6 +191,7 @@ class TestClaudeCodeUserConfig:
             {"mcpServers": {"notion": {"command": "npx", "args": ["-y", "notion-mcp"]}}},
         )
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"claude-code-user": cfg_file},
@@ -183,21 +203,19 @@ class TestClaudeCodeUserConfig:
 
     def test_project_scoped_servers_merged_for_cwd(self, tmp_path):
         import pathlib
+
         cfg_file = self._write_claude_json(
             tmp_path,
             {
                 "mcpServers": {"notion": {"command": "npx"}},
                 "projects": {
-                    str(pathlib.Path.cwd()): {
-                        "mcpServers": {"github": {"command": "npx"}}
-                    },
-                    "/some/other/project": {
-                        "mcpServers": {"unrelated": {"command": "npx"}}
-                    },
+                    str(pathlib.Path.cwd()): {"mcpServers": {"github": {"command": "npx"}}},
+                    "/some/other/project": {"mcpServers": {"unrelated": {"command": "npx"}}},
                 },
             },
         )
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"claude-code-user": cfg_file},
@@ -209,18 +227,18 @@ class TestClaudeCodeUserConfig:
 
     def test_project_entry_wins_over_top_level(self, tmp_path):
         import pathlib
+
         cfg_file = self._write_claude_json(
             tmp_path,
             {
                 "mcpServers": {"github": {"command": "old-cmd"}},
                 "projects": {
-                    str(pathlib.Path.cwd()): {
-                        "mcpServers": {"github": {"command": "new-cmd"}}
-                    }
+                    str(pathlib.Path.cwd()): {"mcpServers": {"github": {"command": "new-cmd"}}}
                 },
             },
         )
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"claude-code-user": cfg_file},
@@ -231,16 +249,21 @@ class TestClaudeCodeUserConfig:
 
     def test_claude_json_wins_over_legacy_mcp_json(self, tmp_path):
         legacy_file = tmp_path / "mcp.json"
-        legacy_file.write_text(json.dumps(
-            {"mcpServers": {
-                "github": {"command": "legacy-cmd"},
-                "only-legacy": {"command": "npx"},
-            }}
-        ))
+        legacy_file.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "github": {"command": "legacy-cmd"},
+                        "only-legacy": {"command": "npx"},
+                    }
+                }
+            )
+        )
         cfg_file = self._write_claude_json(
             tmp_path, {"mcpServers": {"github": {"command": "modern-cmd"}}}
         )
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"claude-code": legacy_file, "claude-code-user": cfg_file},
@@ -254,13 +277,12 @@ class TestClaudeCodeUserConfig:
 
     def test_legacy_config_dropped_when_fully_shadowed(self, tmp_path):
         legacy_file = tmp_path / "mcp.json"
-        legacy_file.write_text(json.dumps(
-            {"mcpServers": {"github": {"command": "legacy-cmd"}}}
-        ))
+        legacy_file.write_text(json.dumps({"mcpServers": {"github": {"command": "legacy-cmd"}}}))
         cfg_file = self._write_claude_json(
             tmp_path, {"mcpServers": {"github": {"command": "modern-cmd"}}}
         )
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"claude-code": legacy_file, "claude-code-user": cfg_file},
@@ -274,6 +296,7 @@ class TestClaudeCodeUserConfig:
             {"mcpServers": {"notion": {"command": "npx"}}, "projects": "not-a-dict"},
         )
         from kitsune_mcp.gateway import _find_mcp_configs
+
         with patch(
             "kitsune_mcp.gateway._client_config_paths",
             return_value={"claude-code-user": cfg_file},
@@ -285,9 +308,11 @@ class TestClaudeCodeUserConfig:
 class TestHarvestCredentials:
     def test_extracts_credential_keys(self):
         from kitsune_mcp.gateway import AbsorbedServer, _harvest_credentials
+
         servers = [
             AbsorbedServer(
-                id="brave-search", command="npx",
+                id="brave-search",
+                command="npx",
                 env={"BRAVE_API_KEY": "sk-abc", "LOGGING_LEVEL": "debug"},
                 client="claude-desktop",
             )
@@ -299,13 +324,13 @@ class TestHarvestCredentials:
 
     def test_skips_empty_values(self):
         from kitsune_mcp.gateway import AbsorbedServer, _harvest_credentials
-        servers = [
-            AbsorbedServer(id="x", command="npx", env={"MY_API_KEY": ""}, client="c")
-        ]
+
+        servers = [AbsorbedServer(id="x", command="npx", env={"MY_API_KEY": ""}, client="c")]
         assert _harvest_credentials(servers) == {}
 
     def test_multiple_servers(self):
         from kitsune_mcp.gateway import AbsorbedServer, _harvest_credentials
+
         servers = [
             AbsorbedServer(id="a", command="n", env={"EXA_API_KEY": "exa-1"}, client="c"),
             AbsorbedServer(id="b", command="n", env={"NOTION_TOKEN": "ntn-2"}, client="c"),
@@ -321,10 +346,15 @@ class TestAbsorbedServerPersistence:
             _load_absorbed_servers,
             _save_absorbed_servers,
         )
+
         servers = [
             AbsorbedServer(
-                id="my-server", command="npx", args=["-y", "my-pkg"],
-                env={"MY_API_KEY": "v"}, client="claude-code", absorbed_at="2026-01-01T00:00:00",
+                id="my-server",
+                command="npx",
+                args=["-y", "my-pkg"],
+                env={"MY_API_KEY": "v"},
+                client="claude-code",
+                absorbed_at="2026-01-01T00:00:00",
             )
         ]
         absorbed_path = tmp_path / "absorbed_servers.json"
@@ -341,6 +371,7 @@ class TestAbsorbedServerPersistence:
 
     def test_load_absent_file_returns_empty(self, tmp_path):
         from kitsune_mcp.gateway import _load_absorbed_servers
+
         with patch("kitsune_mcp.gateway._ABSORBED_PATH", tmp_path / "nonexistent.json"):
             assert _load_absorbed_servers() == []
 
@@ -350,10 +381,16 @@ class TestAbsorbedServerPersistence:
             _load_absorbed_servers,
             _save_absorbed_servers,
         )
+
         servers = [
             AbsorbedServer(
-                id="remote", command="", args=[], env={}, client="claude-code-user",
-                url="https://mcp.example.com/mcp", transport="http",
+                id="remote",
+                command="",
+                args=[],
+                env={},
+                client="claude-code-user",
+                url="https://mcp.example.com/mcp",
+                transport="http",
             )
         ]
         absorbed_path = tmp_path / "absorbed_servers.json"
@@ -372,12 +409,23 @@ class TestAbsorbedServerPersistence:
         import json as _json
 
         from kitsune_mcp.gateway import _load_absorbed_servers
+
         absorbed_path = tmp_path / "absorbed_servers.json"
-        absorbed_path.write_text(_json.dumps([{
-            "id": "old", "command": "npx", "args": ["-y", "pkg"],
-            "env": {}, "client": "claude-desktop",
-            "absorbed_at": "2026-01-01T00:00:00", "estimated_tools": 8,
-        }]))
+        absorbed_path.write_text(
+            _json.dumps(
+                [
+                    {
+                        "id": "old",
+                        "command": "npx",
+                        "args": ["-y", "pkg"],
+                        "env": {},
+                        "client": "claude-desktop",
+                        "absorbed_at": "2026-01-01T00:00:00",
+                        "estimated_tools": 8,
+                    }
+                ]
+            )
+        )
         with patch("kitsune_mcp.gateway._ABSORBED_PATH", absorbed_path):
             loaded = _load_absorbed_servers()
         assert loaded[0].id == "old"
@@ -388,9 +436,13 @@ class TestAbsorbedServerPersistence:
 class TestToServerInfo:
     def test_basic_conversion(self):
         from kitsune_mcp.gateway import AbsorbedServer, _to_server_info
+
         a = AbsorbedServer(
-            id="my-pg", command="npx", args=["-y", "my-pg"],
-            env={"DATABASE_URL": "postgresql://..."}, client="claude-desktop",
+            id="my-pg",
+            command="npx",
+            args=["-y", "my-pg"],
+            env={"DATABASE_URL": "postgresql://..."},
+            client="claude-desktop",
         )
         srv = _to_server_info(a)
         assert srv.id == "my-pg"
@@ -400,9 +452,13 @@ class TestToServerInfo:
 
     def test_credential_env_keys_extracted(self):
         from kitsune_mcp.gateway import AbsorbedServer, _to_server_info
+
         a = AbsorbedServer(
-            id="s", command="n", args=[],
-            env={"BRAVE_API_KEY": "x", "LOG": "debug"}, client="c",
+            id="s",
+            command="n",
+            args=[],
+            env={"BRAVE_API_KEY": "x", "LOG": "debug"},
+            client="c",
         )
         srv = _to_server_info(a)
         assert "BRAVE_API_KEY" in srv.credentials
@@ -410,6 +466,7 @@ class TestToServerInfo:
 
     def test_install_cmd_built(self):
         from kitsune_mcp.gateway import AbsorbedServer, _to_server_info
+
         a = AbsorbedServer(id="s", command="npx", args=["-y", "pkg"], env={}, client="c")
         srv = _to_server_info(a)
         assert srv.install_cmd == ["npx", "-y", "pkg"]
@@ -418,9 +475,15 @@ class TestToServerInfo:
         # A remote absorbed server must come back as http+url, not an
         # unlaunchable stdio stub with an empty install_cmd.
         from kitsune_mcp.gateway import AbsorbedServer, _to_server_info
+
         a = AbsorbedServer(
-            id="remote", command="", args=[], env={}, client="claude-code-user",
-            url="https://mcp.example.com/mcp", transport="http",
+            id="remote",
+            command="",
+            args=[],
+            env={},
+            client="claude-code-user",
+            url="https://mcp.example.com/mcp",
+            transport="http",
         )
         srv = _to_server_info(a)
         assert srv.transport == "http"
@@ -433,19 +496,30 @@ class TestAbsorbedTrustAndRanking:
 
     def test_absorbed_is_high_trust(self):
         from kitsune_mcp.constants import TRUST_HIGH
+
         assert "absorbed" in TRUST_HIGH
 
     def test_absorbed_in_source_tier_top(self):
         from kitsune_mcp.registry import _SOURCE_TIER
+
         assert _SOURCE_TIER["absorbed"] == 0
 
     def test_absorbed_works_now_beats_official(self):
         from kitsune_mcp.registry import ServerInfo, _works_now_score
+
         absorbed = ServerInfo(
-            id="s", name="s", description="", source="absorbed", transport="stdio",
+            id="s",
+            name="s",
+            description="",
+            source="absorbed",
+            transport="stdio",
         )
         official = ServerInfo(
-            id="s", name="s", description="", source="official", transport="stdio",
+            id="s",
+            name="s",
+            description="",
+            source="official",
+            transport="stdio",
         )
         assert _works_now_score(absorbed) > _works_now_score(official)
 
@@ -504,6 +578,7 @@ class TestAbsorbedRegistry:
 class TestIsCredentialKey:
     def test_api_key_matches(self):
         from kitsune_mcp.gateway import _is_credential_key
+
         assert _is_credential_key("BRAVE_API_KEY") is True
         assert _is_credential_key("NOTION_TOKEN") is True
         assert _is_credential_key("GITHUB_TOKEN") is True
@@ -511,6 +586,7 @@ class TestIsCredentialKey:
 
     def test_non_credential_keys(self):
         from kitsune_mcp.gateway import _is_credential_key
+
         assert _is_credential_key("LOGGING_LEVEL") is False
         assert _is_credential_key("DATABASE_URL") is False
         assert _is_credential_key("PORT") is False

@@ -9,7 +9,7 @@ from kitsune_mcp.constants import (
     TIMEOUT_TCP_PROBE,
 )
 
-_ENV_VAR_RE = re.compile(r'\b([A-Z][A-Z0-9_]{3,})\b')
+_ENV_VAR_RE = re.compile(r"\b([A-Z][A-Z0-9_]{3,})\b")
 _LOCAL_URL_RE = re.compile(r'https?://(?:127\.0\.0\.1|localhost)(?::\d+)?(?:/[^\s,)"\']*)?')
 _OAUTH_KEYWORDS = ("oauth", "authorize", "authorization_url", "callback", "redirect_uri")
 
@@ -28,8 +28,7 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
     import socket as _socket
 
     all_text = " ".join(
-        (t.get("description") or "") + " " + json.dumps(t.get("inputSchema", {}))
-        for t in tools
+        (t.get("description") or "") + " " + json.dumps(t.get("inputSchema", {})) for t in tools
     )
     if extra_text:
         all_text += " " + extra_text
@@ -39,7 +38,7 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
     _structured_missing: set[str] = set()
     _structured_set: set[str] = set()
     _env_block_re = re.compile(
-        r'^([A-Z][A-Z0-9_]{2,})\s*\n\s+Environment:\s*(\[not set\]|.+)', re.MULTILINE
+        r"^([A-Z][A-Z0-9_]{2,})\s*\n\s+Environment:\s*(\[not set\]|.+)", re.MULTILINE
     )
     for m in _env_block_re.finditer(extra_text):
         var, val = m.group(1), m.group(2).strip()
@@ -50,11 +49,14 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
 
     # Regex scan for credential env vars mentioned in descriptions/schemas (supplemental)
     found_vars = {
-        m for m in _ENV_VAR_RE.findall(all_text)
-        if any(m.endswith(sfx) for sfx in CRED_SUFFIXES)
+        m for m in _ENV_VAR_RE.findall(all_text) if any(m.endswith(sfx) for sfx in CRED_SUFFIXES)
     }
-    structured_creds_missing = {v for v in _structured_missing if any(v.endswith(sfx) for sfx in CRED_SUFFIXES)}
-    structured_creds_set = {v for v in _structured_set if any(v.endswith(sfx) for sfx in CRED_SUFFIXES)}
+    structured_creds_missing = {
+        v for v in _structured_missing if any(v.endswith(sfx) for sfx in CRED_SUFFIXES)
+    }
+    structured_creds_set = {
+        v for v in _structured_set if any(v.endswith(sfx) for sfx in CRED_SUFFIXES)
+    }
 
     regex_missing = {v for v in found_vars if not os.environ.get(v)} - structured_creds_set
     regex_set = {v for v in found_vars if os.environ.get(v)} - structured_creds_missing
@@ -63,11 +65,14 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
     set_env = sorted(structured_creds_set | regex_set)
 
     # Schema-declared required params that look like credentials
-    schema_creds = sorted({
-        p for tool in tools
-        for p in (tool.get("inputSchema") or {}).get("required", [])
-        if any(p.lower().endswith(sfx.lower().lstrip("_")) for sfx in CRED_SUFFIXES)
-    })
+    schema_creds = sorted(
+        {
+            p
+            for tool in tools
+            for p in (tool.get("inputSchema") or {}).get("required", [])
+            if any(p.lower().endswith(sfx.lower().lstrip("_")) for sfx in CRED_SUFFIXES)
+        }
+    )
 
     # OAuth detection
     needs_oauth = any(kw in all_text.lower() for kw in _OAUTH_KEYWORDS)
@@ -78,6 +83,7 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
     for url in local_urls:
         try:
             from urllib.parse import urlparse as _urlparse
+
             p = _urlparse(url)
             host = p.hostname or "127.0.0.1"
             port = p.port or (443 if p.scheme == "https" else 80)
@@ -97,7 +103,11 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
             if not any(param.endswith(sfx) for sfx in PROVIDER_PARAM_SUFFIXES):
                 continue
             enum_vals = pdef.get("enum") or next(
-                (x.get("enum") for x in pdef.get("anyOf", []) if isinstance(x, dict) and "enum" in x),
+                (
+                    x.get("enum")
+                    for x in pdef.get("anyOf", [])
+                    if isinstance(x, dict) and "enum" in x
+                ),
                 None,
             )
             if enum_vals and len(enum_vals) > 1:
@@ -116,10 +126,10 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
     }
 
 
-def _classify_provider(
-    opt: str, missing_creds: list, set_creds: list, unreachable: list
-) -> str:
-    linked_creds = [v for v in missing_creds if opt.upper() in v and any(v.endswith(s) for s in CRED_SUFFIXES)]
+def _classify_provider(opt: str, missing_creds: list, set_creds: list, unreachable: list) -> str:
+    linked_creds = [
+        v for v in missing_creds if opt.upper() in v and any(v.endswith(s) for s in CRED_SUFFIXES)
+    ]
     cred_ok = any(opt.upper() in v for v in set_creds)
     linked_urls = [u for u in unreachable if opt in u.lower()]
     if cred_ok:
@@ -157,7 +167,11 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
         for param, opts in providers.items():
             cloud_opts, local_opts, other_opts = [], [], []
             for opt in opts:
-                linked_creds = [v for v in missing if opt.upper() in v and any(v.endswith(s) for s in CRED_SUFFIXES)]
+                linked_creds = [
+                    v
+                    for v in missing
+                    if opt.upper() in v and any(v.endswith(s) for s in CRED_SUFFIXES)
+                ]
                 cred_ok = any(opt.upper() in v for v in reqs["set_env"])
                 is_cloud = bool(linked_creds or cred_ok)
                 linked_urls = [u for u in unreachable if opt in u.lower()]
@@ -179,7 +193,7 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
                     label = _letters[idx] if idx < len(_letters) else str(idx + 1)
                     lines.append(f"  [{label}] {opt}  (cloud — {status})")
                     for v in creds:
-                        lines.append(f"      auth(\"{v}\", \"<your-value>\")")
+                        lines.append(f'      auth("{v}", "<your-value>")')
                     idx += 1
                 for opt, urls, _creds in local_opts:
                     label = _letters[idx] if idx < len(_letters) else str(idx + 1)
@@ -187,7 +201,7 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
                     for u in urls:
                         lines.append(f"      {u}  ← not reachable")
                     if has_service_tool:
-                        lines.append(f"      service(\"{opt}\", \"start\")")
+                        lines.append(f'      service("{opt}", "start")')
                     idx += 1
                 for opt, _ in other_opts:
                     label = _letters[idx] if idx < len(_letters) else str(idx + 1)
@@ -205,13 +219,22 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
     if ungrouped_vars:
         lines.append("\nMissing env vars:")
         for v in sorted(ungrouped_vars):
-            lines.append(f"  auth(\"{v}\", \"<your-value>\")")
+            lines.append(f'  auth("{v}", "<your-value>")')
 
     # Local URLs not already shown inside a provider option
-    urls_shown = {u for opt_list in providers.values() for u in unreachable if any(o in u.lower() for o in opt_list)}
+    urls_shown = {
+        u
+        for opt_list in providers.values()
+        for u in unreachable
+        if any(o in u.lower() for o in opt_list)
+    }
     ungrouped_urls = set(unreachable) - urls_shown
     if ungrouped_urls:
-        label = "\nLocal services not reachable:" if not providers else "\nAdditional local services not reachable:"
+        label = (
+            "\nLocal services not reachable:"
+            if not providers
+            else "\nAdditional local services not reachable:"
+        )
         lines.append(label)
         for u in sorted(ungrouped_urls):
             lines.append(f"  {u}  ← not running")

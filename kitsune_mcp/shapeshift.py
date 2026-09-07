@@ -30,7 +30,7 @@ _PARAM_ALIASES: dict[str, str] = {
 }
 
 # Matches URI template parameters like {path} or {file_name}
-_URI_TEMPLATE_RE = re.compile(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}')
+_URI_TEMPLATE_RE = re.compile(r"\{[a-zA-Z_][a-zA-Z0-9_]*\}")
 
 
 def _json_type_to_py(json_type: str) -> type:
@@ -68,10 +68,14 @@ def _make_proxy(
     for pname, pschema in props.items():
         ptype = _json_type_to_py(pschema.get("type", "string"))
         default = _inspect.Parameter.empty if pname in required_set else None
-        params.append(_inspect.Parameter(
-            pname, _inspect.Parameter.KEYWORD_ONLY,
-            default=default, annotation=ptype,
-        ))
+        params.append(
+            _inspect.Parameter(
+                pname,
+                _inspect.Parameter.KEYWORD_ONLY,
+                default=default,
+                annotation=ptype,
+            )
+        )
 
     async def proxy_fn(**kwargs) -> str:
         # Optional params get default=None in our signature so FastMCP/pydantic
@@ -157,7 +161,9 @@ def _register_proxy_resources(transport: "BaseTransport", resources: list[dict])
         mime_type = res.get("mimeType") or "text/plain"
         _uri, _t = uri, transport
 
-        async def _proxy(_u=_uri, _tr=_t) -> str:  # no type annotations — validate_call would reject BaseTransport
+        async def _proxy(
+            _u=_uri, _tr=_t
+        ) -> str:  # no type annotations — validate_call would reject BaseTransport
             try:
                 return await _tr.read_resource(_u)
             except Exception as e:
@@ -166,7 +172,11 @@ def _register_proxy_resources(transport: "BaseTransport", resources: list[dict])
         _proxy.__name__ = name  # type: ignore[attr-defined]
         try:
             r = _FunctionResource.from_function(
-                fn=_proxy, uri=_uri, name=name, description=description, mime_type=mime_type,
+                fn=_proxy,
+                uri=_uri,
+                name=name,
+                description=description,
+                mime_type=mime_type,
             )
             mcp.add_resource(r)
             registered.append(str(r.uri))
@@ -208,10 +218,14 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
             if not arg_name:
                 continue
             default = _inspect.Parameter.empty if arg.get("required") else ""
-            params.append(_inspect.Parameter(
-                arg_name, _inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                default=default, annotation=str,
-            ))
+            params.append(
+                _inspect.Parameter(
+                    arg_name,
+                    _inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    default=default,
+                    annotation=str,
+                )
+            )
             annotations[arg_name] = str
         _proxy.__signature__ = _inspect.Signature(params)  # type: ignore[attr-defined]
         _proxy.__annotations__ = annotations  # type: ignore[attr-defined]
@@ -230,13 +244,16 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
 def _proxy_name_for(server_id: str, raw_name: str, base_tool_names: set | None) -> str:
     """Translate a raw tool name to the name it will be registered under (handles collisions)."""
     if base_tool_names and raw_name in base_tool_names:
-        sanitized = re.sub(r'[^a-z0-9_]', '_', server_id.lower())
+        sanitized = re.sub(r"[^a-z0-9_]", "_", server_id.lower())
         return f"{sanitized}_{raw_name}"
     return raw_name
 
 
 def _register_proxy_tools(
-    server_id: str, tools: list, transport: "BaseTransport", config: dict,
+    server_id: str,
+    tools: list,
+    transport: "BaseTransport",
+    config: dict,
     base_tool_names: set = None,
     only: set[str] | None = None,
 ) -> tuple[list[str], list[tuple[str, str]]]:

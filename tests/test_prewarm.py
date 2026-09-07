@@ -4,6 +4,7 @@ prewarm(server_id) starts a registry server's subprocess and adds it to the
 pool WITHOUT mounting its tools — so a later shapeshift(server_id) skips the
 npx/uvx cold-install latency and benchmarks don't measure install time.
 """
+
 import json
 import os
 import sys
@@ -18,10 +19,17 @@ from tests.conftest import make_mock_process  # noqa: E402
 
 def _srv(**kwargs):
     from kitsune_mcp.registry import ServerInfo
+
     defaults = dict(
-        id="mcp-server-time", name="Time Server", description="time tools",
-        source="official", transport="stdio", url="",
-        install_cmd=["npx", "-y", "mcp-server-time"], credentials={}, tools=[],
+        id="mcp-server-time",
+        name="Time Server",
+        description="time tools",
+        source="official",
+        transport="stdio",
+        url="",
+        install_cmd=["npx", "-y", "mcp-server-time"],
+        credentials={},
+        tools=[],
         token_cost=0,
     )
     defaults.update(kwargs)
@@ -32,16 +40,21 @@ def _fake_persistent_transport(cmd, tools=None):
     """Mock PersistentStdioTransport whose list_tools() also creates a real
     pool entry — mirroring what the real transport does on first spawn."""
     from kitsune_mcp.transport import _PoolEntry, _process_pool
+
     transport = MagicMock()
     pool_key = json.dumps(cmd, sort_keys=True)
 
     async def _list_tools(*a, **kw):
         _process_pool[pool_key] = _PoolEntry(
-            proc=make_mock_process(), install_cmd=cmd, started_at=0.0,
+            proc=make_mock_process(),
+            install_cmd=cmd,
+            started_at=0.0,
         )
-        return tools if tools is not None else [
-            {"name": "get_time", "description": "", "inputSchema": {}}
-        ]
+        return (
+            tools
+            if tools is not None
+            else [{"name": "get_time", "description": "", "inputSchema": {}}]
+        )
 
     transport.list_tools = AsyncMock(side_effect=_list_tools)
     return transport, pool_key
@@ -50,10 +63,12 @@ def _fake_persistent_transport(cmd, tools=None):
 class TestPrewarmProfile:
     def test_prewarm_in_forge_profile(self):
         from kitsune_mcp.tools._state import _BASE_TOOL_NAMES
+
         assert "prewarm" in _BASE_TOOL_NAMES
 
     def test_prewarm_not_in_lean_profile(self):
         from kitsune_mcp.tools._state import _LEAN_TOOL_NAMES
+
         assert "prewarm" not in _LEAN_TOOL_NAMES
 
 
@@ -153,7 +168,9 @@ class TestPrewarm:
 
         with (
             patch.object(_registry, "get_server", AsyncMock(return_value=None)),
-            patch("kitsune_mcp.tools._state._resolve_server_id", AsyncMock(return_value=(None, []))),
+            patch(
+                "kitsune_mcp.tools._state._resolve_server_id", AsyncMock(return_value=(None, []))
+            ),
         ):
             out = await prewarm("no-such-server")
 
@@ -169,7 +186,9 @@ class TestPrewarm:
         cmd = ["npx", "-y", "mcp-server-time"]
         pool_key = json.dumps(cmd, sort_keys=True)
         _process_pool[pool_key] = _PoolEntry(
-            proc=make_mock_process(), install_cmd=cmd, started_at=0.0,
+            proc=make_mock_process(),
+            install_cmd=cmd,
+            started_at=0.0,
             name="mcp-server-time",
         )
         with (
@@ -196,11 +215,14 @@ class TestPrewarm:
         def factory(cmd, **kwargs):
             captured.append(cmd)
             from kitsune_mcp.transport import _PoolEntry
+
             t = MagicMock()
 
             async def _lt(*a, **k):
                 _process_pool[json.dumps(cmd, sort_keys=True)] = _PoolEntry(
-                    proc=make_mock_process(), install_cmd=cmd, started_at=0.0,
+                    proc=make_mock_process(),
+                    install_cmd=cmd,
+                    started_at=0.0,
                 )
                 return [{"name": "x", "description": "", "inputSchema": {}}]
 
@@ -211,7 +233,9 @@ class TestPrewarm:
         with (
             patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
             patch.object(_state, "PersistentStdioTransport", factory),
-            patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/local/bin/docker"),
+            patch(
+                "kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/local/bin/docker"
+            ),
         ):
             out = await prewarm("mcp-server-time", confirm=True)
 
@@ -231,7 +255,9 @@ class TestPrewarm:
         with (
             patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
             patch("kitsune_mcp.tools._state.PersistentStdioTransport", return_value=transport),
-            patch("kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/local/bin/docker"),
+            patch(
+                "kitsune_mcp.tools.shapeshift.shutil.which", return_value="/usr/local/bin/docker"
+            ),
         ):
             out = await prewarm("mcp-server-time", confirm=True, sandbox=False)
 

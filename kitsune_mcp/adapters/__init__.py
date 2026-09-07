@@ -11,6 +11,7 @@ from __future__ import annotations
 
 class Adapter:
     """Base class for category adapters."""
+
     CATEGORY: str = ""
     KNOWN_IDS: frozenset[str] = frozenset()
 

@@ -82,9 +82,7 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
     elif srv.transport == "http":
         try:
             transport = _state._get_transport(srv.id, srv)
-            tools = await asyncio.wait_for(
-                transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
-            )
+            tools = await asyncio.wait_for(transport.list_tools(), timeout=TIMEOUT_STDIO_INIT)
             if tools:
                 row["tools"] = len(tools)
                 row["tokens"] = _estimate_tokens(tools)
@@ -155,8 +153,12 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
 
 @mcp.tool()
 async def search(
-    query: Annotated[str, Field(description="Keywords, capability description, or natural-language phrase")],
-    compare: Annotated[bool, Field(description="Return a side-by-side token-cost comparison table")] = False,
+    query: Annotated[
+        str, Field(description="Keywords, capability description, or natural-language phrase")
+    ],
+    compare: Annotated[
+        bool, Field(description="Return a side-by-side token-cost comparison table")
+    ] = False,
     registry: str = "all",
     limit: int = 5,
 ) -> str:
@@ -189,7 +191,12 @@ async def search(
     elif registry in ("official", "mcpregistry", "glama"):
         from kitsune_mcp.official_registry import OfficialMCPRegistry
         from kitsune_mcp.registry import GlamaRegistry, McpRegistryIO
-        reg = {"official": OfficialMCPRegistry(), "mcpregistry": McpRegistryIO(), "glama": GlamaRegistry()}[registry]
+
+        reg = {
+            "official": OfficialMCPRegistry(),
+            "mcpregistry": McpRegistryIO(),
+            "glama": GlamaRegistry(),
+        }[registry]
     else:
         reg = _state._registry
 
@@ -203,15 +210,15 @@ async def search(
         errors = getattr(_state._registry, "last_registry_errors", {})
         if errors:
             _ERR_LABELS = {
-                "TimeoutError": "timeout", "asyncio.TimeoutError": "timeout",
-                "ReadTimeout": "timeout", "ConnectTimeout": "timeout",
-                "HTTPStatusError": "HTTP error", "ConnectError": "unreachable",
+                "TimeoutError": "timeout",
+                "asyncio.TimeoutError": "timeout",
+                "ReadTimeout": "timeout",
+                "ConnectTimeout": "timeout",
+                "HTTPStatusError": "HTTP error",
+                "ConnectError": "unreachable",
                 "RemoteProtocolError": "protocol error",
             }
-            failed = ", ".join(
-                f"{n} ({_ERR_LABELS.get(exc, exc)})"
-                for n, exc in errors.items()
-            )
+            failed = ", ".join(f"{n} ({_ERR_LABELS.get(exc, exc)})" for n, exc in errors.items())
             lines.insert(1, f"⚠️  Skipped: {failed}\n")
     for s in servers:
         cred_status = _credentials_ready(s.credentials, s.source)
@@ -284,9 +291,7 @@ async def inspect(server_id: str, probe: bool = False) -> str:
                 probe_env = _state._probe_env(srv)
                 tmpdir = probe_env.get("TMPDIR", "")
                 try:
-                    _probe_t = _state.PersistentStdioTransport(
-                        srv.install_cmd, probe_env=probe_env
-                    )
+                    _probe_t = _state.PersistentStdioTransport(srv.install_cmd, probe_env=probe_env)
                     live_tools = await asyncio.wait_for(
                         _probe_t.list_tools(),
                         timeout=TIMEOUT_STDIO_INIT,
@@ -318,11 +323,9 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         lines.append(f"\nToken cost: ~{token_cost} tokens (measured)")
     else:
         if probe_gated:
-            lines.append(
-                f"TOOLS: not probed ({gate_reason} — would run code from {srv.source})"
-            )
-            lines.append(f"To probe live: inspect(\"{srv.id}\", probe=True)")
-            lines.append("To always trust community: auth(\"KITSUNE_TRUST\", \"community\")")
+            lines.append(f"TOOLS: not probed ({gate_reason} — would run code from {srv.source})")
+            lines.append(f'To probe live: inspect("{srv.id}", probe=True)')
+            lines.append('To always trust community: auth("KITSUNE_TRUST", "community")')
         elif probe_error:
             lines.append(f"TOOLS: live probe failed — {probe_error}")
         elif srv.transport == "stdio":
@@ -332,8 +335,10 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         token_cost = srv.token_cost or 0
 
     session["explored"][srv.id] = {
-        "name": srv.name, "desc": srv.description,
-        "status": "inspected", "token_cost": token_cost,
+        "name": srv.name,
+        "desc": srv.description,
+        "status": "inspected",
+        "token_cost": token_cost,
     }
 
     # Suggest next action based on credential state and probe outcome
@@ -342,7 +347,7 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         first_var = _to_env_var(next(iter(missing_creds)))
         lines.append(
             f"\nProbe may have failed due to missing creds. "
-            f"Try: auth(\"{first_var}\", \"...\") then inspect(\"{srv.id}\")"
+            f'Try: auth("{first_var}", "...") then inspect("{srv.id}")'
         )
     elif probe_error:
         lines.append(
@@ -351,10 +356,10 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         )
     elif missing_creds:
         first_var = _to_env_var(next(iter(missing_creds)))
-        lines.append(f"\nNext: auth(\"{first_var}\", \"...\") then shapeshift(\"{srv.id}\")")
+        lines.append(f'\nNext: auth("{first_var}", "...") then shapeshift("{srv.id}")')
     else:
-        lean_hint = f", tools=[\"{tools[0].get('name', '')}\"]" if tools and len(tools) > 4 else ""
-        lines.append(f"\nNext: shapeshift(\"{srv.id}\"{lean_hint})")
+        lean_hint = f', tools=["{tools[0].get("name", "")}"]' if tools and len(tools) > 4 else ""
+        lines.append(f'\nNext: shapeshift("{srv.id}"{lean_hint})')
 
     return "\n".join(lines)
 
@@ -392,7 +397,7 @@ async def _run_compare(query: str, limit: int = 6, probe: bool = False) -> str:
             f"\n💡 Cheapest ready-to-use: {cheapest['id']} "
             f"(~{cheapest['tokens']:,} tokens, {cheapest['tools']} tools, {cheapest['status']})"
         )
-        lines.append(f"   Next: shapeshift(\"{cheapest['id']}\")")
+        lines.append(f'   Next: shapeshift("{cheapest["id"]}")')
     else:
         lines.append("\nNo candidates were ready to use without setup.")
 
@@ -408,7 +413,7 @@ async def _run_compare(query: str, limit: int = 6, probe: bool = False) -> str:
         if gated_count:
             lines.append(
                 f"\n({gated_count} community source{'s' if gated_count != 1 else ''} gated. "
-                f"Run: compare(\"{query}\", probe=True) to probe them too.)"
+                f'Run: compare("{query}", probe=True) to probe them too.)'
             )
     return "\n".join(lines)
 
@@ -439,6 +444,7 @@ async def status() -> str:
     from kitsune_mcp.credentials import _registry_headers
     from kitsune_mcp.registry import REGISTRY_BASE
     from kitsune_mcp.utils import _get_http_client
+
     lines = [f"KITSUNE MCP  v{__version__}", ""]
 
     # PROVIDERS — Smithery key is validated with a live ping so users see
@@ -482,6 +488,7 @@ async def status() -> str:
     # Gateway section — competing servers + absorbed servers
     try:
         from kitsune_mcp.gateway import _find_mcp_configs, _load_absorbed_servers
+
         gw_lines: list[str] = []
         for cfg in _find_mcp_configs():
             competing = [s for s in cfg.servers if "kitsune" not in s.id.lower()]
@@ -492,7 +499,9 @@ async def status() -> str:
                     f"(~{tool_est} extra tools in context)"
                 )
                 if "setup" in _state._active_tool_names():
-                    gw_lines.append("     Run setup() to harvest their credentials and reduce bloat")
+                    gw_lines.append(
+                        "     Run setup() to harvest their credentials and reduce bloat"
+                    )
                 else:
                     gw_lines.append(
                         "     Restart with KITSUNE_TOOLS=all to unlock setup() and harvest"
@@ -515,10 +524,10 @@ async def status() -> str:
     if is_first_run:
         lines += [
             "✨ Quick start:",
-            "  1. shapeshift(\"mcp-server-time\")",
-            "  2. call(\"get_current_time\", {\"timezone\": \"UTC\"})",
+            '  1. shapeshift("mcp-server-time")',
+            '  2. call("get_current_time", {"timezone": "UTC"})',
             "  3. shapeshift()",
-            "  More: search(\"what you need\") | auth(\"SMITHERY_API_KEY\", \"sm-...\") for 3000+ servers",
+            '  More: search("what you need") | auth("SMITHERY_API_KEY", "sm-...") for 3000+ servers',
             "",
         ]
 
@@ -538,6 +547,7 @@ async def status() -> str:
 
     # Persistent connections — ping all in parallel
     from kitsune_mcp.transport import _process_pool
+
     if _process_pool:
         pool_items = list(_process_pool.items())
         ping_results = await asyncio.gather(
@@ -592,7 +602,9 @@ async def status() -> str:
     # mounted this session (would be permanently loaded if installed always-on)
     # plus any inspected-but-never-mounted schemas (legacy inspect() path).
     shapeshift_savings_map = stats.get("tokens_avoided_shapeshift") or {}
-    shapeshift_saved = sum(shapeshift_savings_map.values()) if isinstance(shapeshift_savings_map, dict) else 0
+    shapeshift_saved = (
+        sum(shapeshift_savings_map.values()) if isinstance(shapeshift_savings_map, dict) else 0
+    )
     inspected_not_shapeshifted = {
         sid: info
         for sid, info in explored.items()
@@ -621,9 +633,6 @@ async def status() -> str:
             n_inspected = len(inspected_not_shapeshifted)
             parts.append(f"{n_inspected} inspected schema(s)")
         breakdown = " + ".join(parts)
-        lines.append(
-            f"  Saved vs always-on: ~{total_saved:,} tokens "
-            f"[{breakdown}]"
-        )
+        lines.append(f"  Saved vs always-on: ~{total_saved:,} tokens [{breakdown}]")
 
     return "\n".join(lines)

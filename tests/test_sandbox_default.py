@@ -10,6 +10,7 @@ Docker cage for low-trust / unknown-source local servers, BEST-EFFORT:
 - High-trust registry sources (official/absorbed/registries) are NOT caged
   by default; an explicit KITSUNE_SANDBOX policy still applies on top.
 """
+
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock
@@ -21,14 +22,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from kitsune_mcp.registry import ServerInfo
 
 
-def _srv(id="some-pkg", name="some-pkg", source="npm", transport="stdio",
-         install_cmd=None, credentials=None, tools=None, url=""):
+def _srv(
+    id="some-pkg",
+    name="some-pkg",
+    source="npm",
+    transport="stdio",
+    install_cmd=None,
+    credentials=None,
+    tools=None,
+    url="",
+):
     if install_cmd is None:
         install_cmd = ["npx", "-y", f"{id}@1.2.3"]
     return ServerInfo(
-        id=id, name=name, description="test server", source=source,
-        transport=transport, url=url, install_cmd=install_cmd,
-        credentials=credentials or {}, tools=tools if tools is not None else [],
+        id=id,
+        name=name,
+        description="test server",
+        source=source,
+        transport=transport,
+        url=url,
+        install_cmd=install_cmd,
+        credentials=credentials or {},
+        tools=tools if tools is not None else [],
     )
 
 
@@ -62,6 +77,7 @@ def _docker(available: bool, monkeypatch):
 class TestSandboxDefaultForExec:
     def test_community_source_sandboxes_by_default(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_default_for_exec
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         assert _sandbox_default_for_exec(False, "npm") is True
         assert _sandbox_default_for_exec(False, "pypi") is True
@@ -71,11 +87,13 @@ class TestSandboxDefaultForExec:
         """run() and ad-hoc call() often have no registry entry — treat the
         unknown source as untrusted and cage it."""
         from kitsune_mcp.tools._state import _sandbox_default_for_exec
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         assert _sandbox_default_for_exec(False, "") is True
 
     def test_trusted_sources_not_sandboxed_by_default(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_default_for_exec
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         assert _sandbox_default_for_exec(False, "official") is False
         assert _sandbox_default_for_exec(False, "absorbed") is False
@@ -85,6 +103,7 @@ class TestSandboxDefaultForExec:
 
     def test_explicit_all_policy_still_applies(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_default_for_exec
+
         monkeypatch.setenv("KITSUNE_SANDBOX", "all")
         assert _sandbox_default_for_exec(False, "official") is True
 
@@ -92,6 +111,7 @@ class TestSandboxDefaultForExec:
         """KITSUNE_SANDBOX=off is the escape hatch — it must also turn off the
         low-trust/unknown-source default cage, not just the all/community policy."""
         from kitsune_mcp.tools._state import _sandbox_default_for_exec
+
         monkeypatch.setenv("KITSUNE_SANDBOX", "off")
         assert _sandbox_default_for_exec(False, "npm") is False
         assert _sandbox_default_for_exec(False, "") is False
@@ -105,22 +125,26 @@ class TestSandboxDefaultForExec:
 class TestSandboxForMount:
     def test_true_always_cages(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_for_mount
+
         monkeypatch.setenv("KITSUNE_SANDBOX", "off")
         assert _sandbox_for_mount(True, "official") is True
 
     def test_false_never_cages(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_for_mount
+
         monkeypatch.setenv("KITSUNE_SANDBOX", "all")
         assert _sandbox_for_mount(False, "npm") is False
 
     def test_none_uses_default_policy(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_for_mount
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         assert _sandbox_for_mount(None, "npm") is True
         assert _sandbox_for_mount(None, "official") is False
 
     def test_none_honors_off(self, monkeypatch):
         from kitsune_mcp.tools._state import _sandbox_for_mount
+
         monkeypatch.setenv("KITSUNE_SANDBOX", "off")
         assert _sandbox_for_mount(None, "npm") is False
 
@@ -131,6 +155,7 @@ class TestSandboxForMount:
 class TestSandboxedStdioTransport:
     def test_wraps_community_launch_when_docker_present(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -140,6 +165,7 @@ class TestSandboxedStdioTransport:
 
     def test_runs_uncaged_with_note_when_docker_absent(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(False, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -150,6 +176,7 @@ class TestSandboxedStdioTransport:
 
     def test_trusted_source_not_wrapped_even_with_docker(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -159,6 +186,7 @@ class TestSandboxedStdioTransport:
 
     def test_non_npx_launch_never_wrapped(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -168,6 +196,7 @@ class TestSandboxedStdioTransport:
 
     def test_credential_names_forwarded_when_wrapped(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -183,12 +212,14 @@ class TestSandboxedStdioTransport:
 class TestTransportForExec:
     def test_http_server_routes_unchanged_no_note(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         _docker(True, monkeypatch)
         _t, note = _state.transport_for_exec("https://example.com/mcp", None)
         assert note == ""
 
     def test_stdio_community_server_is_sandboxed(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -198,6 +229,7 @@ class TestTransportForExec:
 
     def test_unknown_package_defaults_to_npx_and_sandboxes(self, monkeypatch):
         from kitsune_mcp.tools import _state
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -215,6 +247,7 @@ class TestRunSandboxesByDefault:
     async def test_run_caged_when_docker_present(self, monkeypatch):
         from kitsune_mcp.tools import _state
         from kitsune_mcp.tools import exec as exec_mod
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(True, monkeypatch)
         captured = _capture_transports(monkeypatch)
@@ -226,6 +259,7 @@ class TestRunSandboxesByDefault:
     async def test_run_uncaged_note_when_docker_absent(self, monkeypatch):
         from kitsune_mcp.tools import _state
         from kitsune_mcp.tools import exec as exec_mod
+
         monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
         _docker(False, monkeypatch)
         captured = _capture_transports(monkeypatch)

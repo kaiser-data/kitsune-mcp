@@ -1,4 +1,5 @@
 """Tests for v0.19 Intent Router — Phase 1 (auto in lean + _blocked) and Phase 2 (category routing + schema inference)."""
+
 import os
 import sys
 
@@ -11,13 +12,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 def test_auto_in_lean_profile():
     """auto must be in the lean tool set starting from v0.19."""
     from server import _LEAN_TOOLS
+
     assert "auto" in _LEAN_TOOLS, "auto must be in lean profile (v0.19+)"
 
 
 def test_blocked_helper_format():
     """`_blocked()` returns the standard 3-line format."""
     from kitsune_mcp.tools.onboarding import _blocked
-    result = _blocked(what="server X needs credentials", why="API_KEY missing", fix="auth('API_KEY', 'val')")
+
+    result = _blocked(
+        what="server X needs credentials", why="API_KEY missing", fix="auth('API_KEY', 'val')"
+    )
     assert result.startswith("✗ Blocked:")
     assert "  Why:" in result
     assert "  Fix:" in result
@@ -27,6 +32,7 @@ def test_blocked_helper_format():
 def test_blocked_helper_with_fallback():
     """`_blocked()` includes Alt line when fallback is given."""
     from kitsune_mcp.tools.onboarding import _blocked
+
     result = _blocked(
         what="schema fetch failed",
         why="no SMITHERY_API_KEY",
@@ -40,6 +46,7 @@ def test_blocked_helper_with_fallback():
 def test_blocked_format_four_fields():
     """`_blocked()` output has exactly 3 or 4 lines depending on fallback."""
     from kitsune_mcp.tools.onboarding import _blocked
+
     without_fallback = _blocked("what", "why", "fix")
     assert len(without_fallback.splitlines()) == 3
 
@@ -53,6 +60,7 @@ def test_blocked_format_four_fields():
 class TestClassifyTask:
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _classify_task
+
         return _classify_task
 
     def test_web_search(self):
@@ -109,19 +117,27 @@ class TestClassifyTask:
 class TestClassifyParam:
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _classify_param
+
         return _classify_param
 
     def test_sql_query_by_description(self):
-        assert self._fn()("query", "SQL query to execute", "Execute a database query") == "sql_query"
+        assert (
+            self._fn()("query", "SQL query to execute", "Execute a database query") == "sql_query"
+        )
 
     def test_sql_query_by_name_in_combined(self):
         assert self._fn()("statement", "The sql query string", "") == "sql_query"
 
     def test_shell_command_by_description(self):
-        assert self._fn()("cmd", "Shell command to run", "Execute command in terminal") == "shell_command"
+        assert (
+            self._fn()("cmd", "Shell command to run", "Execute command in terminal")
+            == "shell_command"
+        )
 
     def test_shell_command_by_tool_desc(self):
-        assert self._fn()("command", "", "Execute a bash command in the terminal") == "shell_command"
+        assert (
+            self._fn()("command", "", "Execute a bash command in the terminal") == "shell_command"
+        )
 
     def test_repo_identifier(self):
         assert self._fn()("repo", "GitHub repository (owner/repo)", "") == "repo_identifier"
@@ -157,6 +173,7 @@ class TestClassifyParam:
 class TestInferArgsEnhanced:
     def _fn(self):
         from kitsune_mcp.tools.onboarding import _infer_args_from_task
+
         return _infer_args_from_task
 
     def _schema(self, pname, ptype="string", desc="", tool_desc="", required=True):

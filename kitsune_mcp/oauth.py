@@ -257,10 +257,7 @@ async def authorize(meta: AuthMeta, client: ClientInfo, force_login: bool = Fals
     """
     methods = meta.code_challenge_methods_supported or ["S256"]
     if "S256" not in methods:
-        raise RuntimeError(
-            f"Server at {meta.issuer} does not advertise PKCE S256 "
-            f"(got {methods})"
-        )
+        raise RuntimeError(f"Server at {meta.issuer} does not advertise PKCE S256 (got {methods})")
 
     verifier, challenge = _pkce_pair()
     state_value = _make_state()

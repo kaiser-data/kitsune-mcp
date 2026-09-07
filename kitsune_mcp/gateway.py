@@ -20,6 +20,7 @@ _BACKUP_DIR = _KITSUNE_HOME / "backup"
 
 # ─── Client config paths ──────────────────────────────────────────────────────
 
+
 def _client_config_paths() -> dict[str, Path]:
     """Return paths to existing MCP client config files on this machine."""
     plat = sys.platform
@@ -27,13 +28,13 @@ def _client_config_paths() -> dict[str, Path]:
     raw: dict[str, dict[str, Path]] = {
         "claude-desktop": {
             "darwin": home / "Library/Application Support/Claude/claude_desktop_config.json",
-            "win32":  Path(os.environ.get("APPDATA", "")) / "Claude/claude_desktop_config.json",
-            "linux":  home / ".config/Claude/claude_desktop_config.json",
+            "win32": Path(os.environ.get("APPDATA", "")) / "Claude/claude_desktop_config.json",
+            "linux": home / ".config/Claude/claude_desktop_config.json",
         },
         "claude-code": {"all": home / ".claude/mcp.json"},
         "claude-code-user": {"all": home / ".claude.json"},
-        "cursor":      {"all": home / ".cursor/mcp.json"},
-        "windsurf":    {"all": home / ".codeium/windsurf/mcp_config.json"},
+        "cursor": {"all": home / ".cursor/mcp.json"},
+        "windsurf": {"all": home / ".codeium/windsurf/mcp_config.json"},
     }
     result: dict[str, Path] = {}
     for client, plat_map in raw.items():
@@ -45,6 +46,7 @@ def _client_config_paths() -> dict[str, Path]:
 
 # ─── Data classes ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class AbsorbedServer:
     id: str
@@ -54,8 +56,8 @@ class AbsorbedServer:
     client: str = ""
     absorbed_at: str = ""
     estimated_tools: int = 8
-    url: str = ""              # remote servers ({"url": ...} config entries)
-    transport: str = "stdio"   # "stdio" | "http" | "websocket"
+    url: str = ""  # remote servers ({"url": ...} config entries)
+    transport: str = "stdio"  # "stdio" | "http" | "websocket"
 
 
 @dataclass
@@ -66,6 +68,7 @@ class ClientConfig:
 
 
 # ─── Config discovery (Phase 1 — read-only) ───────────────────────────────────
+
 
 def _parse_mcp_servers(config: dict, client: str) -> list[AbsorbedServer]:
     """Extract server stubs from an MCP client config dict.
@@ -87,15 +90,17 @@ def _parse_mcp_servers(config: dict, client: str) -> list[AbsorbedServer]:
             transport = "websocket" if url.startswith(("ws://", "wss://")) else "http"
         else:
             continue
-        servers.append(AbsorbedServer(
-            id=name,
-            command=command,
-            args=cfg.get("args") or [],
-            env=cfg.get("env") or {},
-            client=client,
-            url=url,
-            transport=transport,
-        ))
+        servers.append(
+            AbsorbedServer(
+                id=name,
+                command=command,
+                args=cfg.get("args") or [],
+                env=cfg.get("env") or {},
+                client=client,
+                url=url,
+                transport=transport,
+            )
+        )
     return servers
 
 
@@ -136,8 +141,7 @@ def _find_mcp_configs() -> list[ClientConfig]:
         remaining = [s for s in legacy.servers if s.id not in modern_ids]
         if remaining:
             result = [
-                ClientConfig(client=c.client, path=c.path, servers=remaining)
-                if c is legacy else c
+                ClientConfig(client=c.client, path=c.path, servers=remaining) if c is legacy else c
                 for c in result
             ]
         else:
@@ -147,6 +151,7 @@ def _find_mcp_configs() -> list[ClientConfig]:
 
 # ─── Credential harvest (Phase 2) ─────────────────────────────────────────────
 
+
 def _is_credential_key(key: str) -> bool:
     env_name = key.upper().replace("-", "_")
     return any(env_name.endswith(sfx) for sfx in CRED_SUFFIXES)
@@ -155,6 +160,7 @@ def _is_credential_key(key: str) -> bool:
 def _harvest_credentials(servers: list[AbsorbedServer]) -> dict[str, str]:
     """Extract credential env vars from server env blocks. Returns {ENV_VAR: value}."""
     from kitsune_mcp.credentials import _to_env_var
+
     harvested: dict[str, str] = {}
     for srv in servers:
         for key, val in (srv.env or {}).items():
@@ -164,6 +170,7 @@ def _harvest_credentials(servers: list[AbsorbedServer]) -> dict[str, str]:
 
 
 # ─── Absorbed server persistence (Phase 3) ────────────────────────────────────
+
 
 def _load_absorbed_servers() -> list[AbsorbedServer]:
     """Load absorbed server definitions from ~/.kitsune/absorbed_servers.json."""
@@ -194,10 +201,8 @@ def _save_absorbed_servers(servers: list[AbsorbedServer]) -> None:
 def _to_server_info(a: AbsorbedServer):
     """Convert an AbsorbedServer to a ServerInfo for the registry."""
     from kitsune_mcp.registry import ServerInfo
-    creds = {
-        k: "" for k in (a.env or {})
-        if _is_credential_key(k)
-    }
+
+    creds = {k: "" for k in (a.env or {}) if _is_credential_key(k)}
     install_cmd = [a.command, *a.args] if a.command else []
     return ServerInfo(
         id=a.id,
@@ -212,6 +217,7 @@ def _to_server_info(a: AbsorbedServer):
 
 
 # ─── Config management (Phase 4) ──────────────────────────────────────────────
+
 
 def _write_project_config() -> Path:
     """Write .claude/mcp.json with only Kitsune for the current project."""
@@ -247,8 +253,7 @@ def _write_exclusive_config(client: str, keep: list[str]) -> Path:
 
     mcp_servers = data.get("mcpServers") or {}
     data["mcpServers"] = {
-        k: v for k, v in mcp_servers.items()
-        if k in keep or "kitsune" in k.lower()
+        k: v for k, v in mcp_servers.items() if k in keep or "kitsune" in k.lower()
     }
 
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".json")

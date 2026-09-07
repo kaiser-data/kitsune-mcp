@@ -106,7 +106,7 @@ class TestCredentialsGuide:
         result = _credentials_guide("test-server", credentials, resolved)
         assert "test-server" in result
         assert "API_KEY" in result  # env var form shown
-        assert "✗" in result        # shown as missing
+        assert "✗" in result  # shown as missing
 
     def test_shows_auth_command(self):
         credentials = {"apiKey": "API key description"}
@@ -132,7 +132,7 @@ class TestCredentialsGuide:
         result = _credentials_guide("multi-server", credentials, resolved)
         assert "TOKEN" in result
         assert "SECRET" in result
-        assert "✓" in result   # apiKey is resolved — should show as found
+        assert "✓" in result  # apiKey is resolved — should show as found
 
 
 class TestExtractContent:
@@ -141,10 +141,12 @@ class TestExtractContent:
         assert _extract_content(result) == "Hello world"
 
     def test_multiple_text_parts_joined(self):
-        result = {"content": [
-            {"type": "text", "text": "Part 1"},
-            {"type": "text", "text": "Part 2"},
-        ]}
+        result = {
+            "content": [
+                {"type": "text", "text": "Part 1"},
+                {"type": "text", "text": "Part 2"},
+            ]
+        }
         assert _extract_content(result) == "Part 1\nPart 2"
 
     def test_non_text_content_falls_back_to_json(self):
@@ -227,15 +229,32 @@ class TestConnectServerIdResolution:
         from server import ServerInfo, _process_pool, _registry, connect
 
         srv = ServerInfo(
-            id="filesystem", name="filesystem", description="",
-            source="official", transport="stdio", url="",
+            id="filesystem",
+            name="filesystem",
+            description="",
+            source="official",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
-        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
-            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "fs", "version": "1"}
-        }}).encode() + b"\n"
+        init_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {"name": "fs", "version": "1"},
+                    },
+                }
+            ).encode()
+            + b"\n"
+        )
 
         mock_proc = MagicMock()
         mock_proc.stdin = MagicMock()
@@ -243,24 +262,32 @@ class TestConnectServerIdResolution:
         mock_proc.stdin.drain = AsyncMock()
         mock_proc.stdin.close = MagicMock()
         mock_proc.stdout = MagicMock()
-        mock_proc.stdout.readline = AsyncMock(side_effect=[
-            init_msg,
-            _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {"tools": []}}).encode() + b"\n",
-            _json.dumps({"jsonrpc": "2.0", "id": 4, "result": {"resources": []}}).encode() + b"\n",
-            b"",
-        ])
+        mock_proc.stdout.readline = AsyncMock(
+            side_effect=[
+                init_msg,
+                _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {"tools": []}}).encode() + b"\n",
+                _json.dumps({"jsonrpc": "2.0", "id": 4, "result": {"resources": []}}).encode()
+                + b"\n",
+                b"",
+            ]
+        )
         mock_proc.returncode = None
         mock_proc.kill = MagicMock()
         mock_proc.wait = AsyncMock(return_value=0)
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)):
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)),
+        ):
             result = await connect("filesystem", name="fs")
 
         assert "Connected" in result or "Already" in result
         # The resolved install_cmd must have been used — pool key reflects it
         import json
-        expected_key = json.dumps(["npx", "-y", "@modelcontextprotocol/server-filesystem"], sort_keys=True)
+
+        expected_key = json.dumps(
+            ["npx", "-y", "@modelcontextprotocol/server-filesystem"], sort_keys=True
+        )
         assert expected_key in _process_pool
 
     async def test_shell_command_bypasses_registry(self):
@@ -269,8 +296,10 @@ class TestConnectServerIdResolution:
 
         from server import _registry, connect
 
-        with patch.object(_registry, "get_server", AsyncMock()) as mock_get, \
-             patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
+        with (
+            patch.object(_registry, "get_server", AsyncMock()) as mock_get,
+            patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError),
+        ):
             await connect("npx -y some-package")
 
         mock_get.assert_not_called()
@@ -281,18 +310,22 @@ class TestCraftTool:
 
     def setup_method(self):
         import os
+
         os.environ["KITSUNE_ALLOW_LOCAL_FETCH"] = "1"
         from server import mcp, session
+
         # Clean up any crafted tools from previous tests
         for name in list(session.get("crafted_tools", {}).keys()):
             with contextlib.suppress(Exception):
                 mcp.remove_tool(name)
         session["crafted_tools"] = {}
-        session["shapeshift_tools"] = [t for t in session.get("morphed_tools", [])
-                                     if t not in session.get("crafted_tools", {})]
+        session["shapeshift_tools"] = [
+            t for t in session.get("morphed_tools", []) if t not in session.get("crafted_tools", {})
+        ]
 
     def teardown_method(self):
         import os
+
         os.environ.pop("KITSUNE_ALLOW_LOCAL_FETCH", None)
 
     async def test_craft_registers_tool_post(self):
@@ -350,12 +383,15 @@ class TestCraftTool:
             )
 
             # Call the registered tool directly
-            tool_fn = next(t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "echo_tool")
+            tool_fn = next(
+                t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "echo_tool"
+            )
             response = await tool_fn(msg="hello")
 
         assert response == "pong"
         assert route.called
         import json as _json2
+
         body = _json2.loads(route.calls[0].request.content)
         assert body == {"msg": "hello"}
 
@@ -385,7 +421,9 @@ class TestCraftTool:
                 method="GET",
             )
 
-            tool_fn = next(t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "get_searcher")
+            tool_fn = next(
+                t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "get_searcher"
+            )
             await tool_fn(q="mcp")
 
         assert route.called
@@ -416,7 +454,9 @@ class TestCraftTool:
                 url="http://localhost:9999/fail",
             )
 
-            tool_fn = next(t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "fail_tool")
+            tool_fn = next(
+                t.fn for t in mcp._tool_manager._tools.values() if t.fn.__name__ == "fail_tool"
+            )
             result = await tool_fn(x="anything")
 
         assert "500" in result
@@ -435,7 +475,9 @@ class TestCraftTool:
         ctx.session.send_tool_list_changed = AsyncMock()
 
         with respx.mock:
-            respx.post("http://localhost:9999/tmp").mock(return_value=httpx.Response(200, text="ok"))
+            respx.post("http://localhost:9999/tmp").mock(
+                return_value=httpx.Response(200, text="ok")
+            )
             await craft(
                 ctx=ctx,
                 name="tmp_tool",
@@ -497,24 +539,44 @@ class TestLeanMorph:
         from server import ServerInfo, _registry, session, shapeshift
 
         srv = ServerInfo(
-            id="filesystem", name="Filesystem", description="fs",
-            source="official", transport="stdio", url="",
+            id="filesystem",
+            name="Filesystem",
+            description="fs",
+            source="official",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
         all_tools = [
-            {"name": "read_file", "description": "read", "inputSchema": {"properties": {}, "required": []}},
-            {"name": "write_file", "description": "write", "inputSchema": {"properties": {}, "required": []}},
-            {"name": "list_directory", "description": "list", "inputSchema": {"properties": {}, "required": []}},
+            {
+                "name": "read_file",
+                "description": "read",
+                "inputSchema": {"properties": {}, "required": []},
+            },
+            {
+                "name": "write_file",
+                "description": "write",
+                "inputSchema": {"properties": {}, "required": []},
+            },
+            {
+                "name": "list_directory",
+                "description": "list",
+                "inputSchema": {"properties": {}, "required": []},
+            },
         ]
 
         ctx = MagicMock()
         ctx.session = MagicMock()
         ctx.session.send_tool_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockTransport:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockTransport,
+        ):
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=all_tools)
             MockTransport.return_value = mock_t
@@ -533,10 +595,16 @@ class TestLeanMorph:
         from server import ServerInfo, _registry, session, shapeshift
 
         srv = ServerInfo(
-            id="filesystem", name="Filesystem", description="fs",
-            source="official", transport="stdio", url="",
+            id="filesystem",
+            name="Filesystem",
+            description="fs",
+            source="official",
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
         all_tools = [
@@ -548,8 +616,10 @@ class TestLeanMorph:
         ctx.session = MagicMock()
         ctx.session.send_tool_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockTransport:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockTransport,
+        ):
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=all_tools)
             MockTransport.return_value = mock_t
@@ -564,16 +634,24 @@ class TestLeanMorph:
 # Phase 1: proactive credential warning in morph()
 # ---------------------------------------------------------------------------
 
+
 class TestMorphCredentialWarning:
     """morph() should warn about missing env vars probed from tool schemas."""
 
     def _make_srv(self, source="official"):
         from server import ServerInfo
+
         return ServerInfo(
-            id="org/cred-server", name="cred-server", description="",
-            source=source, transport="stdio", url="",
+            id="org/cred-server",
+            name="cred-server",
+            description="",
+            source=source,
+            transport="stdio",
+            url="",
             install_cmd=["npx", "-y", "cred-server"],
-            credentials={}, tools=[], token_cost=0,
+            credentials={},
+            tools=[],
+            token_cost=0,
         )
 
     async def test_warns_on_missing_credentials(self):
@@ -588,11 +666,13 @@ class TestMorphCredentialWarning:
         os.environ.pop(env_var, None)
 
         srv = self._make_srv()
-        tools_with_cred = [{
-            "name": "do_thing",
-            "description": f"Requires {env_var}",
-            "inputSchema": {"properties": {}, "required": []},
-        }]
+        tools_with_cred = [
+            {
+                "name": "do_thing",
+                "description": f"Requires {env_var}",
+                "inputSchema": {"properties": {}, "required": []},
+            }
+        ]
 
         ctx = MagicMock()
         ctx.session = MagicMock()
@@ -600,8 +680,10 @@ class TestMorphCredentialWarning:
         ctx.session.send_resource_list_changed = AsyncMock()
         ctx.session.send_prompt_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+        ):
             mock_t = MagicMock()
             mock_t.list_tools = AsyncMock(return_value=tools_with_cred)
             mock_t.list_resources = AsyncMock(return_value=[])
@@ -625,11 +707,13 @@ class TestMorphCredentialWarning:
 
         try:
             srv = self._make_srv()
-            tools_with_cred = [{
-                "name": "do_thing",
-                "description": f"Requires {env_var}",
-                "inputSchema": {"properties": {}, "required": []},
-            }]
+            tools_with_cred = [
+                {
+                    "name": "do_thing",
+                    "description": f"Requires {env_var}",
+                    "inputSchema": {"properties": {}, "required": []},
+                }
+            ]
 
             ctx = MagicMock()
             ctx.session = MagicMock()
@@ -637,8 +721,10 @@ class TestMorphCredentialWarning:
             ctx.session.send_resource_list_changed = AsyncMock()
             ctx.session.send_prompt_list_changed = AsyncMock()
 
-            with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-                 patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
+            with (
+                patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+                patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+            ):
                 mock_t = MagicMock()
                 mock_t.list_tools = AsyncMock(return_value=tools_with_cred)
                 mock_t.list_resources = AsyncMock(return_value=[])
@@ -666,13 +752,18 @@ class TestMorphCredentialWarning:
         ctx.session.send_resource_list_changed = AsyncMock()
         ctx.session.send_prompt_list_changed = AsyncMock()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=srv)), \
-             patch("kitsune_mcp.tools._state._probe_requirements", side_effect=RuntimeError("probe failed")), \
-             patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT:
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=srv)),
+            patch(
+                "kitsune_mcp.tools._state._probe_requirements",
+                side_effect=RuntimeError("probe failed"),
+            ),
+            patch("kitsune_mcp.tools._state.PersistentStdioTransport") as MockT,
+        ):
             mock_t = MagicMock()
-            mock_t.list_tools = AsyncMock(return_value=[
-                {"name": "simple_tool", "description": "", "inputSchema": {}}
-            ])
+            mock_t.list_tools = AsyncMock(
+                return_value=[{"name": "simple_tool", "description": "", "inputSchema": {}}]
+            )
             mock_t.list_resources = AsyncMock(return_value=[])
             mock_t.list_prompts = AsyncMock(return_value=[])
             MockT.return_value = mock_t

@@ -1,4 +1,5 @@
 """Tests for SmitheryRegistry and NpmRegistry."""
+
 import os
 import sys
 
@@ -13,9 +14,11 @@ from server import NpmRegistry, SmitheryRegistry
 # SmitheryRegistry tests
 # ---------------------------------------------------------------------------
 
+
 class TestSmitheryRegistryNoKey:
     async def test_search_without_api_key_returns_empty(self, monkeypatch):
         import kitsune_mcp.credentials as creds
+
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", "")
         reg = SmitheryRegistry()
@@ -24,6 +27,7 @@ class TestSmitheryRegistryNoKey:
 
     async def test_get_server_without_api_key_returns_none(self, monkeypatch):
         import kitsune_mcp.credentials as creds
+
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", "")
         reg = SmitheryRegistry()
@@ -127,6 +131,7 @@ class TestSmitheryRegistryWithMock:
 # NpmRegistry tests
 # ---------------------------------------------------------------------------
 
+
 class TestNpmRegistry:
     async def test_search_returns_mcp_packages_only(self):
         npm_response = {
@@ -165,9 +170,7 @@ class TestNpmRegistry:
             "name": "mcp-server-test",
             "description": "Test MCP server",
             "dist-tags": {"latest": "1.2.3"},
-            "versions": {
-                "1.2.3": {"description": "Test MCP server v1.2.3"}
-            },
+            "versions": {"1.2.3": {"description": "Test MCP server v1.2.3"}},
         }
         with respx.mock:
             respx.get("https://registry.npmjs.org/mcp-server-test").mock(
@@ -221,6 +224,7 @@ class TestNpmRegistry:
 # MultiRegistry tests
 # ---------------------------------------------------------------------------
 
+
 class TestMultiRegistryGetServerParallel:
     """MultiRegistry.get_server() should query all registries in parallel."""
 
@@ -248,6 +252,7 @@ class TestMultiRegistryGetServerParallel:
                 return_value=httpx.Response(200, json=npm_detail)
             )
             from server import MultiRegistry
+
             reg = MultiRegistry()
             result = await reg.get_server("exa/exa")
 
@@ -257,6 +262,7 @@ class TestMultiRegistryGetServerParallel:
     async def test_falls_back_to_npm_when_smithery_unavailable(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         import kitsune_mcp.credentials as creds
+
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_detail = {
             "name": "mcp-server-brave-search",
@@ -269,6 +275,7 @@ class TestMultiRegistryGetServerParallel:
                 return_value=httpx.Response(200, json=npm_detail)
             )
             from server import MultiRegistry
+
             reg = MultiRegistry()
             result = await reg.get_server("mcp-server-brave-search")
 
@@ -278,12 +285,14 @@ class TestMultiRegistryGetServerParallel:
     async def test_returns_none_when_all_fail(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         import kitsune_mcp.credentials as creds
+
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         with respx.mock:
             respx.get("https://registry.npmjs.org/totally-unknown-pkg-xyz").mock(
                 return_value=httpx.Response(404, text="Not Found")
             )
             from server import MultiRegistry
+
             reg = MultiRegistry()
             result = await reg.get_server("totally-unknown-pkg-xyz")
 
@@ -296,6 +305,7 @@ class TestMultiRegistryCaching:
     async def test_get_server_returns_cached_result(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         import kitsune_mcp.credentials as creds
+
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_detail = {
             "name": "mcp-server-cached",
@@ -304,6 +314,7 @@ class TestMultiRegistryCaching:
             "versions": {"1.0.0": {"description": "Cached server"}},
         }
         from server import MultiRegistry
+
         reg = MultiRegistry()
         with respx.mock:
             route = respx.get("https://registry.npmjs.org/mcp-server-cached").mock(
@@ -320,6 +331,7 @@ class TestMultiRegistryCaching:
     async def test_bust_cache_clears_all(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         import kitsune_mcp.credentials as creds
+
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_detail = {
             "name": "mcp-server-bustable",
@@ -328,6 +340,7 @@ class TestMultiRegistryCaching:
             "versions": {"1.0.0": {"description": "Bustable"}},
         }
         from server import MultiRegistry
+
         reg = MultiRegistry()
         with respx.mock:
             route = respx.get("https://registry.npmjs.org/mcp-server-bustable").mock(
@@ -343,6 +356,7 @@ class TestMultiRegistryCaching:
     async def test_search_returns_cached_result(self, monkeypatch):
         monkeypatch.delenv("SMITHERY_API_KEY", raising=False)
         import kitsune_mcp.credentials as creds
+
         monkeypatch.setattr(creds, "SMITHERY_API_KEY", None)
         npm_search = {
             "objects": [
@@ -356,6 +370,7 @@ class TestMultiRegistryCaching:
             ]
         }
         from server import MultiRegistry
+
         reg = MultiRegistry()
         with respx.mock:
             route = respx.get("https://registry.npmjs.org/-/v1/search").mock(
@@ -372,25 +387,31 @@ class TestMultiRegistryCaching:
 # OfficialMCPRegistry tests
 # ---------------------------------------------------------------------------
 
+
 class TestOfficialMCPRegistry:
     """OfficialMCPRegistry returns trusted reference servers."""
 
     async def test_search_filesystem_returns_official_server(self):
         from server import OfficialMCPRegistry
+
         reg = OfficialMCPRegistry()
         with respx.mock:
             # Allow GitHub API call (but don't require it — seed list is enough)
-            respx.get("https://api.github.com/repos/modelcontextprotocol/servers/contents/src").mock(
-                return_value=httpx.Response(200, json=[])
-            )
+            respx.get(
+                "https://api.github.com/repos/modelcontextprotocol/servers/contents/src"
+            ).mock(return_value=httpx.Response(200, json=[]))
             results = await reg.search("filesystem", 5)
 
         assert len(results) >= 1
         assert results[0].source == "official"
-        assert "@modelcontextprotocol/server-filesystem" in results[0].id or "filesystem" in results[0].id.lower()
+        assert (
+            "@modelcontextprotocol/server-filesystem" in results[0].id
+            or "filesystem" in results[0].id.lower()
+        )
 
     async def test_get_server_returns_seed_entry(self):
         from server import OfficialMCPRegistry
+
         reg = OfficialMCPRegistry()
         result = await reg.get_server("@modelcontextprotocol/server-filesystem")
 
@@ -400,6 +421,7 @@ class TestOfficialMCPRegistry:
 
     async def test_get_server_pip_uses_uvx(self):
         from server import OfficialMCPRegistry
+
         reg = OfficialMCPRegistry()
         result = await reg.get_server("mcp-server-git")
 
@@ -410,13 +432,14 @@ class TestOfficialMCPRegistry:
     async def test_get_server_unknown_returns_none(self):
         import kitsune_mcp.official_registry as oreg
         from server import OfficialMCPRegistry
+
         # Reset cache so the live fetch runs
         oreg._live_cache.clear()
         reg = OfficialMCPRegistry()
         with respx.mock:
-            respx.get("https://api.github.com/repos/modelcontextprotocol/servers/contents/src").mock(
-                return_value=httpx.Response(200, json=[])
-            )
+            respx.get(
+                "https://api.github.com/repos/modelcontextprotocol/servers/contents/src"
+            ).mock(return_value=httpx.Response(200, json=[]))
             result = await reg.get_server("totally-unknown-official-server")
 
         assert result is None
@@ -425,6 +448,7 @@ class TestOfficialMCPRegistry:
 # ---------------------------------------------------------------------------
 # PyPIRegistry tests
 # ---------------------------------------------------------------------------
+
 
 class TestPyPIRegistry:
     """PyPIRegistry searches PyPI for uvx-installable MCP servers."""
@@ -448,6 +472,7 @@ class TestPyPIRegistry:
 
     async def test_search_returns_pypi_packages(self):
         from server import PyPIRegistry
+
         with respx.mock:
             respx.get("https://pypi.org/search/").mock(
                 return_value=httpx.Response(200, text=self._SEARCH_HTML)
@@ -463,6 +488,7 @@ class TestPyPIRegistry:
 
     async def test_search_http_error_returns_empty(self):
         from server import PyPIRegistry
+
         with respx.mock:
             respx.get("https://pypi.org/search/").mock(
                 return_value=httpx.Response(503, text="Service Unavailable")
@@ -479,6 +505,7 @@ class TestPyPIRegistry:
             }
         }
         from server import PyPIRegistry
+
         with respx.mock:
             respx.get("https://pypi.org/pypi/mcp-server-git/json").mock(
                 return_value=httpx.Response(200, json=pypi_detail)
@@ -502,6 +529,7 @@ class TestPyPIRegistry:
             }
         }
         from server import PyPIRegistry
+
         with respx.mock:
             respx.get("https://pypi.org/pypi/mcp-server-git/json").mock(
                 return_value=httpx.Response(200, json=pypi_detail)
@@ -513,6 +541,7 @@ class TestPyPIRegistry:
 
     async def test_get_server_http_error_returns_none(self):
         from server import PyPIRegistry
+
         with respx.mock:
             respx.get("https://pypi.org/pypi/nonexistent-mcp-pkg/json").mock(
                 return_value=httpx.Response(404, text="Not Found")
@@ -526,32 +555,39 @@ class TestPyPIRegistry:
 # GitHubRegistry tests
 # ---------------------------------------------------------------------------
 
+
 class TestGitHubRegistry:
     """GitHubRegistry resolves github:owner/repo IDs."""
 
     async def test_non_github_id_returns_none(self):
         from server import GitHubRegistry
+
         reg = GitHubRegistry()
         result = await reg.get_server("mcp-server-filesystem")
         assert result is None
 
     async def test_invalid_slug_returns_none(self):
         from server import GitHubRegistry
+
         reg = GitHubRegistry()
         result = await reg.get_server("github:no-slash-here")
         assert result is None
 
     async def test_search_always_returns_empty(self):
         from server import GitHubRegistry
+
         reg = GitHubRegistry()
         results = await reg.search("anything", 10)
         assert results == []
 
     async def test_npm_repo_detected_via_package_json(self):
         from server import GitHubRegistry
+
         with respx.mock:
             respx.get("https://api.github.com/repos/user/my-mcp").mock(
-                return_value=httpx.Response(200, json={"name": "my-mcp", "description": "A test server"})
+                return_value=httpx.Response(
+                    200, json={"name": "my-mcp", "description": "A test server"}
+                )
             )
             respx.get("https://api.github.com/repos/user/my-mcp/contents/package.json").mock(
                 return_value=httpx.Response(200, json={"content": ""})
@@ -569,11 +605,14 @@ class TestGitHubRegistry:
         import base64
 
         from server import GitHubRegistry
-        pyproject_content = b"[project.scripts]\nmy-server = \"my_package:main\"\n"
+
+        pyproject_content = b'[project.scripts]\nmy-server = "my_package:main"\n'
         encoded = base64.b64encode(pyproject_content).decode()
         with respx.mock:
             respx.get("https://api.github.com/repos/user/my-pip-mcp").mock(
-                return_value=httpx.Response(200, json={"name": "my-pip-mcp", "description": "pip server"})
+                return_value=httpx.Response(
+                    200, json={"name": "my-pip-mcp", "description": "pip server"}
+                )
             )
             respx.get("https://api.github.com/repos/user/my-pip-mcp/contents/package.json").mock(
                 return_value=httpx.Response(404, text="Not Found")
@@ -591,6 +630,7 @@ class TestGitHubRegistry:
 
     async def test_fallback_to_npm_when_no_manifest(self):
         from server import GitHubRegistry
+
         with respx.mock:
             respx.get("https://api.github.com/repos/user/unknown-mcp").mock(
                 return_value=httpx.Response(200, json={"name": "unknown-mcp", "description": ""})
@@ -611,48 +651,66 @@ class TestGitHubRegistry:
 class TestDedupKey:
     def test_strips_mcp_server_prefix(self):
         from server import _dedup_key
+
         assert _dedup_key("mcp-server-filesystem") == _dedup_key("filesystem")
 
     def test_strips_npm_scope(self):
         from server import _dedup_key
+
         assert _dedup_key("@modelcontextprotocol/server-filesystem") == _dedup_key("filesystem")
 
     def test_strips_server_prefix(self):
         from server import _dedup_key
+
         assert _dedup_key("server-brave-search") == _dedup_key("brave-search")
 
     def test_different_names_stay_different(self):
         from server import _dedup_key
+
         assert _dedup_key("filesystem") != _dedup_key("sqlite")
 
 
 class TestRelevanceScore:
     def _make_srv(self, id, name, desc="", source="npm"):
         from server import ServerInfo
-        return ServerInfo(id=id, name=name, description=desc, source=source,
-                          transport="stdio", url="", install_cmd=[], credentials={},
-                          tools=[], token_cost=0)
+
+        return ServerInfo(
+            id=id,
+            name=name,
+            description=desc,
+            source=source,
+            transport="stdio",
+            url="",
+            install_cmd=[],
+            credentials={},
+            tools=[],
+            token_cost=0,
+        )
 
     def test_exact_name_match_scores_highest(self):
         from server import _relevance_score
+
         exact = self._make_srv("filesystem", "filesystem")
         partial = self._make_srv("mcp-server-filesystem", "MCP Filesystem Tools")
         assert _relevance_score(exact, "filesystem") > _relevance_score(partial, "filesystem")
 
     def test_official_beats_npm_same_name(self):
         from server import _relevance_score
+
         official = self._make_srv("filesystem", "filesystem", source="official")
         npm = self._make_srv("mcp-server-filesystem", "filesystem", source="npm")
         assert _relevance_score(official, "filesystem") > _relevance_score(npm, "filesystem")
 
     def test_name_match_beats_desc_only_match(self):
         from server import _relevance_score
+
         in_name = self._make_srv("brave-search", "brave-search", desc="web search")
         in_desc = self._make_srv("web-tools", "web-tools", desc="brave search engine")
         assert _relevance_score(in_name, "brave") > _relevance_score(in_desc, "brave")
 
     def test_unrelated_server_scores_low(self):
         from server import _relevance_score
+
         srv = self._make_srv("random-tool", "random-tool", desc="does things")
         assert _relevance_score(srv, "filesystem") < 5.0
 
@@ -660,9 +718,19 @@ class TestRelevanceScore:
 class TestMultiRegistrySearchDedup:
     def _srv(self, id, name, source="npm"):
         from server import ServerInfo
-        return ServerInfo(id=id, name=name, description="", source=source,
-                          transport="stdio", url="", install_cmd=[], credentials={},
-                          tools=[], token_cost=0)
+
+        return ServerInfo(
+            id=id,
+            name=name,
+            description="",
+            source=source,
+            transport="stdio",
+            url="",
+            install_cmd=[],
+            credentials={},
+            tools=[],
+            token_cost=0,
+        )
 
     async def test_same_server_from_two_registries_deduplicated(self):
         from unittest.mock import AsyncMock
@@ -726,6 +794,7 @@ class TestMultiRegistrySearchDedup:
 # McpRegistryIO tests
 # ---------------------------------------------------------------------------
 
+
 class TestMcpRegistryIO:
     """McpRegistryIO wraps registry.modelcontextprotocol.io — no auth."""
 
@@ -768,6 +837,7 @@ class TestMcpRegistryIO:
     async def test_search_returns_servers(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
+
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
@@ -781,6 +851,7 @@ class TestMcpRegistryIO:
     async def test_npm_package_gets_npx_install_cmd(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
+
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
@@ -794,6 +865,7 @@ class TestMcpRegistryIO:
     async def test_pypi_package_gets_uvx_install_cmd(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
+
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
@@ -807,6 +879,7 @@ class TestMcpRegistryIO:
     async def test_credentials_extracted_from_env_vars(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
+
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
@@ -820,6 +893,7 @@ class TestMcpRegistryIO:
     async def test_http_error_returns_empty(self):
         import kitsune_mcp.registry as reg_mod
         from server import McpRegistryIO
+
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
             respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
@@ -833,6 +907,7 @@ class TestMcpRegistryIO:
 # ---------------------------------------------------------------------------
 # GlamaRegistry tests
 # ---------------------------------------------------------------------------
+
 
 class TestGlamaRegistry:
     """GlamaRegistry wraps glama.ai/api/mcp/v1/servers — no auth."""
@@ -871,6 +946,7 @@ class TestGlamaRegistry:
 
     async def test_search_returns_glama_servers(self):
         from server import GlamaRegistry
+
         with respx.mock:
             respx.get("https://glama.ai/api/mcp/v1/servers").mock(
                 return_value=httpx.Response(200, json=self._SEARCH_RESPONSE)
@@ -882,6 +958,7 @@ class TestGlamaRegistry:
 
     async def test_required_env_vars_become_credentials(self):
         from server import GlamaRegistry
+
         with respx.mock:
             respx.get("https://glama.ai/api/mcp/v1/servers").mock(
                 return_value=httpx.Response(200, json=self._SEARCH_RESPONSE)
@@ -893,6 +970,7 @@ class TestGlamaRegistry:
 
     async def test_optional_env_vars_not_in_credentials(self):
         from server import GlamaRegistry
+
         with respx.mock:
             respx.get("https://glama.ai/api/mcp/v1/servers").mock(
                 return_value=httpx.Response(200, json=self._SEARCH_RESPONSE)
@@ -904,6 +982,7 @@ class TestGlamaRegistry:
 
     async def test_github_url_becomes_install_cmd(self):
         from server import GlamaRegistry
+
         with respx.mock:
             respx.get("https://glama.ai/api/mcp/v1/servers").mock(
                 return_value=httpx.Response(200, json=self._SEARCH_RESPONSE)
@@ -915,6 +994,7 @@ class TestGlamaRegistry:
 
     async def test_http_error_returns_empty(self):
         from server import GlamaRegistry
+
         with respx.mock:
             respx.get("https://glama.ai/api/mcp/v1/servers").mock(
                 return_value=httpx.Response(503, text="Unavailable")
@@ -930,19 +1010,26 @@ class TestGlamaGetServerFallback:
     @staticmethod
     def _srv(server_id: str):
         from server import ServerInfo
+
         return ServerInfo(
-            id=server_id, name=server_id.rsplit("/", 1)[-1],
-            description="", source="glama", transport="stdio",
+            id=server_id,
+            name=server_id.rsplit("/", 1)[-1],
+            description="",
+            source="glama",
+            transport="stdio",
         )
 
     async def test_cache_hit_returns_without_calling_search(self):
         from unittest.mock import AsyncMock, patch
 
         from server import GlamaRegistry
+
         reg = GlamaRegistry()
         cached = [self._srv("author/slug-a"), self._srv("author/slug-b")]
-        with patch.object(reg, "_all_servers", AsyncMock(return_value=cached)), \
-             patch.object(reg, "search", AsyncMock()) as search_spy:
+        with (
+            patch.object(reg, "_all_servers", AsyncMock(return_value=cached)),
+            patch.object(reg, "search", AsyncMock()) as search_spy,
+        ):
             hit = await reg.get_server("author/slug-b")
         assert hit is not None and hit.id == "author/slug-b"
         search_spy.assert_not_called()
@@ -951,10 +1038,13 @@ class TestGlamaGetServerFallback:
         from unittest.mock import AsyncMock, patch
 
         from server import GlamaRegistry
+
         reg = GlamaRegistry()
         target = self._srv("deep/catalog-entry")
-        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
-             patch.object(reg, "search", AsyncMock(return_value=[target])) as search_spy:
+        with (
+            patch.object(reg, "_all_servers", AsyncMock(return_value=[])),
+            patch.object(reg, "search", AsyncMock(return_value=[target])) as search_spy,
+        ):
             hit = await reg.get_server("deep/catalog-entry")
         assert hit is target
         search_spy.assert_awaited_once()
@@ -965,14 +1055,17 @@ class TestGlamaGetServerFallback:
         from unittest.mock import AsyncMock, patch
 
         from server import GlamaRegistry
+
         reg = GlamaRegistry()
         target = self._srv("vague-org/uniquetool")
 
         async def fake_search(term, limit):
             return [target] if term == "uniquetool" else []
 
-        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
-             patch.object(reg, "search", side_effect=fake_search) as search_spy:
+        with (
+            patch.object(reg, "_all_servers", AsyncMock(return_value=[])),
+            patch.object(reg, "search", side_effect=fake_search) as search_spy,
+        ):
             hit = await reg.get_server("vague-org/uniquetool")
         assert hit is target
         # Tried namespace first, then slug.
@@ -982,9 +1075,12 @@ class TestGlamaGetServerFallback:
         from unittest.mock import AsyncMock, patch
 
         from server import GlamaRegistry
+
         reg = GlamaRegistry()
-        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
-             patch.object(reg, "search", AsyncMock(return_value=[self._srv("other/thing")])):
+        with (
+            patch.object(reg, "_all_servers", AsyncMock(return_value=[])),
+            patch.object(reg, "search", AsyncMock(return_value=[self._srv("other/thing")])),
+        ):
             hit = await reg.get_server("missing/thing")
         assert hit is None
 
@@ -992,9 +1088,12 @@ class TestGlamaGetServerFallback:
         from unittest.mock import AsyncMock, patch
 
         from server import GlamaRegistry
+
         reg = GlamaRegistry()
-        with patch.object(reg, "_all_servers", AsyncMock(return_value=[])), \
-             patch.object(reg, "search", AsyncMock(side_effect=RuntimeError("boom"))):
+        with (
+            patch.object(reg, "_all_servers", AsyncMock(return_value=[])),
+            patch.object(reg, "search", AsyncMock(side_effect=RuntimeError("boom"))),
+        ):
             hit = await reg.get_server("any/id")
         assert hit is None
 
@@ -1003,22 +1102,37 @@ class TestGlamaGetServerFallback:
 # Relevance score: credential preference
 # ---------------------------------------------------------------------------
 
+
 class TestRelevanceScoreCredentialBonus:
     def _srv(self, id, name, credentials=None, source="npm"):
         from server import ServerInfo
-        return ServerInfo(id=id, name=name, description="web search tool", source=source,
-                          transport="stdio", url="", install_cmd=[],
-                          credentials=credentials or {}, tools=[], token_cost=0)
+
+        return ServerInfo(
+            id=id,
+            name=name,
+            description="web search tool",
+            source=source,
+            transport="stdio",
+            url="",
+            install_cmd=[],
+            credentials=credentials or {},
+            tools=[],
+            token_cost=0,
+        )
 
     def test_no_cred_server_ranks_above_cred_server(self):
         from server import _relevance_score
+
         free = self._srv("brave-search-free", "brave search", credentials={})
         paid = self._srv("brave-search-paid", "brave search", credentials={"BRAVE_API_KEY": "key"})
         assert _relevance_score(free, "brave search") > _relevance_score(paid, "brave search")
 
     def test_cred_bonus_does_not_override_strong_name_match(self):
         from server import _relevance_score
+
         # A server with creds but exact name match should still beat a no-cred server with weak match
         exact_cred = self._srv("filesystem", "filesystem", credentials={"FS_KEY": "key"})
         weak_free = self._srv("tools-pack", "tools pack", credentials={})
-        assert _relevance_score(exact_cred, "filesystem") > _relevance_score(weak_free, "filesystem")
+        assert _relevance_score(exact_cred, "filesystem") > _relevance_score(
+            weak_free, "filesystem"
+        )

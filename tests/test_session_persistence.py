@@ -7,6 +7,7 @@ import pytest
 def _patch_state_path(tmp_path, monkeypatch):
     """Redirect _STATE_PATH to a temp file for each test."""
     import kitsune_mcp.session as sess_mod
+
     monkeypatch.setattr(sess_mod, "_STATE_PATH", tmp_path / "state.json")
     monkeypatch.setattr(sess_mod, "_KITSUNE_HOME", tmp_path)
     # Reset crafted_tools / connections / explored before each test
@@ -18,9 +19,14 @@ def _patch_state_path(tmp_path, monkeypatch):
 
 def test_save_load_crafted_tools(tmp_path):
     from kitsune_mcp.session import _load_state, _save_state, session
+
     session["crafted_tools"] = {
-        "my_tool": {"url": "https://example.com/api", "method": "POST",
-                    "description": "test tool", "params": {}}
+        "my_tool": {
+            "url": "https://example.com/api",
+            "method": "POST",
+            "description": "test tool",
+            "params": {},
+        }
     }
     _save_state()
     session["crafted_tools"] = {}
@@ -31,6 +37,7 @@ def test_save_load_crafted_tools(tmp_path):
 
 def test_pids_not_persisted(tmp_path):
     from kitsune_mcp.session import _load_state, _save_state, session
+
     session["connections"] = {
         "key1": {"name": "test", "pid": 12345, "command": "npx foo", "started_at": "2026-01-01"}
     }
@@ -45,6 +52,7 @@ def test_pids_not_persisted(tmp_path):
 
 def test_explored_capped_at_100(tmp_path):
     from kitsune_mcp.session import _load_state, _save_state, session
+
     session["explored"] = {str(i): {"name": f"server-{i}"} for i in range(150)}
     _save_state()
     session["explored"] = {}
@@ -58,6 +66,7 @@ def test_explored_capped_at_100(tmp_path):
 
 def test_corrupt_state_is_ignored(tmp_path, monkeypatch):
     import kitsune_mcp.session as sess_mod
+
     state_path = tmp_path / "state.json"
     state_path.write_text("not valid json")
     monkeypatch.setattr(sess_mod, "_STATE_PATH", state_path)
@@ -68,5 +77,6 @@ def test_corrupt_state_is_ignored(tmp_path, monkeypatch):
 
 def test_missing_state_file_is_ignored(tmp_path):
     from kitsune_mcp.session import _load_state, session
+
     _load_state()  # file doesn't exist — should not raise
     assert session["crafted_tools"] == {}

@@ -1,4 +1,5 @@
 """Tests for kitsune_mcp/adapters — Phase 3 adapter module."""
+
 import os
 import sys
 
@@ -7,9 +8,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # ── Registry lookup ────────────────────────────────────────────────────────
 
+
 class TestAdapterRegistry:
     def test_get_adapter_by_exact_id(self):
         from kitsune_mcp.adapters import get_adapter
+
         a = get_adapter("brave-search")
         assert a is not None
         assert a.CATEGORY == "web_search"
@@ -17,39 +20,47 @@ class TestAdapterRegistry:
     def test_get_adapter_by_scoped_id(self):
         # "@modelcontextprotocol/server-github" → strips scope → "server-github"
         from kitsune_mcp.adapters import get_adapter
+
         a = get_adapter("@modelcontextprotocol/server-github")
         assert a is not None
         assert a.CATEGORY == "code_ops"
 
     def test_get_adapter_unknown_returns_none(self):
         from kitsune_mcp.adapters import get_adapter
+
         assert get_adapter("completely-unknown-server-xyz") is None
 
     def test_get_adapter_for_category_web_search(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         a = get_adapter_for_category("web_search")
         assert a is not None
         assert a.CATEGORY == "web_search"
 
     def test_get_adapter_for_category_none_returns_none(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         assert get_adapter_for_category(None) is None
 
     def test_get_adapter_for_category_unknown_returns_none(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         assert get_adapter_for_category("nonexistent_category") is None
 
     def test_all_categories_registered(self):
         from kitsune_mcp.adapters import _BY_CATEGORY
+
         expected = {"web_search", "file_ops", "code_ops", "database", "shell"}
         assert expected <= set(_BY_CATEGORY.keys())
 
 
 # ── WebSearchAdapter ────────────────────────────────────────────────────────
 
+
 class TestWebSearchAdapter:
     def _get(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         return get_adapter_for_category("web_search")
 
     def test_setup_hint_brave(self):
@@ -67,15 +78,19 @@ class TestWebSearchAdapter:
 
     def test_infer_args_returns_none(self):
         # Handled by Rule 1 — adapter defers to generic inference
-        schema = {"inputSchema": {"properties": {"query": {"type": "string"}}, "required": ["query"]}}
+        schema = {
+            "inputSchema": {"properties": {"query": {"type": "string"}}, "required": ["query"]}
+        }
         assert self._get().infer_args("search for news", schema) is None
 
 
 # ── FileOpsAdapter ──────────────────────────────────────────────────────────
 
+
 class TestFileOpsAdapter:
     def _get(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         return get_adapter_for_category("file_ops")
 
     def test_setup_hint_filesystem(self):
@@ -127,9 +142,11 @@ class TestFileOpsAdapter:
 
 # ── CodeOpsAdapter ──────────────────────────────────────────────────────────
 
+
 class TestCodeOpsAdapter:
     def _get(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         return get_adapter_for_category("code_ops")
 
     def _schema(self, extra_required=None):
@@ -188,9 +205,11 @@ class TestCodeOpsAdapter:
 
 # ── DatabaseAdapter ─────────────────────────────────────────────────────────
 
+
 class TestDatabaseAdapter:
     def _get(self):
         from kitsune_mcp.adapters import get_adapter_for_category
+
         return get_adapter_for_category("database")
 
     def test_setup_hint_database_url(self):
@@ -207,5 +226,10 @@ class TestDatabaseAdapter:
 
     def test_infer_args_returns_none(self):
         # Handled by Rule 2.5 — adapter defers
-        schema = {"inputSchema": {"properties": {"query": {"type": "string", "description": "SQL query"}}, "required": ["query"]}}
+        schema = {
+            "inputSchema": {
+                "properties": {"query": {"type": "string", "description": "SQL query"}},
+                "required": ["query"],
+            }
+        }
         assert self._get().infer_args("SELECT * FROM users", schema) is None

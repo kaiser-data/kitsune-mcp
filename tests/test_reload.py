@@ -4,6 +4,7 @@ reload('dev') removes the "connect() handed back the old process" footgun by
 always releasing the stale process first, then restarting fresh code and
 remounting so the client sees the new schemas.
 """
+
 import importlib
 import json
 import os
@@ -42,19 +43,23 @@ def _seed_connection(name="dev", command="uvx --from . my-mcp-server"):
 # Profile: reload is lean, alongside connect/release
 # ---------------------------------------------------------------------------
 
+
 class TestReloadProfile:
     def test_reload_in_base_tools(self):
         from kitsune_mcp.tools._state import _BASE_TOOL_NAMES
+
         assert "reload" in _BASE_TOOL_NAMES
 
     def test_repl_trio_in_lean(self):
         from kitsune_mcp.tools._state import _LEAN_TOOL_NAMES
+
         assert {"connect", "release", "reload"} <= _LEAN_TOOL_NAMES
 
 
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
+
 
 class TestReload:
     @pytest.mark.asyncio
@@ -111,6 +116,7 @@ class TestReload:
     @pytest.mark.asyncio
     async def test_missing_stored_command_is_reported(self):
         from kitsune_mcp.session import session
+
         ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
 
         pool_key, _ = _seed_connection(name="dev")

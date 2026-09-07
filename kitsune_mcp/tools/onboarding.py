@@ -49,7 +49,10 @@ async def skill(qualified_name: str, forget: bool = False) -> str:
         lines = [
             f"Skill injected (cached): {skill_name} ({qualified_name})",
             f"Context cost: ~{token_estimate:,} tokens",
-            "", "--- SKILL CONTENT ---", "", content,
+            "",
+            "--- SKILL CONTENT ---",
+            "",
+            content,
         ]
         return "\n".join(lines)
 
@@ -76,8 +79,9 @@ async def skill(qualified_name: str, forget: bool = False) -> str:
     skill_desc = (skill_meta.get("description") or "").strip()
 
     content = None
-    content_url = (skill_meta.get("contentUrl") or skill_meta.get("url")
-                   or skill_meta.get("content_url"))
+    content_url = (
+        skill_meta.get("contentUrl") or skill_meta.get("url") or skill_meta.get("content_url")
+    )
     if content_url and _is_safe_url(content_url):
         try:
             rc = await _get_http_client().get(content_url, timeout=TIMEOUT_FETCH_URL)
@@ -87,16 +91,17 @@ async def skill(qualified_name: str, forget: bool = False) -> str:
             content = None
 
     if not content:
-        content = (skill_meta.get("content") or skill_meta.get("markdown")
-                   or skill_meta.get("text"))
+        content = skill_meta.get("content") or skill_meta.get("markdown") or skill_meta.get("text")
 
     if not content:
-        return "\n".join([
-            f"Skill: {skill_name} ({qualified_name})",
-            f"Description: {skill_desc}" if skill_desc else "",
-            "Warning: could not fetch skill content.",
-            json.dumps(skill_meta, indent=2),
-        ])
+        return "\n".join(
+            [
+                f"Skill: {skill_name} ({qualified_name})",
+                f"Description: {skill_desc}" if skill_desc else "",
+                "Warning: could not fetch skill content.",
+                json.dumps(skill_meta, indent=2),
+            ]
+        )
 
     token_estimate = len(content) // 4
     session["skills"][qualified_name] = {
@@ -159,15 +164,36 @@ async def auto(
     # to an external MCP server. auto("onboard") would otherwise search the
     # registry for a server named "onboard" and fail confusingly.
     # Core lean-profile tools always available; forge extras only with KITSUNE_TOOLS=all
-    _KITSUNE_LEAN: frozenset[str] = frozenset({
-        "auth", "auto", "call", "search", "shapeshift", "status",
-        "connect", "release", "reload",
-    })
-    _KITSUNE_FORGE: frozenset[str] = frozenset({
-        "bench", "compare", "craft", "fetch",
-        "inspect", "key", "login", "onboard", "run",
-        "setup", "shiftback", "skill", "test",
-    })
+    _KITSUNE_LEAN: frozenset[str] = frozenset(
+        {
+            "auth",
+            "auto",
+            "call",
+            "search",
+            "shapeshift",
+            "status",
+            "connect",
+            "release",
+            "reload",
+        }
+    )
+    _KITSUNE_FORGE: frozenset[str] = frozenset(
+        {
+            "bench",
+            "compare",
+            "craft",
+            "fetch",
+            "inspect",
+            "key",
+            "login",
+            "onboard",
+            "run",
+            "setup",
+            "shiftback",
+            "skill",
+            "test",
+        }
+    )
     _KITSUNE_BUILTINS = _KITSUNE_LEAN | _KITSUNE_FORGE
     task_stripped = task.strip().lower()
     if task_stripped in _KITSUNE_BUILTINS:
@@ -214,11 +240,13 @@ async def auto(
                     what=f"no candidate server can '{intent}'",
                     why=f"top matches ({tried}) advertise no {intent}-capable tool",
                     fix=f'search("<topic>") to find a {intent} server, then '
-                        f'auto("{task}", server_hint="<server-id>")',
+                    f'auto("{task}", server_hint="<server-id>")',
                     fallback=(
                         f'known-good: auto("{task}", server_hint="exa") or '
                         f'server_hint="brave-search"'
-                    ) if intent in ("search", "find", "lookup", "google") else "",
+                    )
+                    if intent in ("search", "find", "lookup", "google")
+                    else "",
                 )
             candidates = matching
         # Rank by works-now score: credentials set + trusted source + stdio > HTTP.
@@ -231,7 +259,9 @@ async def auto(
         # Remove the chosen one from the fallback queue
         candidates = [s for s in candidates if s.id != chosen.id]
         session["explored"][server_id] = {
-            "name": server_name, "desc": chosen.description, "status": "harvested"
+            "name": server_name,
+            "desc": chosen.description,
+            "status": "harvested",
         }
 
     resolved_config, missing = _state._resolve_config(credentials, {})
@@ -267,15 +297,14 @@ async def auto(
 
         if not tools:
             reg_errors = getattr(_state._registry, "last_registry_errors", {})
-            err_detail = (
-                "; ".join(f"{n}: {e}" for n, e in reg_errors.items()) if reg_errors else ""
-            )
+            err_detail = "; ".join(f"{n}: {e}" for n, e in reg_errors.items()) if reg_errors else ""
             from kitsune_mcp.credentials import _smithery_available
+
             if srv and getattr(srv, "source", None) == "smithery" and not _smithery_available():
                 return _blocked(
                     what=f"could not fetch tool schema for '{server_id}'",
                     why="Smithery-hosted server requires SMITHERY_API_KEY"
-                        + (f"; {err_detail}" if err_detail else ""),
+                    + (f"; {err_detail}" if err_detail else ""),
                     fix="auth('SMITHERY_API_KEY', 'sm-...') then retry",
                     fallback="search() for a free alternative",
                 )
@@ -291,7 +320,7 @@ async def auto(
             selected_tool_schema = tools[0]
         else:
             task_lc = task.lower()
-            task_words = set(re.split(r'\W+', task_lc))
+            task_words = set(re.split(r"\W+", task_lc))
 
             def _tool_score(t: dict) -> float:
                 n = (t.get("name") or "").lower()
@@ -311,13 +340,15 @@ async def auto(
             else:
                 # No match — list tools and ask user to pick
                 tool_lines = [f"  {t['name']} — {(t.get('description') or '')[:80]}" for t in tools]
-                return "\n".join([
-                    f"{server_name} ({server_id}) ready. Available tools:",
-                    "",
-                    *tool_lines,
-                    "",
-                    f'Call: auto("{task}", "<tool>", args, server_hint="{server_id}")',
-                ])
+                return "\n".join(
+                    [
+                        f"{server_name} ({server_id}) ready. Available tools:",
+                        "",
+                        *tool_lines,
+                        "",
+                        f'Call: auto("{task}", "<tool>", args, server_hint="{server_id}")',
+                    ]
+                )
 
     # If caller picked a tool implicitly and supplied no arguments, fill args from task.
     # Try category adapter first (handles multi-param tools like owner+repo),
@@ -356,7 +387,14 @@ async def auto(
         # candidates left.
         is_auth_fail = any(
             kw in last_result.lower()
-            for kw in ("auth failed", "unauthorized", "401", "403", "invalid token", "smithery_api_key")
+            for kw in (
+                "auth failed",
+                "unauthorized",
+                "401",
+                "403",
+                "invalid token",
+                "smithery_api_key",
+            )
         )
         if not is_auth_fail or not candidates:
             break
@@ -390,95 +428,216 @@ async def auto(
 
 # Param names that semantically take a free-text query — always safe to fill
 # from the raw task string regardless of how the task is phrased.
-_SEARCH_PARAM_NAMES: frozenset[str] = frozenset({
-    "query", "q", "text", "prompt", "input", "search", "term",
-    "message", "content", "question", "request", "task",
-    "description", "user_question", "user_input", "user_prompt",
-})
+_SEARCH_PARAM_NAMES: frozenset[str] = frozenset(
+    {
+        "query",
+        "q",
+        "text",
+        "prompt",
+        "input",
+        "search",
+        "term",
+        "message",
+        "content",
+        "question",
+        "request",
+        "task",
+        "description",
+        "user_question",
+        "user_input",
+        "user_prompt",
+    }
+)
 
 # Structured params whose value is a code/identifier (timezone name, currency
 # code, language tag, etc.) — must NOT receive a full NL sentence verbatim.
 # Used by Rule 2 in _infer_args_from_task when the task starts with a
 # NL question/context word.
-_STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset({
-    "timezone", "time_zone", "source_timezone", "target_timezone",
-    "from_timezone", "to_timezone",
-    "language", "lang", "locale", "source_language", "target_language",
-    "currency", "symbol", "ticker", "from_currency", "to_currency",
-    "base_currency", "target_currency",
-    "city", "country", "region", "location", "address",
-    "path", "file", "directory", "filename", "url", "uri",
-    "format", "mode", "type", "encoding",
-})
+_STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset(
+    {
+        "timezone",
+        "time_zone",
+        "source_timezone",
+        "target_timezone",
+        "from_timezone",
+        "to_timezone",
+        "language",
+        "lang",
+        "locale",
+        "source_language",
+        "target_language",
+        "currency",
+        "symbol",
+        "ticker",
+        "from_currency",
+        "to_currency",
+        "base_currency",
+        "target_currency",
+        "city",
+        "country",
+        "region",
+        "location",
+        "address",
+        "path",
+        "file",
+        "directory",
+        "filename",
+        "url",
+        "uri",
+        "format",
+        "mode",
+        "type",
+        "encoding",
+    }
+)
 
 # Path-like params that must receive a filesystem path value. If the task
 # doesn't look like a path, these params are never filled — a bare task like
 # "web search for X" must not become path="/Users/.../web search for X".
-_PATH_PARAM_NAMES: frozenset[str] = frozenset({
-    "path", "file", "directory", "dir", "filename", "filepath",
-    "folder", "root", "base_path", "target_path", "source_path",
-})
+_PATH_PARAM_NAMES: frozenset[str] = frozenset(
+    {
+        "path",
+        "file",
+        "directory",
+        "dir",
+        "filename",
+        "filepath",
+        "folder",
+        "root",
+        "base_path",
+        "target_path",
+        "source_path",
+    }
+)
 
 # Words that signal the task is a natural-language phrase rather than a bare
 # value. Used only when the matched param is in _STRUCTURED_PARAM_NAMES.
-_NL_STARTERS: frozenset[str] = frozenset({
-    "what", "whats", "when", "where", "who", "how", "why",
-    "tell", "show", "find", "is", "are", "does", "can", "could",
-    "give", "get", "list", "fetch", "check",
-    # Context/state queries — "current time", "current weather", "latest price"
-    "current", "latest", "today", "now", "todays",
-})
+_NL_STARTERS: frozenset[str] = frozenset(
+    {
+        "what",
+        "whats",
+        "when",
+        "where",
+        "who",
+        "how",
+        "why",
+        "tell",
+        "show",
+        "find",
+        "is",
+        "are",
+        "does",
+        "can",
+        "could",
+        "give",
+        "get",
+        "list",
+        "fetch",
+        "check",
+        # Context/state queries — "current time", "current weather", "latest price"
+        "current",
+        "latest",
+        "today",
+        "now",
+        "todays",
+    }
+)
 
 # Timezone abbreviations → IANA identifiers, for auto() NL extraction.
 _TZ_ABBREVS: dict[str, str] = {
-    "UTC": "UTC", "GMT": "GMT",
-    "EST": "America/New_York", "EDT": "America/New_York",
-    "CST": "America/Chicago", "CDT": "America/Chicago",
-    "MST": "America/Denver", "MDT": "America/Denver",
-    "PST": "America/Los_Angeles", "PDT": "America/Los_Angeles",
-    "CET": "Europe/Berlin", "CEST": "Europe/Berlin",
-    "BST": "Europe/London", "WET": "Europe/Lisbon",
-    "IST": "Asia/Kolkata", "JST": "Asia/Tokyo",
-    "CST_CN": "Asia/Shanghai", "KST": "Asia/Seoul",
-    "AEST": "Australia/Sydney", "AEDT": "Australia/Sydney",
+    "UTC": "UTC",
+    "GMT": "GMT",
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+    "CET": "Europe/Berlin",
+    "CEST": "Europe/Berlin",
+    "BST": "Europe/London",
+    "WET": "Europe/Lisbon",
+    "IST": "Asia/Kolkata",
+    "JST": "Asia/Tokyo",
+    "CST_CN": "Asia/Shanghai",
+    "KST": "Asia/Seoul",
+    "AEST": "Australia/Sydney",
+    "AEDT": "Australia/Sydney",
     "NZST": "Pacific/Auckland",
 }
 
 # Common city/location names → IANA timezone identifiers.
 _CITY_TO_TZ: dict[str, str] = {
-    "new york": "America/New_York", "new york city": "America/New_York", "nyc": "America/New_York",
-    "los angeles": "America/Los_Angeles", "san francisco": "America/Los_Angeles", "seattle": "America/Los_Angeles",
-    "chicago": "America/Chicago", "houston": "America/Chicago", "dallas": "America/Chicago",
-    "denver": "America/Denver", "phoenix": "America/Phoenix",
-    "toronto": "America/Toronto", "montreal": "America/Toronto",
+    "new york": "America/New_York",
+    "new york city": "America/New_York",
+    "nyc": "America/New_York",
+    "los angeles": "America/Los_Angeles",
+    "san francisco": "America/Los_Angeles",
+    "seattle": "America/Los_Angeles",
+    "chicago": "America/Chicago",
+    "houston": "America/Chicago",
+    "dallas": "America/Chicago",
+    "denver": "America/Denver",
+    "phoenix": "America/Phoenix",
+    "toronto": "America/Toronto",
+    "montreal": "America/Toronto",
     "vancouver": "America/Vancouver",
     "mexico city": "America/Mexico_City",
-    "sao paulo": "America/Sao_Paulo", "brazil": "America/Sao_Paulo",
-    "london": "Europe/London", "uk": "Europe/London",
-    "paris": "Europe/Paris", "france": "Europe/Paris",
-    "berlin": "Europe/Berlin", "germany": "Europe/Berlin",
-    "madrid": "Europe/Madrid", "spain": "Europe/Madrid",
-    "rome": "Europe/Rome", "italy": "Europe/Rome",
+    "sao paulo": "America/Sao_Paulo",
+    "brazil": "America/Sao_Paulo",
+    "london": "Europe/London",
+    "uk": "Europe/London",
+    "paris": "Europe/Paris",
+    "france": "Europe/Paris",
+    "berlin": "Europe/Berlin",
+    "germany": "Europe/Berlin",
+    "madrid": "Europe/Madrid",
+    "spain": "Europe/Madrid",
+    "rome": "Europe/Rome",
+    "italy": "Europe/Rome",
     "amsterdam": "Europe/Amsterdam",
-    "zurich": "Europe/Zurich", "switzerland": "Europe/Zurich",
-    "stockholm": "Europe/Stockholm", "oslo": "Europe/Oslo", "helsinki": "Europe/Helsinki",
-    "moscow": "Europe/Moscow", "russia": "Europe/Moscow",
-    "istanbul": "Europe/Istanbul", "turkey": "Europe/Istanbul",
-    "dubai": "Asia/Dubai", "uae": "Asia/Dubai",
-    "mumbai": "Asia/Kolkata", "delhi": "Asia/Kolkata", "india": "Asia/Kolkata",
+    "zurich": "Europe/Zurich",
+    "switzerland": "Europe/Zurich",
+    "stockholm": "Europe/Stockholm",
+    "oslo": "Europe/Oslo",
+    "helsinki": "Europe/Helsinki",
+    "moscow": "Europe/Moscow",
+    "russia": "Europe/Moscow",
+    "istanbul": "Europe/Istanbul",
+    "turkey": "Europe/Istanbul",
+    "dubai": "Asia/Dubai",
+    "uae": "Asia/Dubai",
+    "mumbai": "Asia/Kolkata",
+    "delhi": "Asia/Kolkata",
+    "india": "Asia/Kolkata",
     "singapore": "Asia/Singapore",
-    "tokyo": "Asia/Tokyo", "japan": "Asia/Tokyo",
-    "beijing": "Asia/Shanghai", "shanghai": "Asia/Shanghai", "china": "Asia/Shanghai",
+    "tokyo": "Asia/Tokyo",
+    "japan": "Asia/Tokyo",
+    "beijing": "Asia/Shanghai",
+    "shanghai": "Asia/Shanghai",
+    "china": "Asia/Shanghai",
     "hong kong": "Asia/Hong_Kong",
-    "seoul": "Asia/Seoul", "korea": "Asia/Seoul",
-    "bangkok": "Asia/Bangkok", "thailand": "Asia/Bangkok",
-    "jakarta": "Asia/Jakarta", "indonesia": "Asia/Jakarta",
-    "sydney": "Australia/Sydney", "melbourne": "Australia/Melbourne", "australia": "Australia/Sydney",
-    "auckland": "Pacific/Auckland", "new zealand": "Pacific/Auckland",
-    "cairo": "Africa/Cairo", "egypt": "Africa/Cairo",
-    "johannesburg": "Africa/Johannesburg", "south africa": "Africa/Johannesburg",
-    "nairobi": "Africa/Nairobi", "kenya": "Africa/Nairobi",
-    "lagos": "Africa/Lagos", "nigeria": "Africa/Lagos",
+    "seoul": "Asia/Seoul",
+    "korea": "Asia/Seoul",
+    "bangkok": "Asia/Bangkok",
+    "thailand": "Asia/Bangkok",
+    "jakarta": "Asia/Jakarta",
+    "indonesia": "Asia/Jakarta",
+    "sydney": "Australia/Sydney",
+    "melbourne": "Australia/Melbourne",
+    "australia": "Australia/Sydney",
+    "auckland": "Pacific/Auckland",
+    "new zealand": "Pacific/Auckland",
+    "cairo": "Africa/Cairo",
+    "egypt": "Africa/Cairo",
+    "johannesburg": "Africa/Johannesburg",
+    "south africa": "Africa/Johannesburg",
+    "nairobi": "Africa/Nairobi",
+    "kenya": "Africa/Nairobi",
+    "lagos": "Africa/Lagos",
+    "nigeria": "Africa/Lagos",
 }
 
 
@@ -491,19 +650,19 @@ def _extract_timezone_from_nl(task: str) -> str | None:
     Returns None when no recognizable timezone is found.
     """
     # Check for uppercase abbreviations (UTC, GMT, PST, …)
-    for word in re.findall(r'\b[A-Z]{2,5}\b', task):
+    for word in re.findall(r"\b[A-Z]{2,5}\b", task):
         if word in _TZ_ABBREVS:
             return _TZ_ABBREVS[word]
 
     # Check for an IANA-style literal already in the task (e.g. "America/New_York")
-    m = re.search(r'\b[A-Z][a-z]+/[A-Z][a-zA-Z_]+\b', task)
+    m = re.search(r"\b[A-Z][a-z]+/[A-Z][a-zA-Z_]+\b", task)
     if m:
         return m.group(0)
 
     # City/country map — longest match first to prefer "New York City" over "New York"
     task_lc = task.lower()
     for city, tz in sorted(_CITY_TO_TZ.items(), key=lambda x: -len(x[0])):
-        if re.search(r'\b' + re.escape(city) + r'\b', task_lc):
+        if re.search(r"\b" + re.escape(city) + r"\b", task_lc):
             return tz
 
     return None
@@ -512,42 +671,137 @@ def _extract_timezone_from_nl(task: str) -> str | None:
 # ── Phase 2: Category-based intent routing ───────────────────────────────────
 
 _CATEGORY_KEYWORDS: dict[str, frozenset[str]] = {
-    "web_search": frozenset({
-        "search", "find", "look up", "google", "web", "internet", "news",
-        "results", "query", "browse",
-    }),
-    "file_ops": frozenset({
-        "file", "files", "directory", "folder", "path", "read", "write",
-        "list", "filesystem", "disk", "local",
-    }),
-    "code_ops": frozenset({
-        "github", "gitlab", "repo", "repository", "commit", "pull request",
-        "pr", "issue", "branch", "code", "git", "diff", "merge",
-    }),
-    "shell": frozenset({
-        "run", "execute", "shell", "bash", "command", "terminal", "script",
-        "process", "install", "build", "compile", "deploy",
-    }),
-    "database": frozenset({
-        "sql", "query", "database", "db", "postgres", "mysql", "sqlite",
-        "table", "select", "insert", "update", "schema",
-    }),
-    "productivity": frozenset({
-        "notion", "linear", "jira", "asana", "task", "project", "ticket",
-        "document", "page", "workspace", "note",
-    }),
-    "communication": frozenset({
-        "slack", "email", "gmail", "message", "send", "notify", "channel",
-        "team", "chat", "discord",
-    }),
-    "memory": frozenset({
-        "remember", "recall", "memory", "store", "retrieve",
-        "knowledge", "context", "history",
-    }),
-    "time_util": frozenset({
-        "time", "timezone", "clock", "date", "weather", "currency",
-        "convert", "calculate",
-    }),
+    "web_search": frozenset(
+        {
+            "search",
+            "find",
+            "look up",
+            "google",
+            "web",
+            "internet",
+            "news",
+            "results",
+            "query",
+            "browse",
+        }
+    ),
+    "file_ops": frozenset(
+        {
+            "file",
+            "files",
+            "directory",
+            "folder",
+            "path",
+            "read",
+            "write",
+            "list",
+            "filesystem",
+            "disk",
+            "local",
+        }
+    ),
+    "code_ops": frozenset(
+        {
+            "github",
+            "gitlab",
+            "repo",
+            "repository",
+            "commit",
+            "pull request",
+            "pr",
+            "issue",
+            "branch",
+            "code",
+            "git",
+            "diff",
+            "merge",
+        }
+    ),
+    "shell": frozenset(
+        {
+            "run",
+            "execute",
+            "shell",
+            "bash",
+            "command",
+            "terminal",
+            "script",
+            "process",
+            "install",
+            "build",
+            "compile",
+            "deploy",
+        }
+    ),
+    "database": frozenset(
+        {
+            "sql",
+            "query",
+            "database",
+            "db",
+            "postgres",
+            "mysql",
+            "sqlite",
+            "table",
+            "select",
+            "insert",
+            "update",
+            "schema",
+        }
+    ),
+    "productivity": frozenset(
+        {
+            "notion",
+            "linear",
+            "jira",
+            "asana",
+            "task",
+            "project",
+            "ticket",
+            "document",
+            "page",
+            "workspace",
+            "note",
+        }
+    ),
+    "communication": frozenset(
+        {
+            "slack",
+            "email",
+            "gmail",
+            "message",
+            "send",
+            "notify",
+            "channel",
+            "team",
+            "chat",
+            "discord",
+        }
+    ),
+    "memory": frozenset(
+        {
+            "remember",
+            "recall",
+            "memory",
+            "store",
+            "retrieve",
+            "knowledge",
+            "context",
+            "history",
+        }
+    ),
+    "time_util": frozenset(
+        {
+            "time",
+            "timezone",
+            "clock",
+            "date",
+            "weather",
+            "currency",
+            "convert",
+            "calculate",
+        }
+    ),
 }
 
 
@@ -577,16 +831,45 @@ def _classify_param(name: str, desc: str, tool_desc: str) -> str:
     Returns one of: "sql_query" | "shell_command" | "repo_identifier" | "file_path" | "free_text"
     """
     combined = f"{name} {desc} {tool_desc}".lower()
-    if any(w in combined for w in ("sql query", "sql to", "execute query", "database query", " sql ")):
+    if any(
+        w in combined for w in ("sql query", "sql to", "execute query", "database query", " sql ")
+    ):
         return "sql_query"
-    if any(w in combined for w in ("shell command", "bash command", "command to run", "execute command",
-                                    "terminal command", "shell script")):
+    if any(
+        w in combined
+        for w in (
+            "shell command",
+            "bash command",
+            "command to run",
+            "execute command",
+            "terminal command",
+            "shell script",
+        )
+    ):
         return "shell_command"
-    if any(w in combined for w in ("repository", "owner/repo", "github.com", "github repository",
-                                    "repo name", "owner and repo")):
+    if any(
+        w in combined
+        for w in (
+            "repository",
+            "owner/repo",
+            "github.com",
+            "github repository",
+            "repo name",
+            "owner and repo",
+        )
+    ):
         return "repo_identifier"
-    if any(w in combined for w in ("file path", "path to file", "filepath", "directory path",
-                                    "file to read", "file to write")):
+    if any(
+        w in combined
+        for w in (
+            "file path",
+            "path to file",
+            "filepath",
+            "directory path",
+            "file to read",
+            "file to write",
+        )
+    ):
         return "file_path"
     return "free_text"
 
@@ -594,22 +877,67 @@ def _classify_param(name: str, desc: str, tool_desc: str) -> str:
 # Stop-words stripped from NL tasks before they're passed to registry search.
 # Keeping content words (nouns, verbs, place names) while dropping filler gives
 # keyword-quality queries to registries that do substring matching.
-_SEARCH_STOP_WORDS: frozenset[str] = frozenset({
-    "what", "whats", "when", "where", "who", "how", "why",
-    "the", "a", "an", "and", "or", "for", "of", "to", "in",
-    "is", "it", "me", "my", "i", "do", "does", "did",
-    "can", "could", "please", "now", "current", "currently",
-    "latest", "today", "tell", "show", "give", "find", "get",
-    "make", "want", "need", "help", "some", "any",
-})
+_SEARCH_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "what",
+        "whats",
+        "when",
+        "where",
+        "who",
+        "how",
+        "why",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "for",
+        "of",
+        "to",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "i",
+        "do",
+        "does",
+        "did",
+        "can",
+        "could",
+        "please",
+        "now",
+        "current",
+        "currently",
+        "latest",
+        "today",
+        "tell",
+        "show",
+        "give",
+        "find",
+        "get",
+        "make",
+        "want",
+        "need",
+        "help",
+        "some",
+        "any",
+    }
+)
 
 # Intent verbs are stripped from registry queries too (#34): "search" and
 # "web" match almost every server's description, inflating relevance scores
 # for servers that cannot actually search the web. The verb still drives
 # ranking — see _intent_verb / _matches_intent below.
-_GENERIC_INTENT_WORDS: frozenset[str] = frozenset({
-    "search", "web", "look", "lookup", "browse",
-})
+_GENERIC_INTENT_WORDS: frozenset[str] = frozenset(
+    {
+        "search",
+        "web",
+        "look",
+        "lookup",
+        "browse",
+    }
+)
 
 # task verb → substrings that mark a candidate as actually capable of it.
 # Checked against server id/name/description and tool names/descriptions.
@@ -639,8 +967,10 @@ def _search_query_for(task: str) -> str:
     search still has something to work with.
     """
     words = [
-        w for w in re.split(r'\W+', task)
-        if len(w) >= 3 and w.lower() not in _SEARCH_STOP_WORDS
+        w
+        for w in re.split(r"\W+", task)
+        if len(w) >= 3
+        and w.lower() not in _SEARCH_STOP_WORDS
         and w.lower() not in _GENERIC_INTENT_WORDS
     ]
     return " ".join(words) if words else task
@@ -651,7 +981,7 @@ def _intent_verb(task: str) -> str:
 
     "search the web for X" → "search"; "what time in Tokyo" → "".
     """
-    for w in re.split(r'\W+', task.lower()):
+    for w in re.split(r"\W+", task.lower()):
         if w in _INTENT_TOOL_MARKERS:
             return w
     return ""
@@ -693,7 +1023,7 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     3. Single required param not covered above → fill it (e.g. bare values,
        QA-style tools with unique param names).
     """
-    schema = (tool_schema.get("inputSchema") or {})
+    schema = tool_schema.get("inputSchema") or {}
     props = schema.get("properties") or {}
     required = set(schema.get("required") or [])
     string_required = [p for p in required if props.get(p, {}).get("type") == "string"]
@@ -708,8 +1038,7 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     # SEARCH_PARAM_NAMES match found in the properties.
     if len(string_required) == 0:
         optional_search = [
-            p for p in props
-            if p in _SEARCH_PARAM_NAMES and props[p].get("type") == "string"
+            p for p in props if p in _SEARCH_PARAM_NAMES and props[p].get("type") == "string"
         ]
         if optional_search:
             return {optional_search[0]: task}
@@ -724,7 +1053,9 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     # Rule 2a — path param: only fill if task looks like an actual filesystem path
     if pname in _PATH_PARAM_NAMES:
         stripped = task.strip()
-        if stripped.startswith(("/", "~", "./", "../")) or (len(stripped) > 1 and stripped[1] == ":"):
+        if stripped.startswith(("/", "~", "./", "../")) or (
+            len(stripped) > 1 and stripped[1] == ":"
+        ):
             return {pname: stripped}
         return {}
 
@@ -732,8 +1063,14 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     # but first try to extract the value from the text (timezone, city, etc.)
     first_word = task.split()[0].lower() if task.split() else ""
     if pname in _STRUCTURED_PARAM_NAMES and first_word in _NL_STARTERS:
-        if pname in {"timezone", "time_zone", "source_timezone", "target_timezone",
-                     "from_timezone", "to_timezone"}:
+        if pname in {
+            "timezone",
+            "time_zone",
+            "source_timezone",
+            "target_timezone",
+            "from_timezone",
+            "to_timezone",
+        }:
             tz = _extract_timezone_from_nl(task)
             if tz:
                 return {pname: tz}
@@ -747,9 +1084,19 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
     )
     if param_type == "sql_query":
         task_upper = task.strip().upper()
-        if any(task_upper.startswith(kw) for kw in (
-            "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "WITH",
-        )):
+        if any(
+            task_upper.startswith(kw)
+            for kw in (
+                "SELECT",
+                "INSERT",
+                "UPDATE",
+                "DELETE",
+                "CREATE",
+                "DROP",
+                "ALTER",
+                "WITH",
+            )
+        ):
             return {pname: task}
         return {}
     if param_type == "shell_command":
@@ -758,13 +1105,15 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
             return {pname: task}
         return {}
     if param_type == "repo_identifier":
-        m = re.search(r'\b([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)\b', task)
+        m = re.search(r"\b([a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)\b", task)
         if m:
             return {pname: m.group(1)}
         return {}
     if param_type == "file_path":
         stripped = task.strip()
-        if stripped.startswith(("/", "~", "./", "../")) or (len(stripped) > 1 and stripped[1] == ":"):
+        if stripped.startswith(("/", "~", "./", "../")) or (
+            len(stripped) > 1 and stripped[1] == ":"
+        ):
             return {pname: stripped}
         return {}
 
@@ -775,21 +1124,41 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
 # Canonical example values for structured param names — shown in retry hints
 # so the caller sees the expected format at a glance (not just a placeholder).
 _PARAM_EXAMPLES: dict[str, str] = {
-    "timezone": "America/New_York", "time_zone": "America/New_York",
-    "source_timezone": "UTC", "target_timezone": "America/New_York",
-    "from_timezone": "UTC", "to_timezone": "America/New_York",
-    "language": "en", "lang": "en", "locale": "en-US",
-    "source_language": "en", "target_language": "es",
-    "currency": "USD", "from_currency": "USD", "to_currency": "EUR",
-    "base_currency": "USD", "target_currency": "EUR",
-    "symbol": "AAPL", "ticker": "AAPL",
-    "city": "London", "country": "US", "region": "Europe",
-    "location": "London", "address": "123 Main St",
-    "format": "json", "mode": "text", "type": "file", "encoding": "utf-8",
-    "path": "/path/to/target", "file": "/path/to/file",
-    "directory": "/path/to/dir", "dir": "/path/to/dir",
-    "filename": "output.txt", "filepath": "/path/to/file",
-    "folder": "/path/to/folder", "url": "https://example.com",
+    "timezone": "America/New_York",
+    "time_zone": "America/New_York",
+    "source_timezone": "UTC",
+    "target_timezone": "America/New_York",
+    "from_timezone": "UTC",
+    "to_timezone": "America/New_York",
+    "language": "en",
+    "lang": "en",
+    "locale": "en-US",
+    "source_language": "en",
+    "target_language": "es",
+    "currency": "USD",
+    "from_currency": "USD",
+    "to_currency": "EUR",
+    "base_currency": "USD",
+    "target_currency": "EUR",
+    "symbol": "AAPL",
+    "ticker": "AAPL",
+    "city": "London",
+    "country": "US",
+    "region": "Europe",
+    "location": "London",
+    "address": "123 Main St",
+    "format": "json",
+    "mode": "text",
+    "type": "file",
+    "encoding": "utf-8",
+    "path": "/path/to/target",
+    "file": "/path/to/file",
+    "directory": "/path/to/dir",
+    "dir": "/path/to/dir",
+    "filename": "output.txt",
+    "filepath": "/path/to/file",
+    "folder": "/path/to/folder",
+    "url": "https://example.com",
     "uri": "file:///path/to/resource",
 }
 
@@ -831,11 +1200,13 @@ def _build_inference_hint(
         reason = param_notes[0]
 
     args_repr = json.dumps(example_args)
-    return "\n".join([
-        f"auto() couldn't infer args from \"{task}\" — {reason}.",
-        "Retry with explicit args:",
-        f'  auto("{task}", server_hint="{server_id}", arguments={args_repr})',
-    ])
+    return "\n".join(
+        [
+            f'auto() couldn\'t infer args from "{task}" — {reason}.',
+            "Retry with explicit args:",
+            f'  auto("{task}", server_hint="{server_id}", arguments={args_repr})',
+        ]
+    )
 
 
 @mcp.tool()
@@ -886,7 +1257,9 @@ async def setup(
         if not guide:
             lines.append("✅ All requirements satisfied — ready to call tools.")
             if tools:
-                lines.append(f"\nAvailable tools ({len(tools)}): {', '.join(t.get('name', '?') for t in tools)}")
+                lines.append(
+                    f"\nAvailable tools ({len(tools)}): {', '.join(t.get('name', '?') for t in tools)}"
+                )
             return "\n".join(lines)
 
         lines.append(guide)
@@ -911,15 +1284,18 @@ async def setup(
     # ── project=True: write .claude/mcp.json for this project ────────────────
     if project:
         mcp_path = _write_project_config()
-        return "\n".join([
-            f"✓ Wrote {mcp_path}",
-            "  This project will load only Kitsune on next Claude Code start.",
-            "  Other sessions (global config) are unaffected.",
-        ])
+        return "\n".join(
+            [
+                f"✓ Wrote {mcp_path}",
+                "  This project will load only Kitsune on next Claude Code start.",
+                "  Other sessions (global config) are unaffected.",
+            ]
+        )
 
     # ── action="restore" ─────────────────────────────────────────────────────
     if action == "restore":
         from kitsune_mcp.gateway import _restore_config
+
         configs = _find_mcp_configs()
         if not configs:
             return "✗ No client configs found."
@@ -967,7 +1343,7 @@ async def setup(
             "Next steps:",
             '  setup(action="harvest")  — extract credentials → ~/.kitsune/.env',
             '  setup(action="absorb")   — harvest + register servers for shapeshift()',
-            '  setup(project=True)      — lean project config (Claude Code only)',
+            "  setup(project=True)      — lean project config (Claude Code only)",
         ]
         return "\n".join(lines)
 
@@ -981,15 +1357,18 @@ async def setup(
                 saved.append(env_var)
         harvest_summary = (
             f"  Harvested {len(saved)} new credential(s): {', '.join(saved)}"
-            if saved else "  No new credentials (all already set or none found)."
+            if saved
+            else "  No new credentials (all already set or none found)."
         )
 
         if action == "harvest":
-            return "\n".join([
-                "✓ Credential harvest complete.",
-                harvest_summary,
-                "  Keys written to ~/.kitsune/.env — active immediately.",
-            ])
+            return "\n".join(
+                [
+                    "✓ Credential harvest complete.",
+                    harvest_summary,
+                    "  Keys written to ~/.kitsune/.env — active immediately.",
+                ]
+            )
 
     # ── action="absorb" ──────────────────────────────────────────────────────
     if action in ("absorb", "exclusive"):
@@ -1004,32 +1383,37 @@ async def setup(
 
         absorb_summary = (
             f"  Absorbed {len(new_servers)} new server(s): {', '.join(s.id for s in new_servers)}"
-            if new_servers else "  No new servers (all already absorbed)."
+            if new_servers
+            else "  No new servers (all already absorbed)."
         )
 
         if action == "absorb":
-            return "\n".join([
-                "✓ Server absorption complete.",
-                harvest_summary,
-                absorb_summary,
-                '  Try: shapeshift("<server-id>") with any absorbed server.',
-            ])
+            return "\n".join(
+                [
+                    "✓ Server absorption complete.",
+                    harvest_summary,
+                    absorb_summary,
+                    '  Try: shapeshift("<server-id>") with any absorbed server.',
+                ]
+            )
 
     # ── action="exclusive" ───────────────────────────────────────────────────
     if action == "exclusive":
         if not confirm:
             client_names = [cfg.client for cfg in configs]
-            return "\n".join([
-                "⚠  EXCLUSIVE MODE affects ALL Claude windows on this machine.",
-                f"   Clients to rewrite: {', '.join(client_names)}",
-                "   Backup will be saved to ~/.kitsune/backup/",
-                "",
-                harvest_summary,
-                absorb_summary,
-                "",
-                '   To confirm: setup(action="exclusive", confirm=True)',
-                '   To undo later: setup(action="restore")',
-            ])
+            return "\n".join(
+                [
+                    "⚠  EXCLUSIVE MODE affects ALL Claude windows on this machine.",
+                    f"   Clients to rewrite: {', '.join(client_names)}",
+                    "   Backup will be saved to ~/.kitsune/backup/",
+                    "",
+                    harvest_summary,
+                    absorb_summary,
+                    "",
+                    '   To confirm: setup(action="exclusive", confirm=True)',
+                    '   To undo later: setup(action="restore")',
+                ]
+            )
         backed_up: list[str] = []
         keep_ids = list(keep or [])
         for cfg in configs:
@@ -1038,21 +1422,24 @@ async def setup(
                 backed_up.append(f"{cfg.client} → {bp}")
             except Exception as e:
                 backed_up.append(f"{cfg.client}: failed ({e})")
-        return "\n".join([
-            "✓ Exclusive mode applied.",
-            harvest_summary,
-            absorb_summary,
-            "  Backups:",
-            *[f"    {b}" for b in backed_up],
-            "  Restart affected clients to pick up changes.",
-            '  To undo: setup(action="restore")',
-        ])
+        return "\n".join(
+            [
+                "✓ Exclusive mode applied.",
+                harvest_summary,
+                absorb_summary,
+                "  Backups:",
+                *[f"    {b}" for b in backed_up],
+                "  Restart affected clients to pick up changes.",
+                '  To undo: setup(action="restore")',
+            ]
+        )
 
     return f"Unknown action '{action}'. Use: harvest | absorb | exclusive | restore"
 
 
 def _is_credential_key(key: str) -> bool:
     from kitsune_mcp.constants import CRED_SUFFIXES
+
     env_name = key.upper().replace("-", "_")
     return any(env_name.endswith(sfx) for sfx in CRED_SUFFIXES)
 
@@ -1070,28 +1457,33 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
 
     # Value provided — guard: names with - / @ are server IDs, not env var names
     if value:
-        if re.search(r'[-/@]', name):
+        if re.search(r"[-/@]", name):
             # Looks like a server ID — route to logout or reject
             if value.lower() in ("logout", "signout", "clear", "revoke"):
                 srv_logout = await _state._registry.get_server(name)
                 if srv_logout and srv_logout.transport == "http" and srv_logout.url:
                     from kitsune_mcp import oauth
+
                     revoked, _ = await oauth.logout(srv_logout.url)
                     lines = [f"✓ OAuth tokens cleared for '{name}'."]
                     if revoked:
                         lines.append("  Refresh token revoked at the identity provider.")
                     else:
-                        lines.append("  (Local-only — IdP did not advertise a revocation endpoint.)")
+                        lines.append(
+                            "  (Local-only — IdP did not advertise a revocation endpoint.)"
+                        )
                     lines.append(f"  Next: auth('{name}') will force a fresh browser login.")
                     return "\n".join(lines)
                 return f"'{name}' is not an OAuth server — no tokens to clear."
             suggested = _to_env_var(name)
-            return "\n".join([
-                f"✗ '{name}' looks like a server ID, not an env var name.",
-                f"  To store a credential:  auth('{suggested}', '{value}')",
-                f"  To check server auth:   auth('{name}')",
-                f"  To revoke OAuth tokens: auth('{name}', 'logout')",
-            ])
+            return "\n".join(
+                [
+                    f"✗ '{name}' looks like a server ID, not an env var name.",
+                    f"  To store a credential:  auth('{suggested}', '{value}')",
+                    f"  To check server auth:   auth('{name}')",
+                    f"  To revoke OAuth tokens: auth('{name}', 'logout')",
+                ]
+            )
         var = name.upper().replace(" ", "_").replace("-", "_")
         _save_to_env(var, value)
         _state._registry.bust_cache()
@@ -1099,12 +1491,12 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
         return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
 
     # ALL_CAPS pattern → env var status check
-    if re.match(r'^[A-Z][A-Z0-9_]*$', name):
+    if re.match(r"^[A-Z][A-Z0-9_]*$", name):
         val = os.getenv(name)
         if val:
             preview = val[:4] + "***" + val[-2:] if len(val) > 6 else "***"
-            return f"✓ {name} = {preview} (set)\nTo update: auth(\"{name}\", \"new-value\")"
-        return f"✗ {name} not set.\nTo set: auth(\"{name}\", \"your-value\")"
+            return f'✓ {name} = {preview} (set)\nTo update: auth("{name}", "new-value")'
+        return f'✗ {name} not set.\nTo set: auth("{name}", "your-value")'
 
     # Server ID → look up in registry
     srv = await _state._registry.get_server(name)
@@ -1119,20 +1511,25 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
                 fix=f'search("{name}") to find the correct server ID, then auth("<id>")',
             )
         from kitsune_mcp import oauth
+
         base_url = srv.url
         try:
             token = await oauth.ensure_token(base_url)
         except Exception as e:
-            return "\n".join([
-                f"OAuth failed for '{name}': {e}",
-                f'Retry: auth("{name}")',
-            ])
+            return "\n".join(
+                [
+                    f"OAuth failed for '{name}': {e}",
+                    f'Retry: auth("{name}")',
+                ]
+            )
         preview = token[:8] + "..." if len(token) > 8 else token
-        return "\n".join([
-            f"Authenticated '{name}'.",
-            f"Token: {preview}",
-            f'Next: shapeshift("{name}")',
-        ])
+        return "\n".join(
+            [
+                f"Authenticated '{name}'.",
+                f"Token: {preview}",
+                f'Next: shapeshift("{name}")',
+            ]
+        )
 
     # stdio transport
     resolved, missing = _state._resolve_config(srv.credentials, {})
@@ -1171,6 +1568,7 @@ async def onboard() -> str:
     list of zero-config servers you can shapeshift into immediately.
     """
     import os
+
     lines = [
         "🦊  Welcome to Kitsune.",
         "",
@@ -1179,8 +1577,10 @@ async def onboard() -> str:
 
     # Active providers — check auth state explicitly
     smithery_ok = _smithery_available()
-    lines.append(f"  {'✓' if smithery_ok else '🔑'}  Smithery"
-                 f"  {'(SMITHERY_API_KEY set — 3000+ verified servers)' if smithery_ok else '(unconfigured — get a key at smithery.ai/account/api-keys to unlock 3000+ servers)'}")
+    lines.append(
+        f"  {'✓' if smithery_ok else '🔑'}  Smithery"
+        f"  {'(SMITHERY_API_KEY set — 3000+ verified servers)' if smithery_ok else '(unconfigured — get a key at smithery.ai/account/api-keys to unlock 3000+ servers)'}"
+    )
     lines.append("  ✓  Official MCP Registry  (modelcontextprotocol.io — no key needed)")
     lines.append("  ✓  npm + PyPI  (community servers, no key needed)")
     lines.append("  ✓  Glama  (community directory, no key needed)")
@@ -1191,14 +1591,14 @@ async def onboard() -> str:
     # Recommended starting point — the free tier
     lines.append("FASTEST PATH TO A WORKING TOOL CALL (no API keys required)")
     for sid, desc in _FREE_TIER_SERVERS:
-        lines.append(f"  shapeshift(\"{sid}\")")
+        lines.append(f'  shapeshift("{sid}")')
         lines.append(f"    → {desc}")
     lines.append("")
 
     # The "3 step" promise
     lines.append("3-STEP CHECK")
-    lines.append("  1. shapeshift(\"mcp-server-time\")")
-    lines.append("  2. call(\"get_current_time\", arguments={\"timezone\": \"UTC\"})")
+    lines.append('  1. shapeshift("mcp-server-time")')
+    lines.append('  2. call("get_current_time", arguments={"timezone": "UTC"})')
     lines.append("  3. shapeshift()")
     lines.append("  → If step 2 returns a timestamp, your install works end-to-end.")
     lines.append("")
@@ -1208,8 +1608,8 @@ async def onboard() -> str:
         lines.append("UPGRADE PATH")
         lines.append("  Get more servers (incl. GitHub, Notion, Linear, Slack, …):")
         lines.append("    1. Sign up at https://smithery.ai/account/api-keys")
-        lines.append("    2. key(\"SMITHERY_API_KEY\", \"sm-...\")")
-        lines.append("    3. search(\"<what you need>\")")
+        lines.append('    2. key("SMITHERY_API_KEY", "sm-...")')
+        lines.append('    3. search("<what you need>")')
     else:
         lines.append("All providers active — explore freely with search() / shapeshift().")
 

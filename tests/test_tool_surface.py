@@ -3,11 +3,13 @@
 Guards against profile drift — tools silently added to or removed from the
 lean profile without updating docs/onboarding examples.
 """
+
 import os
 
 # ---------------------------------------------------------------------------
 # Helpers — import server with a clean tool registry each time
 # ---------------------------------------------------------------------------
+
 
 def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
     """Import server.py with KITSUNE_TOOLS set to the given value and return
@@ -30,12 +32,14 @@ def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
 
         import server  # noqa: F401 — side effects register/prune tools
         from kitsune_mcp.app import mcp
+
         # FastMCP exposes registered tools via ._tool_manager or similar; use the
         # public list_tools() sync path if available, else inspect internals.
         try:
             tools = mcp.list_tools()
             if hasattr(tools, "__await__"):
                 import asyncio
+
                 tools = asyncio.get_event_loop().run_until_complete(tools)
             return {t.name for t in tools}
         except Exception:
@@ -58,16 +62,33 @@ def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
 # ---------------------------------------------------------------------------
 
 LEAN_REQUIRED = {
-    "shapeshift", "search", "auth", "call", "status", "auto",
+    "shapeshift",
+    "search",
+    "auth",
+    "call",
+    "status",
+    "auto",
     # MCP REPL trio — lean so the headline developer loop works on a default install.
-    "connect", "release", "reload",
+    "connect",
+    "release",
+    "reload",
 }
 
 # Tools that must NOT appear in lean (forge-only)
 FORGE_ONLY = {
-    "shiftback", "inspect", "compare", "key", "onboard",
-    "run", "fetch", "craft",
-    "test", "bench", "setup", "prewarm", "skill",
+    "shiftback",
+    "inspect",
+    "compare",
+    "key",
+    "onboard",
+    "run",
+    "fetch",
+    "craft",
+    "test",
+    "bench",
+    "setup",
+    "prewarm",
+    "skill",
 }
 
 ALL_TOOLS = LEAN_REQUIRED | FORGE_ONLY
@@ -77,9 +98,11 @@ ALL_TOOLS = LEAN_REQUIRED | FORGE_ONLY
 # Tests
 # ---------------------------------------------------------------------------
 
+
 def test_lean_profile_has_required_tools():
     """Lean profile must expose exactly the core discovery + hub tools."""
     from server import _LEAN_TOOLS
+
     missing = LEAN_REQUIRED - _LEAN_TOOLS
     assert not missing, f"Lean profile is missing expected tools: {missing}"
 
@@ -87,6 +110,7 @@ def test_lean_profile_has_required_tools():
 def test_lean_profile_excludes_forge_only_tools():
     """Forge-only tools must not be in the lean profile."""
     from server import _LEAN_TOOLS
+
     leaked = FORGE_ONLY & _LEAN_TOOLS
     assert not leaked, f"Forge-only tools leaked into lean profile: {leaked}"
 
@@ -94,12 +118,14 @@ def test_lean_profile_excludes_forge_only_tools():
 def test_auth_is_in_lean():
     """auth replaces key+login in the lean profile."""
     from server import _LEAN_TOOLS
+
     assert "auth" in _LEAN_TOOLS, "auth must be in lean profile"
 
 
 def test_auto_is_in_lean():
     """auto moved to lean profile in v0.19."""
     from server import _LEAN_TOOLS
+
     assert "auto" in _LEAN_TOOLS, "auto must be in lean profile (v0.19+)"
 
 
@@ -107,6 +133,7 @@ def test_base_tool_names_covers_lean_and_forge():
     """_BASE_TOOL_NAMES must be the superset of lean + forge."""
     from kitsune_mcp.tools._state import _BASE_TOOL_NAMES
     from server import _LEAN_TOOLS
+
     uncovered = _LEAN_TOOLS - _BASE_TOOL_NAMES
     assert not uncovered, f"Lean tools not in _BASE_TOOL_NAMES: {uncovered}"
 
@@ -114,6 +141,7 @@ def test_base_tool_names_covers_lean_and_forge():
 def test_lean_tools_documented_count():
     """Lean profile is exactly 9 tools (6 core + connect/release/reload) — catch silent drift."""
     from server import _LEAN_TOOLS
+
     assert len(_LEAN_TOOLS) == 9, (
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
@@ -124,20 +152,24 @@ def test_lean_tools_documented_count():
 # _active_tool_names() — shared profile resolution
 # ---------------------------------------------------------------------------
 
+
 def test_active_tool_names_default_is_lean(monkeypatch):
     from kitsune_mcp.tools._state import _LEAN_TOOL_NAMES, _active_tool_names
+
     monkeypatch.delenv("KITSUNE_TOOLS", raising=False)
     assert _active_tool_names() == _LEAN_TOOL_NAMES
 
 
 def test_active_tool_names_all_is_full_surface(monkeypatch):
     from kitsune_mcp.tools._state import _BASE_TOOL_NAMES, _active_tool_names
+
     monkeypatch.setenv("KITSUNE_TOOLS", "all")
     assert _active_tool_names() == _BASE_TOOL_NAMES
 
 
 def test_active_tool_names_custom_subset_intersects_base(monkeypatch):
     from kitsune_mcp.tools._state import _active_tool_names
+
     monkeypatch.setenv("KITSUNE_TOOLS", "shapeshift, call, not-a-real-tool")
     assert _active_tool_names() == {"shapeshift", "call"}
 
@@ -146,10 +178,12 @@ def test_active_tool_names_custom_subset_intersects_base(monkeypatch):
 # GATEWAY bloat hint — must only recommend tools in the active profile
 # ---------------------------------------------------------------------------
 
+
 def _fake_client_config():
     from pathlib import Path
 
     from kitsune_mcp.gateway import AbsorbedServer, ClientConfig
+
     return ClientConfig(
         client="test-client",
         path=Path("/dev/null"),
@@ -161,6 +195,7 @@ async def _status_with_competing_server():
     from unittest import mock
 
     from kitsune_mcp.tools import status
+
     with (
         mock.patch("kitsune_mcp.gateway._find_mcp_configs", return_value=[_fake_client_config()]),
         mock.patch("kitsune_mcp.gateway._load_absorbed_servers", return_value=[]),

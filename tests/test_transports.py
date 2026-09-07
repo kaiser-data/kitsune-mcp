@@ -1,4 +1,5 @@
 """Tests for StdioTransport and HTTPSSETransport."""
+
 import contextlib
 import json
 import os
@@ -19,6 +20,7 @@ from server import (
 # StdioTransport tests
 # ---------------------------------------------------------------------------
 
+
 class TestStdioTransportFileNotFound:
     async def test_missing_executable_returns_friendly_message(self):
         transport = StdioTransport(["definitely_not_a_real_command_xyz"])
@@ -35,7 +37,7 @@ class TestStdioTransportParseSSE:
     """Test _parse_sse staticmethod on HTTPSSETransport."""
 
     def test_parse_sse_valid_data_line(self):
-        text = "data: {\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {}}\n"
+        text = 'data: {"jsonrpc": "2.0", "id": 1, "result": {}}\n'
         # Access via instance — parse_sse is a nested function, test indirectly
         # by constructing a mock response scenario
         assert '{"jsonrpc"' in text  # sanity
@@ -66,17 +68,34 @@ class TestHTTPSSETransport:
         import httpx
         import respx
 
-
         endpoint = "https://api.smithery.ai/connect/ns/kitsune-test-org-test-server/mcp"
-        payload = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"}}}
-        tool_payload = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
+        }
+        tool_payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": "ok"}]},
+        }
 
         transport = HTTPSSETransport("test-org/test-server")
-        with patch.object(transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))):
+        with patch.object(
+            transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))
+        ):
             with respx.mock:
                 respx.post(endpoint).mock(
                     side_effect=[
-                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n", headers={"mcp-session-id": "abc"}),
+                        httpx.Response(
+                            200,
+                            text=f"data: {json.dumps(payload)}\n",
+                            headers={"mcp-session-id": "abc"},
+                        ),
                         httpx.Response(200, text=""),
                         httpx.Response(200, text=f"data: {json.dumps(tool_payload)}\n"),
                     ]
@@ -89,11 +108,14 @@ class TestHTTPSSETransport:
         """HTTPSSETransport returns timeout message on asyncio.TimeoutError."""
         endpoint = "https://api.smithery.ai/connect/ns/kitsune-slow-server/mcp"
         transport = HTTPSSETransport("slow-server")
+
         async def _timeout(coro, timeout=None):
             coro.close()  # discard the unawaited _run() coroutine cleanly
             raise TimeoutError
 
-        with patch.object(transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))):
+        with patch.object(
+            transport, "_connect_endpoint", AsyncMock(return_value=(endpoint, "svc-token"))
+        ):
             with patch("asyncio.wait_for", _timeout):
                 result = await transport.execute("tool", {}, {})
         assert "Timeout" in result or "timeout" in result.lower()
@@ -103,13 +125,24 @@ class TestHTTPSSETransport:
 # WebSocketTransport tests
 # ---------------------------------------------------------------------------
 
+
 class TestWebSocketTransport:
     """WebSocketTransport sends MCP handshake and tool call over WebSocket."""
 
     def _make_ws_mock(self, tool_response: dict):
         """Return an async context manager mock that yields a ws with preset recv() replies."""
         ws = AsyncMock()
-        init_reply = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "test"}}})
+        init_reply = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "serverInfo": {"name": "test"},
+                },
+            }
+        )
         tool_reply = json.dumps(tool_response)
         ws.recv = AsyncMock(side_effect=[init_reply, tool_reply])
         ws.send = AsyncMock()
@@ -127,8 +160,13 @@ class TestWebSocketTransport:
 
     async def test_successful_text_response(self):
         import sys
+
         ws_mock_module = MagicMock()
-        tool_resp = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "hello from ws"}]}}
+        tool_resp = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": "hello from ws"}]},
+        }
         cm = self._make_ws_mock(tool_resp)
         ws_mock_module.connect = MagicMock(return_value=cm)
 
@@ -140,8 +178,13 @@ class TestWebSocketTransport:
 
     async def test_error_response_returns_error_message(self):
         import sys
+
         ws_mock_module = MagicMock()
-        tool_resp = {"jsonrpc": "2.0", "id": 2, "error": {"code": -32601, "message": "Method not found"}}
+        tool_resp = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": {"code": -32601, "message": "Method not found"},
+        }
         cm = self._make_ws_mock(tool_resp)
         ws_mock_module.connect = MagicMock(return_value=cm)
 
@@ -153,6 +196,7 @@ class TestWebSocketTransport:
 
     async def test_connection_error_returns_friendly_message(self):
         import sys
+
         ws_mock_module = MagicMock()
         ws_mock_module.connect = MagicMock(side_effect=ConnectionRefusedError("refused"))
 
@@ -166,6 +210,7 @@ class TestWebSocketTransport:
 # ---------------------------------------------------------------------------
 # DockerTransport tests
 # ---------------------------------------------------------------------------
+
 
 class TestDockerTransport:
     """DockerTransport builds correct docker run command and delegates to PersistentStdioTransport."""
@@ -261,12 +306,32 @@ class TestDockerTransport:
         import json as _json
         from unittest.mock import AsyncMock, MagicMock
 
-        init_msg = _json.dumps({"jsonrpc": "2.0", "id": 1, "result": {
-            "protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "t", "version": "1"},
-        }}).encode() + b"\n"
-        tool_msg = _json.dumps({"jsonrpc": "2.0", "id": 3, "result": {
-            "content": [{"type": "text", "text": "docker result"}],
-        }}).encode() + b"\n"
+        init_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {"name": "t", "version": "1"},
+                    },
+                }
+            ).encode()
+            + b"\n"
+        )
+        tool_msg = (
+            _json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "result": {
+                        "content": [{"type": "text", "text": "docker result"}],
+                    },
+                }
+            ).encode()
+            + b"\n"
+        )
 
         mock_proc = MagicMock()
         mock_proc.stdin = MagicMock()
@@ -290,6 +355,7 @@ class TestDockerTransport:
 # Phase 1: _validate_install_cmd
 # ---------------------------------------------------------------------------
 
+
 class TestValidateInstallCmd:
     """_validate_install_cmd raises ValueError for unsafe argv[0]; accepts safe commands."""
 
@@ -301,26 +367,31 @@ class TestValidateInstallCmd:
 
     def test_rejects_empty_command(self):
         import pytest
+
         with pytest.raises(ValueError, match="Empty"):
             _validate_install_cmd([])
 
     def test_rejects_shell_injection_semicolon(self):
         import pytest
+
         with pytest.raises(ValueError, match="Shell metacharacter"):
             _validate_install_cmd(["npx; rm -rf /", "arg"])
 
     def test_rejects_shell_injection_pipe(self):
         import pytest
+
         with pytest.raises(ValueError, match="Shell metacharacter"):
             _validate_install_cmd(["npx|evil", "arg"])
 
     def test_rejects_shell_injection_backtick(self):
         import pytest
+
         with pytest.raises(ValueError, match="Shell metacharacter"):
             _validate_install_cmd(["`evil`"])
 
     def test_rejects_path_traversal(self):
         import pytest
+
         with pytest.raises(ValueError, match="Path traversal"):
             _validate_install_cmd(["../../bin/evil"])
 
@@ -335,6 +406,7 @@ class TestValidateInstallCmd:
         import pytest
 
         from server import PersistentStdioTransport
+
         transport = PersistentStdioTransport(["../../evil"])
         with pytest.raises(RuntimeError, match="Path traversal"):
             await transport._start_process()
@@ -345,6 +417,7 @@ class TestHTTPSSETransportDirectOAuth:
 
     async def test_connect_endpoint_returns_url_and_oauth_token(self):
         from kitsune_mcp import oauth
+
         url = "https://mcp.notion.com/mcp"
         transport = HTTPSSETransport(url, direct=True)
         with patch.object(oauth, "ensure_token", AsyncMock(return_value="tok-oauth-1")):
@@ -362,24 +435,42 @@ class TestHTTPSSETransportDirectOAuth:
         import respx
 
         from kitsune_mcp import oauth
+
         url = "https://mcp.example/mcp"
         transport = HTTPSSETransport(url, direct=True)
         # First call returns token-1; after delete, second call returns token-2.
         ensure_tokens = AsyncMock(side_effect=["tok-1", "tok-2"])
         delete_spy = MagicMock()
-        payload = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "ok"}]}}
-        init_payload = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {}, "serverInfo": {"name": "x", "version": "1"}}}
-        with patch.object(oauth, "ensure_token", ensure_tokens), \
-             patch.object(oauth, "delete_tokens", delete_spy), \
-             patch.object(oauth, "_origin", return_value="mcp.example"):
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": "ok"}]},
+        }
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "x", "version": "1"},
+            },
+        }
+        with (
+            patch.object(oauth, "ensure_token", ensure_tokens),
+            patch.object(oauth, "delete_tokens", delete_spy),
+            patch.object(oauth, "_origin", return_value="mcp.example"),
+        ):
             with respx.mock:
                 respx.post(url).mock(
                     side_effect=[
-                        httpx.Response(401, text=""),                                    # initialize → 401
-                        httpx.Response(200, text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
-                                       headers={"mcp-session-id": "s"}),
-                        httpx.Response(200, text=""),                                    # notifications/initialized
-                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n"),      # tools/call OK
+                        httpx.Response(401, text=""),  # initialize → 401
+                        httpx.Response(
+                            200,
+                            text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
+                            headers={"mcp-session-id": "s"},
+                        ),
+                        httpx.Response(200, text=""),  # notifications/initialized
+                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n"),  # tools/call OK
                     ]
                 )
                 result = await transport.execute("my_tool", {}, {})
@@ -390,8 +481,11 @@ class TestHTTPSSETransportDirectOAuth:
 
     async def test_connect_endpoint_returns_none_when_ensure_token_raises(self):
         from kitsune_mcp import oauth
+
         transport = HTTPSSETransport("https://no-oauth.example/mcp", direct=True)
-        with patch.object(oauth, "ensure_token", AsyncMock(side_effect=RuntimeError("no well-known"))):
+        with patch.object(
+            oauth, "ensure_token", AsyncMock(side_effect=RuntimeError("no well-known"))
+        ):
             result = await transport._connect_endpoint({})
         assert result is None
 
@@ -401,6 +495,7 @@ class TestGetTransportURLEscapeHatch:
 
     def test_bare_https_url_returns_direct_httpsse(self):
         from kitsune_mcp.tools import _get_transport
+
         t = _get_transport("https://mcp.notion.com/mcp", None)
         assert isinstance(t, HTTPSSETransport)
         assert t.direct is True
@@ -408,6 +503,7 @@ class TestGetTransportURLEscapeHatch:
 
     def test_bare_http_url_returns_direct_httpsse(self):
         from kitsune_mcp.tools import _get_transport
+
         t = _get_transport("http://127.0.0.1:9000/mcp", None)
         assert isinstance(t, HTTPSSETransport)
         assert t.direct is True
@@ -415,6 +511,7 @@ class TestGetTransportURLEscapeHatch:
     def test_registry_http_run_tools_stays_smithery(self):
         """A registry-declared HTTP server on *.run.tools is still Smithery-mediated."""
         from kitsune_mcp.tools import _get_transport
+
         srv = MagicMock(transport="http", url="https://brave.run.tools", id="brave")
         t = _get_transport("brave", srv)
         assert isinstance(t, HTTPSSETransport)
@@ -423,6 +520,7 @@ class TestGetTransportURLEscapeHatch:
     def test_registry_http_direct_url_becomes_direct(self):
         """A registry-declared HTTP server NOT on run.tools uses direct OAuth."""
         from kitsune_mcp.tools import _get_transport
+
         srv = MagicMock(transport="http", url="https://mcp.notion.com/mcp", id="notion-hosted")
         t = _get_transport("notion-hosted", srv)
         assert isinstance(t, HTTPSSETransport)
@@ -448,6 +546,7 @@ class TestStdioBufferLimit:
 
     async def test_stdio_transport_passes_limit_kwarg(self):
         from kitsune_mcp.constants import STDIO_BUFFER_LIMIT
+
         spy = AsyncMock(return_value=self._mock_proc())
         with patch("asyncio.create_subprocess_exec", spy):
             transport = StdioTransport(["echo"])
@@ -457,6 +556,7 @@ class TestStdioBufferLimit:
     async def test_persistent_stdio_transport_passes_limit_kwarg(self):
         from kitsune_mcp.constants import STDIO_BUFFER_LIMIT
         from server import PersistentStdioTransport
+
         spy = AsyncMock(return_value=self._mock_proc())
         with patch("asyncio.create_subprocess_exec", spy):
             transport = PersistentStdioTransport(["echo"])

@@ -11,6 +11,7 @@ Covers deterministic pieces (no live browser):
 - invalid_grant → re-auth flow
 - _bundle_from_response parsing
 """
+
 import asyncio
 import base64
 import hashlib
@@ -38,9 +39,11 @@ class TestPKCE:
 
     def test_pkce_challenge_is_s256_of_verifier(self):
         verifier, challenge = oauth._pkce_pair()
-        expected = base64.urlsafe_b64encode(
-            hashlib.sha256(verifier.encode()).digest()
-        ).rstrip(b"=").decode()
+        expected = (
+            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+            .rstrip(b"=")
+            .decode()
+        )
         assert challenge == expected
 
     def test_pkce_no_padding_in_challenge(self):
@@ -254,14 +257,17 @@ class TestTokenStorage:
 class TestBundleFromResponse:
     def test_parses_full_payload(self):
         import time
+
         before = time.time()
-        b = oauth._bundle_from_response({
-            "access_token": "at",
-            "refresh_token": "rt",
-            "expires_in": 3600,
-            "token_type": "Bearer",
-            "scope": "read write",
-        })
+        b = oauth._bundle_from_response(
+            {
+                "access_token": "at",
+                "refresh_token": "rt",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+                "scope": "read write",
+            }
+        )
         after = time.time()
         assert b.access_token == "at"
         assert b.refresh_token == "rt"
@@ -273,6 +279,7 @@ class TestBundleFromResponse:
         assert b.refresh_token is None
         # default 3600
         import time
+
         assert b.expires_at - time.time() > 3500
 
 
@@ -338,6 +345,7 @@ class TestRefresh:
 class TestEnsureToken:
     def test_ensure_token_returns_cached_when_valid(self, tmp_path, monkeypatch):
         import time
+
         monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
         meta = oauth.AuthMeta(
             issuer="https://x",
@@ -351,9 +359,13 @@ class TestEnsureToken:
         # Pre-seed metadata cache so discover isn't called.
         oauth._meta_cache["https://x/mcp"] = meta
         origin = oauth._origin("https://x/mcp")
-        oauth.save_tokens(origin, oauth.TokenBundle(
-            access_token="cached", expires_at=time.time() + 600,
-        ))
+        oauth.save_tokens(
+            origin,
+            oauth.TokenBundle(
+                access_token="cached",
+                expires_at=time.time() + 600,
+            ),
+        )
         token = asyncio.run(oauth.ensure_token("https://x/mcp"))
         assert token == "cached"
         # Clean up shared cache.
@@ -361,6 +373,7 @@ class TestEnsureToken:
 
     def test_ensure_token_refreshes_when_expired(self, tmp_path, monkeypatch):
         import time
+
         monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
         meta = oauth.AuthMeta(
             issuer="https://y",
@@ -373,12 +386,21 @@ class TestEnsureToken:
         )
         oauth._meta_cache["https://y/mcp"] = meta
         origin = oauth._origin("https://y/mcp")
-        oauth._save_client(origin, oauth.ClientInfo(
-            client_id="cid", redirect_uri="http://127.0.0.1:5/cb",
-        ))
-        oauth.save_tokens(origin, oauth.TokenBundle(
-            access_token="old", expires_at=time.time() - 10, refresh_token="rt",
-        ))
+        oauth._save_client(
+            origin,
+            oauth.ClientInfo(
+                client_id="cid",
+                redirect_uri="http://127.0.0.1:5/cb",
+            ),
+        )
+        oauth.save_tokens(
+            origin,
+            oauth.TokenBundle(
+                access_token="old",
+                expires_at=time.time() - 10,
+                refresh_token="rt",
+            ),
+        )
 
         async def fake_refresh(_m, _c, _b):
             return oauth.TokenBundle(access_token="new-access", expires_at=time.time() + 3600)
@@ -391,6 +413,7 @@ class TestEnsureToken:
 
     def test_ensure_token_reauthorizes_on_invalid_grant(self, tmp_path, monkeypatch):
         import time
+
         monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
         meta = oauth.AuthMeta(
             issuer="https://z",
@@ -403,12 +426,21 @@ class TestEnsureToken:
         )
         oauth._meta_cache["https://z/mcp"] = meta
         origin = oauth._origin("https://z/mcp")
-        oauth._save_client(origin, oauth.ClientInfo(
-            client_id="cid", redirect_uri="http://127.0.0.1:5/cb",
-        ))
-        oauth.save_tokens(origin, oauth.TokenBundle(
-            access_token="old", expires_at=time.time() - 10, refresh_token="rt-bad",
-        ))
+        oauth._save_client(
+            origin,
+            oauth.ClientInfo(
+                client_id="cid",
+                redirect_uri="http://127.0.0.1:5/cb",
+            ),
+        )
+        oauth.save_tokens(
+            origin,
+            oauth.TokenBundle(
+                access_token="old",
+                expires_at=time.time() - 10,
+                refresh_token="rt-bad",
+            ),
+        )
 
         async def bad_refresh(*_a, **_kw):
             raise PermissionError("invalid_grant")
@@ -416,8 +448,10 @@ class TestEnsureToken:
         async def fake_authorize(_m, _c, force_login=False):
             return oauth.TokenBundle(access_token="fresh", expires_at=time.time() + 3600)
 
-        with patch.object(oauth, "refresh", side_effect=bad_refresh), \
-             patch.object(oauth, "authorize", side_effect=fake_authorize):
+        with (
+            patch.object(oauth, "refresh", side_effect=bad_refresh),
+            patch.object(oauth, "authorize", side_effect=fake_authorize),
+        ):
             token = asyncio.run(oauth.ensure_token("https://z/mcp"))
         assert token == "fresh"
         oauth._meta_cache.pop("https://z/mcp", None)
@@ -497,15 +531,25 @@ class TestLogout:
 
     def test_logout_deletes_tokens_and_arms_force_login(self, tmp_path, monkeypatch):
         import time
+
         monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
         oauth._meta_cache["https://lo/mcp"] = _meta_with_revoke()
         origin = oauth._origin("https://lo/mcp")
-        oauth._save_client(origin, oauth.ClientInfo(
-            client_id="cid", redirect_uri="http://127.0.0.1/cb",
-        ))
-        oauth.save_tokens(origin, oauth.TokenBundle(
-            access_token="at", expires_at=time.time() + 3600, refresh_token="rt",
-        ))
+        oauth._save_client(
+            origin,
+            oauth.ClientInfo(
+                client_id="cid",
+                redirect_uri="http://127.0.0.1/cb",
+            ),
+        )
+        oauth.save_tokens(
+            origin,
+            oauth.TokenBundle(
+                access_token="at",
+                expires_at=time.time() + 3600,
+                refresh_token="rt",
+            ),
+        )
 
         resp = MagicMock(status_code=200)
         http_client = MagicMock()
@@ -522,13 +566,18 @@ class TestLogout:
 
     def test_ensure_token_consumes_force_login_flag(self, tmp_path, monkeypatch):
         import time
+
         monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
         meta = _meta_with_revoke("https://fl")
         oauth._meta_cache["https://fl/mcp"] = meta
         origin = oauth._origin("https://fl/mcp")
-        oauth._save_client(origin, oauth.ClientInfo(
-            client_id="cid", redirect_uri="http://127.0.0.1/cb",
-        ))
+        oauth._save_client(
+            origin,
+            oauth.ClientInfo(
+                client_id="cid",
+                redirect_uri="http://127.0.0.1/cb",
+            ),
+        )
         # No bundle on disk → ensure_token falls through to authorize()
         oauth._force_login_origins.add(origin)
 
@@ -560,19 +609,28 @@ class TestLogout:
         that is the single remaining manual check.
         """
         import time
+
         monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
         oauth._meta_cache["https://e2e/mcp"] = _meta_with_revoke("https://e2e")
         origin = oauth._origin("https://e2e/mcp")
-        oauth._save_client(origin, oauth.ClientInfo(
-            client_id="cid", redirect_uri="http://127.0.0.1/cb",
-        ))
+        oauth._save_client(
+            origin,
+            oauth.ClientInfo(
+                client_id="cid",
+                redirect_uri="http://127.0.0.1/cb",
+            ),
+        )
         # A fully-authenticated session: valid (unexpired) access token AND a
         # live refresh token — exactly the state that triggered the silent
         # re-issue in the bug report.
-        oauth.save_tokens(origin, oauth.TokenBundle(
-            access_token="fe5fb9ad-OLD", expires_at=time.time() + 3600,
-            refresh_token="rt-old",
-        ))
+        oauth.save_tokens(
+            origin,
+            oauth.TokenBundle(
+                access_token="fe5fb9ad-OLD",
+                expires_at=time.time() + 3600,
+                refresh_token="rt-old",
+            ),
+        )
 
         resp = MagicMock(status_code=200)
         http_client = MagicMock()
@@ -591,15 +649,18 @@ class TestLogout:
         async def fake_authorize(_m, _c, force_login=False):
             seen["force_login"] = force_login
             return oauth.TokenBundle(
-                access_token="NEW-token", expires_at=time.time() + 3600,
+                access_token="NEW-token",
+                expires_at=time.time() + 3600,
                 refresh_token="rt-new",
             )
 
-        with patch.object(oauth, "refresh", side_effect=fake_refresh), \
-             patch.object(oauth, "authorize", side_effect=fake_authorize):
+        with (
+            patch.object(oauth, "refresh", side_effect=fake_refresh),
+            patch.object(oauth, "authorize", side_effect=fake_authorize),
+        ):
             tok = asyncio.run(oauth.ensure_token("https://e2e/mcp"))
 
-        assert tok == "NEW-token"            # not the stale fe5fb9ad prefix
+        assert tok == "NEW-token"  # not the stale fe5fb9ad prefix
         assert seen.get("force_login") is True  # browser re-prompt armed
         assert origin not in oauth._force_login_origins  # flag consumed
         oauth._meta_cache.pop("https://e2e/mcp", None)
