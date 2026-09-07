@@ -232,14 +232,18 @@ search("current time timezone", compare=True)
 # 3. Mount and use
 shapeshift("mcp-server-time")
 call("get_current_time", arguments={"timezone": "Asia/Tokyo"})
-call("convert_time", arguments={"source_timezone": "Asia/Tokyo",
-                                "target_timezone": "America/New_York",
-                                "time": "09:00"})
+call(
+    "convert_time",
+    arguments={
+        "source_timezone": "Asia/Tokyo",
+        "target_timezone": "America/New_York",
+        "time": "09:00",
+    },
+)
 shapeshift()
 
 # 4. Lean mount on GitHub — 1 tool from 26
-shapeshift("@modelcontextprotocol/server-github",
-           tools=["search_repositories"])
+shapeshift("@modelcontextprotocol/server-github", tools=["search_repositories"])
 call("search_repositories", {"query": "MCP server productivity"})
 shapeshift()
 

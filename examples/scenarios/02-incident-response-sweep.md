@@ -46,45 +46,65 @@ shiftback()
 
 # 2. Datadog — pull the metric for the past hour.
 shapeshift("datadog-mcp", tools=["query_metrics", "list_logs"])
-call("query_metrics", {
-    "query": "p99:trace.http.request{service:checkout-api}",
-    "from": "now-1h", "to": "now",
-})
+call(
+    "query_metrics",
+    {
+        "query": "p99:trace.http.request{service:checkout-api}",
+        "from": "now-1h",
+        "to": "now",
+    },
+)
 # → 03:09  812ms  ▁
 #   03:11  1.42s  ▆  ← spike start
 #   03:14  1.81s  █  ← page fired
 #   03:16  1.43s  ▆
 
-call("list_logs", {
-    "query": "service:checkout-api status:error",
-    "from": "now-1h", "limit": 10,
-})
+call(
+    "list_logs",
+    {
+        "query": "service:checkout-api status:error",
+        "from": "now-1h",
+        "limit": 10,
+    },
+)
 # → 5 errors, all "stripe.connect_timeout" — downstream dependency
 shiftback()
 
 # 3. GitHub — file the post-mortem stub linked to the deploy log.
 shapeshift("github-mcp", tools=["create_issue", "search_commits"])
-call("search_commits", {
-    "owner": "acme", "repo": "checkout-api",
-    "query": "merged:>=2026-05-16T02:00", "per_page": 5,
-})
+call(
+    "search_commits",
+    {
+        "owner": "acme",
+        "repo": "checkout-api",
+        "query": "merged:>=2026-05-16T02:00",
+        "per_page": 5,
+    },
+)
 # → No commits in the last 4h.  Symptom is not deploy-induced.
 
-call("create_issue", {
-    "owner": "acme", "repo": "checkout-api",
-    "title": "Incident PXYZ123 — checkout-api p99 > 1.2s, Stripe connect timeouts",
-    "body": "## Auto-summary\n- Page: 03:14\n- Metric: p99 1.42s (threshold 800ms)\n- Logs: 5 stripe.connect_timeout in last hour\n- Deploy history: no commits in 4h\n\n## Next steps\n- [ ] Check Stripe status page\n- [ ] Verify upstream rate-limit headers",
-    "labels": ["incident", "postmortem-stub"],
-})
+call(
+    "create_issue",
+    {
+        "owner": "acme",
+        "repo": "checkout-api",
+        "title": "Incident PXYZ123 — checkout-api p99 > 1.2s, Stripe connect timeouts",
+        "body": "## Auto-summary\n- Page: 03:14\n- Metric: p99 1.42s (threshold 800ms)\n- Logs: 5 stripe.connect_timeout in last hour\n- Deploy history: no commits in 4h\n\n## Next steps\n- [ ] Check Stripe status page\n- [ ] Verify upstream rate-limit headers",
+        "labels": ["incident", "postmortem-stub"],
+    },
+)
 # → ✓ Issue #4421 created
 shiftback()
 
 # 4. Slack — drop the issue link in #oncall.
 shapeshift("slack-mcp", tools=["post_message"])
-call("post_message", {
-    "channel": "#oncall",
-    "text": "PXYZ123 ack'd — see github.com/acme/checkout-api/issues/4421 — looks like Stripe upstream, not us. Going back to bed.",
-})
+call(
+    "post_message",
+    {
+        "channel": "#oncall",
+        "text": "PXYZ123 ack'd — see github.com/acme/checkout-api/issues/4421 — looks like Stripe upstream, not us. Going back to bed.",
+    },
+)
 shiftback()
 ```
 

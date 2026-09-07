@@ -63,7 +63,10 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.3.0",
-    "ruff>=0.6.0",
+    # Pin the formatter/linter to a minor range. `ruff format --check` is a CI
+    # gate and ruff's formatting output changes between minor releases, so an
+    # unbounded pin means CI formats differently from the committed tree.
+    "ruff>=0.16.6,<0.17",
     "respx>=0.21.0",
     # Needed so the suite actually exercises the WebSocket transport rather
     # than skipping it (tests patch `websockets.connect`).

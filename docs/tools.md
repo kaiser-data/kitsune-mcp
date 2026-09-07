@@ -165,7 +165,7 @@ latency-sensitive sessions.
 ```python
 prewarm("mcp-server-time")
 # → 🔥 Prewarmed 'mcp-server-time' — PID 12345, 4 tools ready (6.2s).
-shapeshift("mcp-server-time")   # instant — no install delay
+shapeshift("mcp-server-time")  # instant — no install delay
 ```
 
 Nothing appears in `tools/list` between `prewarm()` and `shapeshift()`.
