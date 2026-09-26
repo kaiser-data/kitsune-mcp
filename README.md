@@ -253,7 +253,7 @@ Reach into 130k community servers only works if unknown code can be **contained*
 | Medium | `mcpregistry`, `glama`, `smithery` | runs directly |
 | Community | `npm`, `pypi`, `github`, local `connect()` | **requires `confirm=True`** |
 
-`KITSUNE_TRUST=community` waives the gate; `status()` warns when that override is active.
+`KITSUNE_TRUST=community` waives the gate; `status()` warns when that override is active. Only the user can set it: `auth()`, `key()` and `auto(keys=)` refuse every `KITSUNE_*` variable, plus launch and supply-chain levers such as `NODE_OPTIONS`, `LD_PRELOAD`, `PIP_INDEX_URL` and `DOCKER_HOST`, because unsandboxed servers inherit the environment.
 
 > **`confirm=True` is not a human-approval boundary.** The model can set it. Real approval belongs in your client's tool-approval UI.
 

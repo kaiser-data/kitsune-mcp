@@ -325,7 +325,9 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         if probe_gated:
             lines.append(f"TOOLS: not probed ({gate_reason} — would run code from {srv.source})")
             lines.append(f'To probe live: inspect("{srv.id}", probe=True)')
-            lines.append('To always trust community: auth("KITSUNE_TRUST", "community")')
+            lines.append(
+                "To always trust community: the user sets KITSUNE_TRUST=community in ~/.kitsune/.env"
+            )
         elif probe_error:
             lines.append(f"TOOLS: live probe failed — {probe_error}")
         elif srv.transport == "stdio":

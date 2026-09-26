@@ -157,7 +157,7 @@ shapeshift("some-random-npm-server")
 ⚠️  'some-random-npm-server' is from npm (community — not verified by the
     official MCP registry).
 To proceed: shapeshift('some-random-npm-server', confirm=True)
-To always trust community: auth("KITSUNE_TRUST", "community")
+To always trust community: the user sets KITSUNE_TRUST=community in ~/.kitsune/.env
 ```
 **CAPTION:** *No arbitrary code runs without an explicit, logged consent.*
 

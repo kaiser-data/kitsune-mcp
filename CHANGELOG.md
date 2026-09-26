@@ -6,6 +6,23 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Security — tool calls can no longer switch off Kitsune's own safety gates
+
+`auth()`, `key()` and `auto(keys=)` wrote any env var the agent named, into
+both `~/.kitsune/.env` and `os.environ`. That let a prompt-injected agent set
+`KITSUNE_TRUST=community` (skip the trust gate), `KITSUNE_SANDBOX=off` (skip the
+Docker cage) or `KITSUNE_ALLOW_LOCAL_FETCH=1` (SSRF). The trust-gate message even
+suggested `auth("KITSUNE_TRUST", "community")`. Because unsandboxed stdio servers
+inherit the environment, launch levers (`NODE_OPTIONS`, `LD_PRELOAD`,
+`PYTHONSTARTUP`, `BASH_ENV`) and supply-chain levers (`PIP_INDEX_URL`,
+`NPM_CONFIG_REGISTRY`, `DOCKER_HOST`, proxies, CA bundles) were reachable too.
+
+`_save_to_env` now refuses every `KITSUNE_*` name and those levers
+(`credentials.is_protected_env_var`); the tools return a "protected variable"
+message and `setup(action="harvest")` skips them. The hints now tell the user to
+set `KITSUNE_TRUST` by hand. Ordinary credentials (`GITHUB_TOKEN`, `*_API_KEY`,
+`DATABASE_URL`) are unaffected.
+
 ---
 
 ## [0.21.1] — 2026-09-07

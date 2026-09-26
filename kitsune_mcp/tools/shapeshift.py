@@ -357,7 +357,7 @@ async def shapeshift(
             f"To proceed: shapeshift('{server_id}', confirm=True)\n"
             f"  ↳ runs caged in Docker by default (no host filesystem) when Docker is available.\n"
             f"To run uncaged instead: shapeshift('{server_id}', confirm=True, sandbox=False)\n"
-            f'To always trust community: auth("KITSUNE_TRUST", "community")'
+            "To always trust community: the user sets KITSUNE_TRUST=community in ~/.kitsune/.env"
         )
 
     if source == "local" and not confirm and not _trust_override:
@@ -369,7 +369,7 @@ async def shapeshift(
             f"This downloads and executes the package locally.\n"
             f"Review first: inspect('{server_id}')\n\n"
             f"To proceed: shapeshift('{server_id}', source='local', confirm=True)\n"
-            f'To always trust local installs: key("KITSUNE_TRUST", "community")'
+            "To always trust local installs: the user sets KITSUNE_TRUST=community in ~/.kitsune/.env"
         )
 
     # Pre-flight gate: Smithery-hosted servers always need SMITHERY_API_KEY

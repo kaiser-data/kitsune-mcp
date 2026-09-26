@@ -83,7 +83,74 @@ def _to_env_var(k: str) -> str:
     return s.upper()
 
 
+# Env vars no tool call may set. _save_to_env writes into os.environ, and
+# unsandboxed stdio servers inherit the whole host environment — so these are
+# Kitsune's own safety knobs (KITSUNE_TRUST / KITSUNE_SANDBOX would switch off
+# the trust gate and the Docker cage), code-execution levers (NODE_OPTIONS,
+# LD_PRELOAD, PYTHONSTARTUP, BASH_ENV) or supply-chain levers (PIP_INDEX_URL,
+# NPM_CONFIG_REGISTRY, DOCKER_HOST, proxies, CA bundles). Not credentials.
+# The user can still set any of them by hand in ~/.kitsune/.env.
+_PROTECTED_ENV_PREFIXES = (
+    "KITSUNE_",
+    "DYLD_",
+    "LD_",
+    "PYTHON",
+    "NODE_",
+    "NPM_CONFIG_",
+    "PIP_",
+    "UV_",
+    "GIT_",
+    "DOCKER_",
+    "BASH_FUNC_",
+)
+_PROTECTED_ENV_NAMES = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "SHELL",
+        "TMPDIR",
+        "ENV",
+        "BASH_ENV",
+        "ZDOTDIR",
+        "PROMPT_COMMAND",
+        "EDITOR",
+        "VISUAL",
+        "PAGER",
+        "SSH_ASKPASS",
+        "SSH_AUTH_SOCK",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+    }
+)
+
+
+class ProtectedEnvVarError(ValueError):
+    """Raised when a tool call tries to set a protected env var."""
+
+
+def is_protected_env_var(name: str) -> bool:
+    upper = name.upper()
+    return upper in _PROTECTED_ENV_NAMES or upper.startswith(_PROTECTED_ENV_PREFIXES)
+
+
+def protected_env_message(name: str) -> str:
+    return (
+        f"✗ Blocked: '{name}' is a protected variable\n"
+        f"  Why: it controls Kitsune's safety policy or how servers are launched, "
+        f"so it can't be set from a tool call\n"
+        f"  Fix: ask the user to add it to ~/.kitsune/.env (or the MCP client config) by hand"
+    )
+
+
 def _save_to_env(env_var: str, value: str) -> None:
+    if is_protected_env_var(env_var):
+        raise ProtectedEnvVarError(env_var)
     try:
         _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
         try:
