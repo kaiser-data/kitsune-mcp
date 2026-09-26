@@ -8,6 +8,7 @@ from mcp.server.fastmcp.resources.types import FunctionResource as _FunctionReso
 
 from kitsune_mcp._fastmcp_compat import remove_prompt, remove_resource
 from kitsune_mcp.app import mcp
+from kitsune_mcp.guard import guard_call
 from kitsune_mcp.session import session
 from kitsune_mcp.transport import BaseTransport
 
@@ -110,6 +111,9 @@ def _make_proxy(
                         continue
                 remapped[k] = v
             cleaned = remapped
+        blocked = await guard_call(server_id, original_name, cleaned)
+        if blocked:
+            return blocked
         return await transport.execute(original_name, cleaned, config)
 
     proxy_fn.__name__ = fn_name

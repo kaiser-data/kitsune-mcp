@@ -18,6 +18,7 @@ from kitsune_mcp.constants import (
     TRUST_MEDIUM,
 )
 from kitsune_mcp.credentials import _credentials_guide
+from kitsune_mcp.guard import guard_call
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport
@@ -89,6 +90,9 @@ async def call(
     else:
         # Ad-hoc one-shot — cage community/unknown local stdio servers best-effort.
         transport, sandbox_note = _state.transport_for_exec(server_id, srv)
+    blocked = await guard_call(server_id, tool_name, arguments)
+    if blocked:
+        return blocked
     result = await transport.execute(tool_name, arguments, resolved_config)
 
     _state._track_call(server_id, tool_name)
@@ -110,6 +114,9 @@ async def run(
     if arguments is None:
         arguments = {}
     cmd = ["uvx", package[4:]] if package.startswith("uvx:") else ["npx", "-y", package]
+    blocked = await guard_call(package, tool_name, arguments)
+    if blocked:
+        return blocked
 
     # Ad-hoc npm/pip run — no registry vetting, so cage it best-effort in Docker.
     transport, sandbox_note = _state.sandboxed_stdio_transport(cmd, None)
@@ -243,6 +250,10 @@ async def test(server_id: str, level: str = "basic") -> str:
                 if pname in required
             }
 
+            blocked = await guard_call(server_id, tname, dummy_args)
+            if blocked:
+                checks.append(f"  ⛔ {tname}() not called — guard: {blocked.splitlines()[0]}")
+                continue
             try:
                 result = await asyncio.wait_for(
                     transport_obj.execute(tname, dummy_args, resolved_config),
@@ -289,6 +300,10 @@ async def bench(
     resolved_config, missing = _state._resolve_config(srv.credentials, {})
     if missing:
         return _credentials_guide(server_id, srv.credentials, resolved_config)
+
+    blocked = await guard_call(server_id, tool_name, args)
+    if blocked:
+        return blocked
 
     latencies: list[float] = []
     errors: list[str] = []

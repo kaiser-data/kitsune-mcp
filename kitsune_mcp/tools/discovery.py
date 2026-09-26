@@ -485,6 +485,11 @@ async def status() -> str:
     lines.append("  ✓  Glama  (no key required)")
     if os.getenv("KITSUNE_TRUST", "").lower() in ("community", "all", "low"):
         lines.append("  ⚠️  KITSUNE_TRUST=community  (community-source confirmation gate is OFF)")
+    from kitsune_mcp.guard import status_line as _guard_status
+
+    guard_line = _guard_status()
+    if guard_line:
+        lines.append(guard_line)
     lines.append("")
 
     # Gateway section — competing servers + absorbed servers

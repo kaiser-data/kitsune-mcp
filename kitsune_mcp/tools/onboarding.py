@@ -23,6 +23,7 @@ from kitsune_mcp.credentials import (
     is_protected_env_var,
     protected_env_message,
 )
+from kitsune_mcp.guard import guard_call
 from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.registry import REGISTRY_BASE, _relevance_score, _works_now_score
 from kitsune_mcp.session import _save_skills, session
@@ -384,6 +385,9 @@ async def auto(
         # Cage community/unknown local stdio servers best-effort — auto() picked
         # this server, so nobody explicitly vetted it.
         transport, sandbox_note = _state.transport_for_exec(server_id, srv)
+        blocked = await guard_call(server_id, tool_name, arguments)
+        if blocked:
+            return blocked
         last_result = await transport.execute(tool_name, arguments, resolved_config)
         _state._track_call(server_id, tool_name)
         attempted.append((server_id, tool_name))
