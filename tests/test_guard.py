@@ -345,6 +345,45 @@ async def test_ask_human_elicitation(action, data, expected):
 
 
 @pytest.mark.asyncio
+async def test_ask_human_skips_clients_without_elicitation():
+    ctx = SimpleNamespace(
+        elicit=AsyncMock(),
+        session=SimpleNamespace(check_client_capability=lambda caps: False),
+    )
+    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+        got = await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r"))
+    assert got is False
+    ctx.elicit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ask_human_asks_clients_that_advertise_elicitation():
+    seen = []
+    ctx = SimpleNamespace(
+        elicit=AsyncMock(
+            return_value=SimpleNamespace(action="accept", data=SimpleNamespace(approve=True))
+        ),
+        session=SimpleNamespace(check_client_capability=lambda caps: seen.append(caps) or True),
+    )
+    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+        assert await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r")) is True
+    assert seen and seen[0].elicitation is not None
+
+
+@pytest.mark.asyncio
+async def test_ask_human_unanswered_prompt_is_a_no(monkeypatch):
+    import asyncio
+
+    async def never(**_kw):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(guard, "ASK_TIMEOUT", 0.05)
+    ctx = SimpleNamespace(elicit=never)
+    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+        assert await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r")) is False
+
+
+@pytest.mark.asyncio
 async def test_policy_edit_is_picked_up(kitsune_home):
     write_policy(kitsune_home, mode="enforce", default="allow")
     assert await guard.guard_call("s", "t", {}) is None

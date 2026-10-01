@@ -40,6 +40,17 @@ policy fails closed. `status()` shows the guard's mode and tally. The classifier
 stage (a calibrated decision model asked a permission question, with the policy as state) is
 specified but not wired; until then, calls it would decide ask the user.
 
+### Fixed — guard approval prompts could hang, and IPv6 URLs were misread
+
+- An approval prompt now times out after 2 minutes and counts as a no. Some
+  clients never render the form and leave the request open, which stalled the
+  tool call.
+- Clients that don't advertise elicitation (e.g. Claude Desktop) are no longer
+  sent a prompt. The call is refused right away, with a hint to allow the tool
+  in the policy.
+- `http://[::1]:8080/` was read as the host `[` and blocked even when `::1` was
+  allowed. Bracketed IPv6 literals are now parsed.
+
 ### Fixed — guard read URL paths in commands as file paths
 
 In free-text arguments only a URL's scheme and host were stripped, so
