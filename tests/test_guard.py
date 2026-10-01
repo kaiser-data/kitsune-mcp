@@ -203,6 +203,13 @@ def test_hosts_in_free_text_commands():
     assert evaluate(p, "shell", "run", {"command": "ssh deploy.corp.example"}).action == "block"
 
 
+def test_ipv6_literal_hosts():
+    p = pol(default="allow", network={"allow": ["::1"]})
+    assert evaluate(p, "web", "fetch", {"url": "http://[::1]:8080/status"}).action == "allow"
+    v = evaluate(p, "shell", "run", {"command": "curl http://[2001:db8::7]/x"})
+    assert v.action == "block" and "2001:db8::7" in v.reason
+
+
 def test_filenames_are_not_hosts():
     # A bare-host regex would read wl.txt / req.json as hosts.
     p = pol(default="allow", network={"allow": []})

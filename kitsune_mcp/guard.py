@@ -83,7 +83,11 @@ _FILE_EXTS = {
     "xml", "lock", "cfg", "ini", "conf", "tar", "gz", "tgz", "zip", "whl", "pem", "key", "out",
 }  # fmt: skip
 
-_URL_HOST = re.compile(r"\b(?:https?|wss?|ftp)://(?:[^@/\s]+@)?([^/:\s\"'<>?#]+)", re.I)
+# Bracketed IPv6 literals ([::1]) first; the plain form stops at ":" so it would
+# otherwise read "[" as the host.
+_URL_HOST = re.compile(
+    r"\b(?:https?|wss?|ftp)://(?:[^@/\s]+@)?(\[[0-9A-Fa-f:.]+\]|[^/:\s\"'<>?#\[]+)", re.I
+)
 _URL = re.compile(r"\b(?:https?|wss?|ftp)://[^\s'\"<>|;&)]*", re.I)
 _SSH_HOST = re.compile(r"\b[\w.-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3}):")
 _IP = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
@@ -297,7 +301,7 @@ def _path_denied(path: str, policy: Policy) -> bool:
 def _hosts(args: dict, free_keys: set[str]) -> set[str]:
     hosts: set[str] = set()
     for key, value in _strings(args):
-        hosts.update(m.lower() for m in _URL_HOST.findall(value))
+        hosts.update(m.lower().strip("[]") for m in _URL_HOST.findall(value))
         if key.lower() in free_keys:
             hosts.update(m.lower() for m in _SSH_HOST.findall(value))
             hosts.update(_IP.findall(value))
