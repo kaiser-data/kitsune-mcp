@@ -44,7 +44,7 @@ dependencies = [
     # MCPServer and deleted `mcp.server.fastmcp`, which app.py/shapeshift.py
     # import. Without <2 a fresh `pip install kitsune-mcp` resolves mcp 2.x
     # and dies at import. Lift only together with the v2 migration.
-    "mcp>=1.0.0,<2",
+    "mcp>=1.0.0,<3",
     # mcp 1.26's bundled FastMCP uses a create_model() pattern that pydantic
     # <2.10 rejects ("non-annotated attribute") and pydantic >=2.13 also rejects
     # (stricter inspect_namespace). Pin to the known-good 2.10–2.12 range.
