@@ -6,6 +6,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.22.0] — 2026-10-01
+
 ### Security — tool calls can no longer switch off Kitsune's own safety gates
 
 `auth()`, `key()` and `auto(keys=)` wrote any env var the agent named, into
