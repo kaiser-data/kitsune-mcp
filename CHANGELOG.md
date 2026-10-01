@@ -8,6 +8,27 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.22.1] — 2026-10-01
+
+### Fixed — guard approval prompts could hang, and IPv6 URLs were misread
+
+- An approval prompt now times out after 2 minutes and counts as a no. Some
+  clients never render the form and leave the request open, which stalled the
+  tool call.
+- Clients that don't advertise elicitation (e.g. Claude Desktop) are no longer
+  sent a prompt. The call is refused right away, with a hint to allow the tool
+  in the policy.
+- `http://[::1]:8080/` was read as the host `[` and blocked even when `::1` was
+  allowed. Bracketed IPv6 literals are now parsed.
+
+### Fixed — guard read URL paths in commands as file paths
+
+In free-text arguments only a URL's scheme and host were stripped, so
+`curl https://pypi.org/simple/` produced the path `/simple` and could fail the
+write-root check. The whole URL is now removed before paths are extracted.
+
+---
+
 ## [0.22.0] — 2026-10-01
 
 ### Security — tool calls can no longer switch off Kitsune's own safety gates

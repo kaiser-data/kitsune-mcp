@@ -18,6 +18,7 @@ Design and evidence: docs/superpowers/specs/2026-09-26-action-guard-design.md
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import fnmatch
@@ -77,13 +78,21 @@ _WRITE_VERBS = {
     "insert",
     "drop",
 }
+# How long the user gets to answer an approval prompt. Some clients never render
+# the form and leave the request open; silence is a no.
+ASK_TIMEOUT = 120.0
 _PATH_KEY_HINTS = ("path", "file", "dir", "folder", "cwd", "dest", "root")
 _FILE_EXTS = {
     "txt", "json", "py", "js", "ts", "md", "yaml", "yml", "toml", "csv", "log", "sh", "html",
     "xml", "lock", "cfg", "ini", "conf", "tar", "gz", "tgz", "zip", "whl", "pem", "key", "out",
 }  # fmt: skip
 
-_URL_HOST = re.compile(r"\b(?:https?|wss?|ftp)://(?:[^@/\s]+@)?([^/:\s\"'<>?#]+)", re.I)
+# Bracketed IPv6 literals ([::1]) first; the plain form stops at ":" so it would
+# otherwise read "[" as the host.
+_URL_HOST = re.compile(
+    r"\b(?:https?|wss?|ftp)://(?:[^@/\s]+@)?(\[[0-9A-Fa-f:.]+\]|[^/:\s\"'<>?#\[]+)", re.I
+)
+_URL = re.compile(r"\b(?:https?|wss?|ftp)://[^\s'\"<>|;&)]*", re.I)
 _SSH_HOST = re.compile(r"\b[\w.-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3}):")
 _IP = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
 _NET_CMD_HOST = re.compile(
@@ -271,7 +280,7 @@ def _paths(args: dict, free_keys: set[str]) -> list[str]:
     for key, value in _strings(args):
         lower = key.lower()
         if lower in free_keys:
-            text = _URL_HOST.sub(" ", value)
+            text = _URL.sub(" ", value)  # a URL's path is not a file path
             found += [m.group(1) for m in _FREE_TEXT_PATH.finditer(text)]
         elif any(h in lower for h in _PATH_KEY_HINTS) and value and "://" not in value:
             found.append(value)
@@ -296,7 +305,7 @@ def _path_denied(path: str, policy: Policy) -> bool:
 def _hosts(args: dict, free_keys: set[str]) -> set[str]:
     hosts: set[str] = set()
     for key, value in _strings(args):
-        hosts.update(m.lower() for m in _URL_HOST.findall(value))
+        hosts.update(m.lower().strip("[]") for m in _URL_HOST.findall(value))
         if key.lower() in free_keys:
             hosts.update(m.lower() for m in _SSH_HOST.findall(value))
             hosts.update(_IP.findall(value))
@@ -418,8 +427,10 @@ def _log(server_id: str, tool: str, args: dict, verdict: Verdict, mode: str, out
 
 
 async def _ask_human(server_id: str, tool: str, args: dict, verdict: Verdict) -> bool:
-    """Out-of-band approval via MCP elicitation. Anything but an explicit yes is a no,
-    including clients that don't support elicitation."""
+    """Out-of-band approval via MCP elicitation. Anything but an explicit yes is a no:
+    clients that don't advertise elicitation (they are not asked), errors, and no
+    answer within ASK_TIMEOUT."""
+    from mcp import types
     from pydantic import BaseModel, Field
 
     from kitsune_mcp.app import mcp
@@ -436,7 +447,14 @@ async def _ask_human(server_id: str, tool: str, args: dict, verdict: Verdict) ->
         f"Arguments: {preview}"
     )
     try:
-        result = await mcp.get_context().elicit(message=message, schema=Approve)
+        ctx = mcp.get_context()
+        session = getattr(ctx, "session", None)
+        wanted = types.ClientCapabilities(elicitation=types.ElicitationCapability())
+        if session is not None and not session.check_client_capability(wanted):
+            return False
+        result = await asyncio.wait_for(
+            ctx.elicit(message=message, schema=Approve), timeout=ASK_TIMEOUT
+        )
     except Exception:
         return False
     return result.action == "accept" and bool(getattr(result.data, "approve", False))
@@ -469,7 +487,8 @@ async def guard_call(server_id: str, tool: str, args: dict) -> str | None:
         return (
             f"⛔ Not run: {tool} on {server_id} needs the user's approval "
             f"({verdict.reason}), and it was not given.\n"
-            f"This can't be changed from a tool call; the user can edit {policy_path()}."
+            f"This can't be changed from a tool call; the user can edit {policy_path()}. "
+            f"Clients without approval prompts can't give it; allow the tool in the policy instead."
         )
     _log(server_id, tool, args, verdict, mode, "blocked")
     return (
