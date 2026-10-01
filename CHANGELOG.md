@@ -40,6 +40,12 @@ policy fails closed. `status()` shows the guard's mode and tally. The classifier
 stage (a calibrated decision model asked a permission question, with the policy as state) is
 specified but not wired; until then, calls it would decide ask the user.
 
+### Fixed — guard read URL paths in commands as file paths
+
+In free-text arguments only a URL's scheme and host were stripped, so
+`curl https://pypi.org/simple/` produced the path `/simple` and could fail the
+write-root check. The whole URL is now removed before paths are extracted.
+
 ---
 
 ## [0.21.1] — 2026-09-07

@@ -84,6 +84,7 @@ _FILE_EXTS = {
 }  # fmt: skip
 
 _URL_HOST = re.compile(r"\b(?:https?|wss?|ftp)://(?:[^@/\s]+@)?([^/:\s\"'<>?#]+)", re.I)
+_URL = re.compile(r"\b(?:https?|wss?|ftp)://[^\s'\"<>|;&)]*", re.I)
 _SSH_HOST = re.compile(r"\b[\w.-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3}):")
 _IP = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
 _NET_CMD_HOST = re.compile(
@@ -271,7 +272,7 @@ def _paths(args: dict, free_keys: set[str]) -> list[str]:
     for key, value in _strings(args):
         lower = key.lower()
         if lower in free_keys:
-            text = _URL_HOST.sub(" ", value)
+            text = _URL.sub(" ", value)  # a URL's path is not a file path
             found += [m.group(1) for m in _FREE_TEXT_PATH.finditer(text)]
         elif any(h in lower for h in _PATH_KEY_HINTS) and value and "://" not in value:
             found.append(value)

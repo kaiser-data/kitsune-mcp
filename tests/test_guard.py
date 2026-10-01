@@ -168,6 +168,12 @@ def test_paths_in_free_text():
     assert v.action == "block"
 
 
+def test_url_paths_in_free_text_are_not_file_paths(tmp_path):
+    p = pol(default="allow", paths={"write": [str(tmp_path)]})
+    cmd = f"curl https://pypi.org/simple/requests/ -o {tmp_path}/index.html"
+    assert evaluate(p, "shell", "run", {"command": cmd}).action == "allow"
+
+
 def test_nested_path_args():
     p = pol(default="allow")
     v = evaluate(p, "fs", "read_multiple_files", {"paths": ["/tmp/a", "~/.aws/config"]})
