@@ -6,6 +6,36 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Security — tool calls can no longer switch off Kitsune's own safety gates
+
+`auth()`, `key()` and `auto(keys=)` wrote any env var the agent named, into
+both `~/.kitsune/.env` and `os.environ`. That let a prompt-injected agent set
+`KITSUNE_TRUST=community` (skip the trust gate), `KITSUNE_SANDBOX=off` (skip the
+Docker cage) or `KITSUNE_ALLOW_LOCAL_FETCH=1` (SSRF). The trust-gate message even
+suggested `auth("KITSUNE_TRUST", "community")`. Because unsandboxed stdio servers
+inherit the environment, launch levers (`NODE_OPTIONS`, `LD_PRELOAD`,
+`PYTHONSTARTUP`, `BASH_ENV`) and supply-chain levers (`PIP_INDEX_URL`,
+`NPM_CONFIG_REGISTRY`, `DOCKER_HOST`, proxies, CA bundles) were reachable too.
+
+`_save_to_env` now refuses every `KITSUNE_*` name and those levers
+(`credentials.is_protected_env_var`); the tools return a "protected variable"
+message and `setup(action="harvest")` skips them. The hints now tell the user to
+set `KITSUNE_TRUST` by hand. Ordinary credentials (`GITHUB_TOKEN`, `*_API_KEY`,
+`DATABASE_URL`) are unaffected.
+
+### Added — action guard (opt-in, stage 1)
+
+New `kitsune_mcp/guard.py`: a policy check in front of every downstream tool
+call, off unless `~/.kitsune/policy.json` exists. Deterministic rules only in this
+release: per-server tool `allow`/`ask`/`deny` globs, read/write path roots with
+symlinks resolved, a host allowlist (URLs, `git@host:`, IPs, hosts after network
+commands), opaque encoded payloads, and always-denied credential paths plus
+`~/.kitsune`. `ask` uses MCP elicitation, so only the user can approve. `monitor`
+mode (default) logs to `~/.kitsune/guard.log.jsonl` without blocking; an invalid
+policy fails closed. `status()` shows the guard's mode and tally. The classifier
+stage (a calibrated decision model asked a permission question, with the policy as state) is
+specified but not wired; until then, calls it would decide ask the user.
+
 ---
 
 ## [0.21.1] — 2026-09-07

@@ -325,7 +325,9 @@ async def inspect(server_id: str, probe: bool = False) -> str:
         if probe_gated:
             lines.append(f"TOOLS: not probed ({gate_reason} — would run code from {srv.source})")
             lines.append(f'To probe live: inspect("{srv.id}", probe=True)')
-            lines.append('To always trust community: auth("KITSUNE_TRUST", "community")')
+            lines.append(
+                "To always trust community: the user sets KITSUNE_TRUST=community in ~/.kitsune/.env"
+            )
         elif probe_error:
             lines.append(f"TOOLS: live probe failed — {probe_error}")
         elif srv.transport == "stdio":
@@ -483,6 +485,11 @@ async def status() -> str:
     lines.append("  ✓  Glama  (no key required)")
     if os.getenv("KITSUNE_TRUST", "").lower() in ("community", "all", "low"):
         lines.append("  ⚠️  KITSUNE_TRUST=community  (community-source confirmation gate is OFF)")
+    from kitsune_mcp.guard import status_line as _guard_status
+
+    guard_line = _guard_status()
+    if guard_line:
+        lines.append(guard_line)
     lines.append("")
 
     # Gateway section — competing servers + absorbed servers

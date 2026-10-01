@@ -20,7 +20,10 @@ from kitsune_mcp.credentials import (
     _save_to_env,
     _smithery_available,
     _to_env_var,
+    is_protected_env_var,
+    protected_env_message,
 )
+from kitsune_mcp.guard import guard_call
 from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.registry import REGISTRY_BASE, _relevance_score, _works_now_score
 from kitsune_mcp.session import _save_skills, session
@@ -126,6 +129,8 @@ async def skill(qualified_name: str, forget: bool = False) -> str:
 async def key(env_var: str, value: str) -> str:
     """Save an API key to .env for persistent use. e.g. key('EXA_API_KEY', 'sk-...')"""
     var = env_var.upper().replace(" ", "_")
+    if is_protected_env_var(var):
+        return protected_env_message(var)
     _save_to_env(var, value)
     _state._registry.bust_cache()  # credentials changed — invalidate cached server records
     preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
@@ -157,6 +162,9 @@ async def auto(
         arguments = {}
     if keys is None:
         keys = {}
+    protected = [k for k in keys if is_protected_env_var(k)]
+    if protected:
+        return protected_env_message(protected[0])
     for env_var, value in keys.items():
         _save_to_env(env_var.upper(), str(value))
 
@@ -377,6 +385,9 @@ async def auto(
         # Cage community/unknown local stdio servers best-effort — auto() picked
         # this server, so nobody explicitly vetted it.
         transport, sandbox_note = _state.transport_for_exec(server_id, srv)
+        blocked = await guard_call(server_id, tool_name, arguments)
+        if blocked:
+            return blocked
         last_result = await transport.execute(tool_name, arguments, resolved_config)
         _state._track_call(server_id, tool_name)
         attempted.append((server_id, tool_name))
@@ -1352,7 +1363,8 @@ async def setup(
         harvested = _harvest_credentials(competing)
         saved: list[str] = []
         for env_var, value in harvested.items():
-            if not os.getenv(env_var):  # don't overwrite existing values
+            # don't overwrite existing values; never import protected knobs
+            if not os.getenv(env_var) and not is_protected_env_var(env_var):
                 _save_to_env(env_var, value)
                 saved.append(env_var)
         harvest_summary = (
@@ -1485,6 +1497,8 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
                 ]
             )
         var = name.upper().replace(" ", "_").replace("-", "_")
+        if is_protected_env_var(var):
+            return protected_env_message(var)
         _save_to_env(var, value)
         _state._registry.bust_cache()
         preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
