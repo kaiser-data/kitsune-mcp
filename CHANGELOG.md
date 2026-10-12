@@ -6,6 +6,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **The first `call()` no longer kills a `connect()`ed server.** The `.env` change detector started from an empty baseline, so its first check always counted as a change and respawned every pooled process. The respawned process also lost its `connect()` name, so `reload("dev")` and `release("dev")` reported "No connection named 'dev'" after any call.
+- **Every respawn keeps the `connect()` name**: after a `.env` change and after the process dies mid-call, so `reload` and `release` still find it.
+- **`~/.env` is loaded at startup**, so a key that only lives there reaches `connect()`ed servers without depending on a respawn.
+- **`call()` on a `connect()` alias stays local.** It used to look the alias up in the registries, so an unrelated npm package named e.g. `dev` lent your server its credential requirements and a `[source: npm]` label. Only live connections count (rows restored from `state.json` are skipped), and a live `connect()` alias wins over a mounted server with the same name.
+
+### Added
+- `examples/demo-hot-reload/`: a weather server with one planted bug and a shot list for recording the agent fixing it with `reload`.
+
+### Docs
+- The safety docs no longer claim `connect()` requires `confirm=True`. It runs your command as your user, with no consent gate and no cage.
+- README rewritten around the MCP REPL (edit → `reload` → `call`): 469 → 172 lines, one-line `claude mcp add` install, lean tool table now lists `connect` / `release` / `reload`.
+- Detail moved out of the README into `docs/safety.md`, `docs/configuration.md` and `docs/performance.md`.
+- One tagline across `pyproject.toml`, `package.json`, `server.json` and `smithery.yaml`; the Smithery tool list now matches the lean profile.
+- Internal plans and reports moved from the repo root to `docs/internal/`. Dead Discord invite removed.
+
 ---
 
 ## [0.22.1] — 2026-10-01

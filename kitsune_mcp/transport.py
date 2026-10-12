@@ -866,6 +866,9 @@ class PersistentStdioTransport(BaseTransport):
             proc=proc,
             install_cmd=self.install_cmd,
             started_at=time.monotonic(),
+            # Every respawn (.env change, mid-call death) keeps the connect()
+            # name, so reload()/release() still find the process by it.
+            name=session["connections"].get(self._pool_key, {}).get("name", ""),
         )
 
         # MCP initialize handshake

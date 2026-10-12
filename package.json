@@ -1,7 +1,7 @@
 {
   "name": "kitsune-mcp",
   "version": "0.22.1",
-  "description": "The shape-shifting MCP hub — shapeshift() into 130,000+ MCP servers at runtime. One entry point, no restarts, 7 registries.",
+  "description": "Hot-reload for MCP servers: edit your tool, reload(), call it again in the same session. Plus mount any of 130,000+ community servers mid-session across 7 registries, caged in Docker. No client restarts.",
   "mcpName": "io.github.kaiser-data/kitsune-mcp",
   "bin": {
     "kitsune-mcp": "./bin/kitsune-mcp.js"
@@ -18,6 +18,9 @@
     "mcp-hub",
     "mcp-registry",
     "mcp-router",
+    "mcp-gateway",
+    "hot-reload",
+    "claude-code",
     "tool-use"
   ],
   "author": "kaiser-data",
