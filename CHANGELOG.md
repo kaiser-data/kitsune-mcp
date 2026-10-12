@@ -6,6 +6,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.22.2] — 2026-10-12
+
 ### Fixed
 - **The first `call()` no longer kills a `connect()`ed server.** The `.env` change detector started from an empty baseline, so its first check always counted as a change and respawned every pooled process. The respawned process also lost its `connect()` name, so `reload("dev")` and `release("dev")` reported "No connection named 'dev'" after any call.
 - **Every respawn keeps the `connect()` name**: after a `.env` change and after the process dies mid-call, so `reload` and `release` still find it.
