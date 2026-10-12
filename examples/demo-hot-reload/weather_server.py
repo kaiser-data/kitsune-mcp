@@ -5,6 +5,8 @@ comes back at a sweltering 59°C. The agent is meant to spot it, fix the
 conversion, reload("dev") and call the tool again. See README.md here.
 
 No network, no API key: readings are fixed so every take of the demo matches.
+Needs the mcp 1.x SDK (mcp 2.x renamed FastMCP); the demo runs it with
+`uv run --with mcp~=1.27`.
 Reset the bug before another take with: git checkout -- weather_server.py
 """
 

@@ -22,6 +22,20 @@ _DOTENV_PATHS = [
     _KITSUNE_HOME / ".env",  # canonical store, always wins
 ]
 
+
+def _load_dotenv_files() -> None:
+    """Load every .env in _DOTENV_PATHS; earlier-set values win, the canonical store overrides."""
+    for p in _DOTENV_PATHS[:-1]:
+        if p.exists():
+            load_dotenv(p, override=False)
+    load_dotenv(_DOTENV_PATHS[-1], override=True)
+
+
+# server.py loads only the project .env and the canonical store; fill in the
+# rest (~/.env) now, so connect()'d children see the same keys a later
+# _reload_dotenv() would and the mtime baseline below matches what is loaded.
+_load_dotenv_files()
+
 # Read at import time (server.py must call load_dotenv() before this import)
 SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
 
@@ -61,10 +75,7 @@ def _reload_dotenv() -> None:
     """Re-read all .env locations. CWD wins. Increments _dotenv_revision when files change."""
     global _dotenv_revision, _last_dotenv_mtimes
     current_mtimes = _dotenv_mtimes()
-    for p in _DOTENV_PATHS[:-1]:
-        if p.exists():
-            load_dotenv(p, override=False)
-    load_dotenv(_DOTENV_PATHS[-1], override=True)  # CWD .env wins
+    _load_dotenv_files()
     if current_mtimes != _last_dotenv_mtimes:
         _dotenv_revision += 1
         _last_dotenv_mtimes = current_mtimes

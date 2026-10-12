@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-import shlex
 import time
 from typing import Annotated
 
@@ -22,7 +21,7 @@ from kitsune_mcp.credentials import _credentials_guide
 from kitsune_mcp.guard import guard_call
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import BaseTransport
+from kitsune_mcp.transport import BaseTransport, _process_pool
 from kitsune_mcp.utils import (
     _estimate_tokens,
     _is_safe_url,
@@ -67,16 +66,19 @@ async def call(
         config = {}
     # A connect()'d server is addressed by its alias; never resolve that alias in
     # the registries, or an unrelated package of the same name lends it its
-    # credentials and source label.
-    local_conn = next(
+    # credentials and source label. Only live processes count: connection rows
+    # restored from state.json after a restart have nothing behind them.
+    local_key = next(
         (
-            c
-            for c in session["connections"].values()
-            if c.get("name") == server_id or c.get("command") == server_id
+            k
+            for k, c in session["connections"].items()
+            if (c.get("name") == server_id or c.get("command") == server_id)
+            and k in _process_pool
+            and _process_pool[k].is_alive()
         ),
         None,
     )
-    if local_conn is not None:
+    if local_key is not None:
         srv = None
     elif server_id.startswith(("http://", "https://")):
         srv = _state._synthetic_http_server(server_id)
@@ -94,17 +96,17 @@ async def call(
     # Smithery servers regardless of what shapeshift set up).
     pool_key = session.get("current_form_pool_key")
     sandbox_note = ""
-    if server_id == session.get("current_form") and pool_key:
+    if local_key is not None:
+        # The user's own live connect() process. It wins over a mounted form that
+        # happens to share the alias, so "dev" always means the server you connected.
+        transport: BaseTransport = _state.PersistentStdioTransport(json.loads(local_key))
+    elif server_id == session.get("current_form") and pool_key:
         # Pooled shapeshift form — shapeshift() already applied trust + sandbox
         # policy when it built this process, so reuse it verbatim.
         try:
-            transport: BaseTransport = _state.PersistentStdioTransport(json.loads(pool_key))
+            transport = _state.PersistentStdioTransport(json.loads(pool_key))
         except (json.JSONDecodeError, TypeError):
             transport = _state._get_transport(server_id, srv)
-    elif local_conn is not None:
-        # The user's own connect() process — reuse it, the same as shapeshift() does.
-        cmd = local_conn.get("install_cmd") or shlex.split(local_conn["command"])
-        transport = _state.PersistentStdioTransport(cmd)
     else:
         # Ad-hoc one-shot — cage community/unknown local stdio servers best-effort.
         transport, sandbox_note = _state.transport_for_exec(server_id, srv)

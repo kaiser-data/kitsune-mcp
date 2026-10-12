@@ -14,7 +14,7 @@ Celsius, so Berlin comes back at **59°C**. Fixed, it says **15°C**.
 2. Reset the bug (needed before every take):
    `git checkout -- examples/demo-hot-reload/weather_server.py`
 3. Warm the uv cache so the first connect isn't slow on camera:
-   `uv run --with mcp python -c "import mcp"`
+   `uv run --with mcp~=1.27 python -c "import mcp.server.fastmcp"`
 4. Start Claude Code from the repo root in a clean session (`claude`), with a
    large font, a dark theme, and nothing else on screen.
 
@@ -32,7 +32,7 @@ Celsius, so Berlin comes back at **59°C**. Fixed, it says **15°C**.
 The prompt, in one go:
 
 ```text
-Connect my MCP server with kitsune: connect("uv run --with mcp python examples/demo-hot-reload/weather_server.py", name="dev").
+Connect my MCP server with kitsune: connect("uv run --with mcp~=1.27 python examples/demo-hot-reload/weather_server.py", name="dev").
 Shapeshift into it and get the weather for Berlin. If the result looks wrong, fix the server code,
 reload("dev"), and check again.
 ```

@@ -817,36 +817,97 @@ class TestDotenvRespawnKeepsConnection:
         )
         assert out.stdout.strip().splitlines()[-1] == "True", out.stderr
 
-    async def test_env_respawn_keeps_connect_name(self):
-        from kitsune_mcp import credentials as creds
+    def test_home_dotenv_loaded_at_startup(self, tmp_path):
+        """A key only in ~/.env must be in the environment before any connect().
 
-        stale = _make_mock_process()
-        fresh = _make_mock_process()
-        fresh.stdout = _make_stdout_with_responses(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "result": {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {},
-                        "serverInfo": {"name": "t", "version": "1"},
-                    },
-                }
-            ]
+        With the mtime baseline set at import, the first call no longer
+        respawns children, so whatever startup misses, they never see.
+        """
+        import subprocess
+
+        home = tmp_path / "home"
+        home.mkdir()
+        (home / ".env").write_text("KITSUNE_TEST_HOME_ONLY=from-home\n")
+        work = tmp_path / "work"
+        work.mkdir()
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        code = (
+            "import os, sys\n"
+            f"sys.path.insert(0, {repo!r})\n"
+            "import server\n"
+            "print(os.environ.get('KITSUNE_TEST_HOME_ONLY', 'missing'))\n"
         )
-        transport = PersistentStdioTransport(["test-respawn-keeps-name"])
+        env = {k: v for k, v in os.environ.items() if k != "KITSUNE_TEST_HOME_ONLY"}
+        env.update(HOME=str(home), KITSUNE_HOME=str(tmp_path / "kh"))
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            cwd=work,
+            env=env,
+            timeout=60,
+        )
+        assert out.stdout.strip().splitlines()[-1] == "from-home", out.stderr
+
+    @staticmethod
+    def _fresh_proc(*responses):
+        proc = _make_mock_process()
+        init = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "t", "version": "1"},
+            },
+        }
+        proc.stdout = _make_stdout_with_responses([init, *responses])
+        return proc
+
+    @staticmethod
+    def _seed(transport, proc, **kw):
         _process_pool[transport._pool_key] = _PoolEntry(
-            proc=stale,
+            proc=proc,
             install_cmd=transport.install_cmd,
             started_at=time.monotonic(),
             name="dev",
-            dotenv_revision=creds._dotenv_revision - 1,
+            **kw,
         )
+        # connect() records the name here; every respawn reads it back.
+        session["connections"][transport._pool_key] = {"name": "dev"}
+
+    @staticmethod
+    def _cleanup(transport):
+        _process_pool.pop(transport._pool_key, None)
+        session["connections"].pop(transport._pool_key, None)
+
+    async def test_env_respawn_keeps_connect_name(self):
+        from kitsune_mcp import credentials as creds
+
+        fresh = self._fresh_proc()
+        transport = PersistentStdioTransport(["test-respawn-keeps-name"])
+        self._seed(transport, _make_mock_process(), dotenv_revision=creds._dotenv_revision - 1)
         try:
             with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=fresh)):
                 entry = await transport._get_or_start()
             assert entry.proc is fresh
             assert entry.name == "dev"
         finally:
-            _process_pool.pop(transport._pool_key, None)
+            self._cleanup(transport)
+
+    async def test_execute_retry_after_death_keeps_connect_name(self):
+        from kitsune_mcp import credentials as creds
+
+        dead = _make_mock_process(returncode=1)
+        fresh = self._fresh_proc(
+            {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "ok"}]}}
+        )
+        transport = PersistentStdioTransport(["test-retry-keeps-name"])
+        self._seed(transport, dead, dotenv_revision=creds._dotenv_revision)
+        try:
+            with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=fresh)):
+                out = await transport.execute("tool", {}, {})
+            assert "ok" in out
+            assert _process_pool[transport._pool_key].name == "dev"
+        finally:
+            self._cleanup(transport)

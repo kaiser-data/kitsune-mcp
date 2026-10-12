@@ -9,7 +9,7 @@ import importlib
 import json
 import os
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -178,7 +178,12 @@ class TestCallOnConnectAlias:
         call_mod = sys.modules["kitsune_mcp.tools.exec"]
         pool_key, _ = _seed_connection()
         registry_lookup = AsyncMock()
-        execute = AsyncMock(return_value="Berlin: 15°C")
+        used_keys = []
+
+        async def execute(self, tool_name, arguments, config):
+            used_keys.append(self._pool_key)
+            return "Berlin: 15°C"
+
         try:
             with (
                 patch.object(_state._registry, "get_server", registry_lookup),
@@ -193,4 +198,65 @@ class TestCallOnConnectAlias:
 
         assert out == "Berlin: 15°C"
         registry_lookup.assert_not_called()
-        execute.assert_awaited_once()
+        assert used_keys == [pool_key]  # the connect()'d process, not a new one
+
+    async def _call_dev(self, registry_lookup):
+        from kitsune_mcp.tools import _state
+        from kitsune_mcp.transport import PersistentStdioTransport
+
+        call_mod = sys.modules["kitsune_mcp.tools.exec"]
+        used_keys = []
+
+        async def execute(self, tool_name, arguments, config):
+            used_keys.append(self._pool_key)
+            return "ok"
+
+        with (
+            patch.object(_state._registry, "get_server", registry_lookup),
+            patch.object(PersistentStdioTransport, "execute", execute),
+        ):
+            await call_mod.call("get_weather", server_id="dev", arguments={})
+        return used_keys
+
+    async def test_restored_row_without_process_is_ignored(self):
+        """A connection row restored from state.json has no live process behind it."""
+        from unittest.mock import AsyncMock
+
+        from kitsune_mcp.session import session
+        from kitsune_mcp.transport import _process_pool
+
+        pool_key, _ = _seed_connection()
+        _process_pool.pop(pool_key)  # the process died with the last server run
+        registry_lookup = AsyncMock(return_value=None)
+        try:
+            with patch.object(
+                sys.modules["kitsune_mcp.tools._state"],
+                "transport_for_exec",
+                lambda sid, srv: (MagicMock(execute=AsyncMock(return_value="ok")), ""),
+            ):
+                used = await self._call_dev(registry_lookup)
+        finally:
+            session["connections"].pop(pool_key, None)
+
+        registry_lookup.assert_awaited_once()
+        assert used == []  # no transport built from the dead row's command
+
+    async def test_live_connect_wins_over_mounted_form_with_same_name(self):
+        from unittest.mock import AsyncMock
+
+        from kitsune_mcp.session import session
+        from kitsune_mcp.transport import _process_pool
+
+        pool_key, _ = _seed_connection()
+        other_key = json.dumps(["npx", "-y", "dev"], sort_keys=True)
+        session["current_form"] = "dev"
+        session["current_form_pool_key"] = other_key
+        try:
+            used = await self._call_dev(AsyncMock())
+        finally:
+            _process_pool.pop(pool_key, None)
+            session["connections"].pop(pool_key, None)
+            session["current_form"] = None
+            session["current_form_pool_key"] = None
+
+        assert used == [pool_key]

@@ -142,7 +142,8 @@ Default profile: **9 tools, ~1,774 tokens/turn** (measured with `python examples
 
 ## Safety, in short
 
-- **Community sources need consent.** npm, PyPI, GitHub and local `connect()` targets require `confirm=True`. The model can set that flag itself, so real approval belongs in your client's tool-approval UI.
+- **Community sources need consent.** npm, PyPI and GitHub servers require `confirm=True`. The model can set that flag itself, so real approval belongs in your client's tool-approval UI.
+- **`connect()` runs the command it is given, as your user, with no consent gate and no cage.** It is meant for your own code. Approve `connect` calls in your client before the agent runs them.
 - **Community packages run in a Docker cage by default** when Docker is installed: no host filesystem, `--cap-drop ALL`, read-only root, memory and PID limits. Credentials are passed by name, never in argv.
 - **Version pins (TOFU).** A later malicious publish doesn't silently replace a version you already ran.
 - **Opt-in action guard.** A `~/.kitsune/policy.json` checks every downstream call against allow/ask/deny rules, path roots and a host allowlist. `ask` goes to you through MCP elicitation.

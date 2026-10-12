@@ -866,6 +866,9 @@ class PersistentStdioTransport(BaseTransport):
             proc=proc,
             install_cmd=self.install_cmd,
             started_at=time.monotonic(),
+            # Every respawn (.env change, mid-call death) keeps the connect()
+            # name, so reload()/release() still find the process by it.
+            name=session["connections"].get(self._pool_key, {}).get("name", ""),
         )
 
         # MCP initialize handshake
@@ -899,14 +902,11 @@ class PersistentStdioTransport(BaseTransport):
         entry = _process_pool.get(self._pool_key)
         if entry is not None and entry.is_alive():
             if entry.dotenv_revision != _creds._dotenv_revision:
-                # .env changed since this process was spawned — kill and respawn,
-                # keeping the connect() name so reload()/release() still find it.
+                # .env changed since this process was spawned — kill and respawn
                 _kill_process_tree(entry.proc)
                 _process_pool.pop(self._pool_key, None)
-                fresh = await self._start_process()
-                fresh.name = entry.name
-                return fresh
-            return entry
+            else:
+                return entry
         return await self._start_process()
 
     async def _send_request(self, method: str, params: dict, timeout: float) -> dict:

@@ -16,7 +16,8 @@ Reach into 130k community servers only works if unknown code can be **contained*
 |---|---|---|
 | High | `official` | runs directly |
 | Medium | `mcpregistry`, `glama`, `smithery` | runs directly |
-| Community | `npm`, `pypi`, `github`, local `connect()` | **requires `confirm=True`** |
+| Community | `npm`, `pypi`, `github` | **requires `confirm=True`** |
+| Your own | local `connect()` command | runs directly, as your user, uncaged. Approve `connect` in your client |
 
 `KITSUNE_TRUST=community` waives the gate; `status()` warns when that override is active. Only the user can set it: `auth()`, `key()` and `auto(keys=)` refuse every `KITSUNE_*` variable, plus launch and supply-chain levers such as `NODE_OPTIONS`, `LD_PRELOAD`, `PIP_INDEX_URL` and `DOCKER_HOST`, because unsandboxed servers inherit the environment.
 
