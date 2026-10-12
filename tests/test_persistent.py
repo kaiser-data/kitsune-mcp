@@ -787,3 +787,66 @@ class TestDotenvRevisionInvariant:
         os.utime(env_file, (time.time() + 1, time.time() + 1))
         creds._reload_dotenv()
         assert creds._dotenv_revision > before
+
+
+class TestDotenvRespawnKeepsConnection:
+    """A connect()'d server must survive the first call and keep its name.
+
+    Regression: the first .env check after startup always looked like a
+    change, so the first call() killed the connected process and respawned
+    an unnamed one; reload('dev') and release('dev') then found nothing.
+    """
+
+    def test_first_reload_without_changes_keeps_revision(self, tmp_path):
+        import subprocess
+
+        code = (
+            "import server\n"
+            "from kitsune_mcp import credentials as c\n"
+            "before = c._dotenv_revision\n"
+            "c._reload_dotenv()\n"
+            "print(c._dotenv_revision == before)\n"
+        )
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            env={**os.environ, "KITSUNE_HOME": str(tmp_path)},
+            timeout=60,
+        )
+        assert out.stdout.strip().splitlines()[-1] == "True", out.stderr
+
+    async def test_env_respawn_keeps_connect_name(self):
+        from kitsune_mcp import credentials as creds
+
+        stale = _make_mock_process()
+        fresh = _make_mock_process()
+        fresh.stdout = _make_stdout_with_responses(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {"name": "t", "version": "1"},
+                    },
+                }
+            ]
+        )
+        transport = PersistentStdioTransport(["test-respawn-keeps-name"])
+        _process_pool[transport._pool_key] = _PoolEntry(
+            proc=stale,
+            install_cmd=transport.install_cmd,
+            started_at=time.monotonic(),
+            name="dev",
+            dotenv_revision=creds._dotenv_revision - 1,
+        )
+        try:
+            with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=fresh)):
+                entry = await transport._get_or_start()
+            assert entry.proc is fresh
+            assert entry.name == "dev"
+        finally:
+            _process_pool.pop(transport._pool_key, None)

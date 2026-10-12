@@ -38,7 +38,6 @@ SMITHERY_API_KEY = os.getenv("SMITHERY_API_KEY", "")
 # stale env values stick. Tests that need to simulate a .env change MUST
 # increment the counter, never reset it.
 _dotenv_revision: int = 0
-_last_dotenv_mtimes: tuple = ()
 
 
 def _dotenv_mtimes() -> tuple:
@@ -50,6 +49,12 @@ def _dotenv_mtimes() -> tuple:
         except OSError:
             result.append(None)
     return tuple(result)
+
+
+# Baseline = the files server.py already loaded at startup. Starting from ()
+# made the first _reload_dotenv() look like a change, which evicted every
+# connect()'d process on its first call.
+_last_dotenv_mtimes: tuple = _dotenv_mtimes()
 
 
 def _reload_dotenv() -> None:

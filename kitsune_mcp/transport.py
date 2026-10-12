@@ -899,11 +899,14 @@ class PersistentStdioTransport(BaseTransport):
         entry = _process_pool.get(self._pool_key)
         if entry is not None and entry.is_alive():
             if entry.dotenv_revision != _creds._dotenv_revision:
-                # .env changed since this process was spawned — kill and respawn
+                # .env changed since this process was spawned — kill and respawn,
+                # keeping the connect() name so reload()/release() still find it.
                 _kill_process_tree(entry.proc)
                 _process_pool.pop(self._pool_key, None)
-            else:
-                return entry
+                fresh = await self._start_process()
+                fresh.name = entry.name
+                return fresh
+            return entry
         return await self._start_process()
 
     async def _send_request(self, method: str, params: dict, timeout: float) -> dict:

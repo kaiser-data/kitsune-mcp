@@ -154,3 +154,43 @@ class TestReload:
         assert "could not restart" in out
         assert "Timeout" in out
         assert remounted == []  # remount skipped when the fresh process failed
+
+
+# ---------------------------------------------------------------------------
+# call() on a connect() alias stays local
+# ---------------------------------------------------------------------------
+
+
+class TestCallOnConnectAlias:
+    """call() must not resolve a connect() alias like 'dev' in the registries.
+
+    Regression: an npm package named 'dev' lent the user's own server its
+    credentials and a '[source: npm]' label.
+    """
+
+    async def test_alias_skips_registry_and_uses_pool(self):
+        from unittest.mock import AsyncMock
+
+        from kitsune_mcp.session import session
+        from kitsune_mcp.tools import _state
+        from kitsune_mcp.transport import PersistentStdioTransport, _process_pool
+
+        call_mod = sys.modules["kitsune_mcp.tools.exec"]
+        pool_key, _ = _seed_connection()
+        registry_lookup = AsyncMock()
+        execute = AsyncMock(return_value="Berlin: 15°C")
+        try:
+            with (
+                patch.object(_state._registry, "get_server", registry_lookup),
+                patch.object(PersistentStdioTransport, "execute", execute),
+            ):
+                out = await call_mod.call(
+                    "get_weather", server_id="dev", arguments={"city": "Berlin"}
+                )
+        finally:
+            _process_pool.pop(pool_key, None)
+            session["connections"].pop(pool_key, None)
+
+        assert out == "Berlin: 15°C"
+        registry_lookup.assert_not_called()
+        execute.assert_awaited_once()

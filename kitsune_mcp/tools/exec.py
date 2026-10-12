@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shlex
 import time
 from typing import Annotated
 
@@ -64,7 +65,20 @@ async def call(
         arguments = {}
     if config is None:
         config = {}
-    if server_id.startswith(("http://", "https://")):
+    # A connect()'d server is addressed by its alias; never resolve that alias in
+    # the registries, or an unrelated package of the same name lends it its
+    # credentials and source label.
+    local_conn = next(
+        (
+            c
+            for c in session["connections"].values()
+            if c.get("name") == server_id or c.get("command") == server_id
+        ),
+        None,
+    )
+    if local_conn is not None:
+        srv = None
+    elif server_id.startswith(("http://", "https://")):
         srv = _state._synthetic_http_server(server_id)
     else:
         srv = await _state._registry.get_server(server_id)
@@ -87,6 +101,10 @@ async def call(
             transport: BaseTransport = _state.PersistentStdioTransport(json.loads(pool_key))
         except (json.JSONDecodeError, TypeError):
             transport = _state._get_transport(server_id, srv)
+    elif local_conn is not None:
+        # The user's own connect() process — reuse it, the same as shapeshift() does.
+        cmd = local_conn.get("install_cmd") or shlex.split(local_conn["command"])
+        transport = _state.PersistentStdioTransport(cmd)
     else:
         # Ad-hoc one-shot — cage community/unknown local stdio servers best-effort.
         transport, sandbox_note = _state.transport_for_exec(server_id, srv)
