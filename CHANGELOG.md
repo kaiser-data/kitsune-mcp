@@ -6,6 +6,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Docs
+- README rewritten around the MCP REPL (edit → `reload` → `call`): 469 → 172 lines, one-line `claude mcp add` install, lean tool table now lists `connect` / `release` / `reload`.
+- Detail moved out of the README into `docs/safety.md`, `docs/configuration.md` and `docs/performance.md`.
+- One tagline across `pyproject.toml`, `package.json`, `server.json` and `smithery.yaml`; the Smithery tool list now matches the lean profile.
+- Internal plans and reports moved from the repo root to `docs/internal/`. Dead Discord invite removed.
+
 ---
 
 ## [0.22.1] — 2026-10-01

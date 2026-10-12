@@ -1,8 +1,9 @@
 name: Kitsune MCP
 qualifiedName: kaiser-data/kitsune-mcp
 description: >
-  The shape-shifting MCP hub. shapeshift() into any MCP server at runtime across 7 registries.
-  No config files. No restarts. Search → shapeshift → call → shiftback in seconds.
+  Hot-reload for MCP servers: edit your tool, reload(), call it again in the same session.
+  Plus mount any community server mid-session across 7 registries, caged in Docker.
+  No config edits. No client restarts.
 homepage: https://github.com/kaiser-data/kitsune-mcp
 license: MIT
 transport: stdio
@@ -29,33 +30,21 @@ startCommand:
     })
 
 tools:
-  - name: search
-    description: Search MCP servers across 7 registries (official, npm, PyPI, Glama, GitHub, Smithery)
-  - name: inspect
-    description: Show a server's tools, credentials, and token cost
-  - name: call
-    description: Call any tool on any MCP server (HTTP or stdio)
-  - name: run
-    description: Run a tool from a local npm/pip package directly
-  - name: shapeshift
-    description: Take a server's form — load its tools directly into your context
-  - name: shiftback
-    description: Drop current form and return to base Kitsune tools
-  - name: connect
-    description: Connect a persistent hardware/audio MCP server (process stays alive)
-  - name: release
-    description: Release a persistent connection and kill its process
   - name: status
-    description: Show current form, connections, token stats
-  - name: fetch
-    description: Fetch a URL with compressed output (~500 tokens vs 25K raw)
+    description: Show current form, connection pool, gateway scan and session stats
+  - name: search
+    description: Search MCP servers across 7 registries (official, MCP Registry, Glama, npm, PyPI, GitHub, Smithery)
+  - name: auth
+    description: Set an API key or run an OAuth 2.1 browser flow mid-session
+  - name: shapeshift
+    description: Mount a server's tools into the session (or drop them with no argument)
+  - name: call
+    description: Call a tool on the mounted server or any server by id
   - name: auto
-    description: Auto-discover and call the best server for a task
-  - name: key
-    description: Save an API key to .env for persistent use
-  - name: skill
-    description: Inject a Smithery skill prompt into context
-  - name: test
-    description: Validate any MCP server and return a quality score 0-100
-  - name: bench
-    description: Benchmark a tool's latency (p50, p95, min, max)
+    description: Search, mount and call in one step for a task
+  - name: connect
+    description: Start a persistent local MCP server process (e.g. the one you are developing)
+  - name: release
+    description: Stop a persistent connection and kill its process
+  - name: reload
+    description: Hot-reload a connected server — restart it on fresh code and remount its tools

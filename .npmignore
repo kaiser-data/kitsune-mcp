@@ -13,7 +13,6 @@ dist/
 *.egg-info/
 pyproject.toml
 Makefile
-PLAN.md
 smithery.yaml
 agent_manifest.json
 *.png
