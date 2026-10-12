@@ -29,14 +29,14 @@ Kitsune hands that loop to the agent. `connect`, `call` and `reload` are tool ca
 Kitsune is one MCP server that sits in your client config and loads other servers **while the session is running**. Your own server under development, or any server from 7 registries. Their tools show up as native tools. Drop them and the session carries on.
 
 ```python
-connect("uvx --from . my-mcp-server", name="dev")   # start your server
-shapeshift("dev")                                   # its tools appear in the client
+connect("uvx --from . my-mcp-server", name="dev")  # start your server
+shapeshift("dev")  # its tools appear in the client
 call("summarize", arguments={"url": "https://example.com"})
 
 # … the agent (or you) edits the tool …
 
-reload("dev")                                       # restart on fresh code, remount
-call("summarize", arguments={"url": "https://example.com"})   # new code, same session
+reload("dev")  # restart on fresh code, remount
+call("summarize", arguments={"url": "https://example.com"})  # new code, same session
 ```
 
 Try it in 30 seconds with the planted-bug demo server: [`examples/demo-hot-reload/`](examples/demo-hot-reload/).
@@ -75,16 +75,16 @@ Also on PyPI (`pip install kitsune-mcp`, then `"command": "kitsune-mcp"`) and np
 
 ```python
 search("web scraping")
-shapeshift("firecrawl", tools=["scrape_url"])   # mount one tool, not the whole server
+shapeshift("firecrawl", tools=["scrape_url"])  # mount one tool, not the whole server
 call("scrape_url", arguments={"url": "https://example.com"})
-shapeshift()                                    # drop it, session stays up
+shapeshift()  # drop it, session stays up
 ```
 
 ### Try a community package, caged
 
 ```python
 search("pdf", registry="glama")
-shapeshift("mcp-pdf-tools", confirm=True)       # npm/PyPI run in hardened Docker when available
+shapeshift("mcp-pdf-tools", confirm=True)  # npm/PyPI run in hardened Docker when available
 call("extract_text", arguments={"path": "report.pdf"})
 shapeshift()
 ```
@@ -92,7 +92,7 @@ shapeshift()
 ### Add credentials mid-session
 
 ```python
-auth("BRAVE_API_KEY", "sk-...")                 # saved to ~/.kitsune/.env, no restart
+auth("BRAVE_API_KEY", "sk-...")  # saved to ~/.kitsune/.env, no restart
 shapeshift("brave", tools=["brave_web_search"])
 ```
 
