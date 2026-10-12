@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **The first `call()` no longer kills a `connect()`ed server.** The `.env` change detector started from an empty baseline, so its first check always counted as a change and respawned every pooled process. The respawned process also lost its `connect()` name, so `reload("dev")` and `release("dev")` reported "No connection named 'dev'" after any call.
+- **A respawn after a real `.env` change keeps the `connect()` name**, so `reload` and `release` still find it.
+- **`call()` on a `connect()` alias stays local.** It used to look the alias up in the registries, so an unrelated npm package named e.g. `dev` lent your server its credential requirements and a `[source: npm]` label.
+
+### Added
+- `examples/demo-hot-reload/`: a weather server with one planted bug and a shot list for recording the agent fixing it with `reload`.
+
 ### Docs
 - README rewritten around the MCP REPL (edit → `reload` → `call`): 469 → 172 lines, one-line `claude mcp add` install, lean tool table now lists `connect` / `release` / `reload`.
 - Detail moved out of the README into `docs/safety.md`, `docs/configuration.md` and `docs/performance.md`.

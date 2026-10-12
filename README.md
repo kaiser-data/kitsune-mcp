@@ -2,8 +2,9 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>Hot-reload for MCP servers.</strong><br/>
-  Edit your tool, <code>reload("dev")</code>, call it again. Same Claude session, no restart.<br/>
+  <p><strong>Let your agent test the MCP server it's building.</strong><br/>
+  It edits the tool, calls <code>reload("dev")</code>, calls it again and sees the result.<br/>
+  No client restart, no config edit, no human in the loop.<br/>
   Plus: mount any of 130,000+ community servers mid-session, caged in Docker.</p>
 </div>
 
@@ -21,7 +22,9 @@
 
 ## The problem
 
-Building an MCP server normally goes: edit → restart the client → lose the session → set up the test again. Every change, every time.
+When an agent writes an MCP server, it can't test its own change. The client still runs the old process, so after every edit a person has to restart the client or reconnect the server (and in some clients, register it in the config first) before the agent can call the tool and see whether the fix worked.
+
+Kitsune hands that loop to the agent. `connect`, `call` and `reload` are tool calls, so the agent can run the tool, see it fail, fix the code, reload and check again on its own, in any MCP client.
 
 Kitsune is one MCP server that sits in your client config and loads other servers **while the session is running**. Your own server under development, or any server from 7 registries. Their tools show up as native tools. Drop them and the session carries on.
 
@@ -30,11 +33,13 @@ connect("uvx --from . my-mcp-server", name="dev")   # start your server
 shapeshift("dev")                                   # its tools appear in the client
 call("summarize", arguments={"url": "https://example.com"})
 
-# … edit the tool in your editor …
+# … the agent (or you) edits the tool …
 
 reload("dev")                                       # restart on fresh code, remount
 call("summarize", arguments={"url": "https://example.com"})   # new code, same session
 ```
+
+Try it in 30 seconds with the planted-bug demo server: [`examples/demo-hot-reload/`](examples/demo-hot-reload/).
 
 ## Install
 
