@@ -23,10 +23,9 @@ Open your client in the folder with `weather_server.py` and give it one
 prompt:
 
 ```text
-Connect my MCP server with kitsune:
-connect("uv run --with mcp~=1.27 python weather_server.py", name="dev").
-Get the weather for Berlin. If it looks wrong, fix the code,
-reload("dev") and check again.
+Use kitsune: connect("uv run weather_server.py", name="dev"),
+then call get_weather for Berlin. If it looks wrong, fix the code,
+reload("dev") and check again. Answer in one short line.
 ```
 
 The agent works through the loop on its own.
@@ -38,7 +37,7 @@ These are the calls the agent makes. You can type them yourself, too.
 **1. Start your server and mount its tools.**
 
 ```python
-connect("uv run --with mcp~=1.27 python weather_server.py", name="dev")
+connect("uv run weather_server.py", name="dev")
 shapeshift("dev")
 ```
 
@@ -104,4 +103,5 @@ The server crashes on start
     Kitsune's log. Fix it and `reload("dev")`.
 
 `ModuleNotFoundError: mcp.server.fastmcp`
-:   mcp 2.x renamed FastMCP. Pin the 1.x SDK with `--with mcp~=1.27`, as above.
+:   mcp 2.x renamed FastMCP. The demo pins the 1.x SDK in its inline script
+    metadata, so start it with `uv run weather_server.py`, not plain `python`.

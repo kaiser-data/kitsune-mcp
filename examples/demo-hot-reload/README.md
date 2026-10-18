@@ -14,7 +14,7 @@ Celsius, so Berlin comes back at **59°C**. Fixed, it says **15°C**.
 2. Reset the bug (needed before every take):
    `git checkout -- examples/demo-hot-reload/weather_server.py`
 3. Warm the uv cache so the first connect isn't slow on camera:
-   `uv run --with mcp~=1.27 python -c "import mcp.server.fastmcp"`
+   `uv run examples/demo-hot-reload/weather_server.py < /dev/null`
 4. Start Claude Code from the repo root in a clean session (`claude`), with a
    large font, a dark theme, and nothing else on screen.
 
@@ -32,9 +32,9 @@ Celsius, so Berlin comes back at **59°C**. Fixed, it says **15°C**.
 The prompt, in one go:
 
 ```text
-Connect my MCP server with kitsune: connect("uv run --with mcp~=1.27 python examples/demo-hot-reload/weather_server.py", name="dev").
-Shapeshift into it and get the weather for Berlin. If the result looks wrong, fix the server code,
-reload("dev"), and check again.
+Use kitsune: connect("uv run examples/demo-hot-reload/weather_server.py", name="dev"), then call
+get_weather for Berlin before reading any code. If it looks wrong, fix the code, reload("dev")
+and check again. Answer in one short line.
 ```
 
 Keep the scrollback on screen at step 5, so the viewer sees it is the same session.
@@ -62,7 +62,9 @@ the two tool results (59°C and 15°C) on screen for at least a second each.
 `weather_server.py` in `~/my-weather-mcp/` (outside any repo, so no CLAUDE.md
 leaks in) and `~/.kitsune-demo-mcp.json` with
 `{"mcpServers": {"kitsune": {"command": "uvx", "args": ["kitsune-mcp@0.22.3"]}}}`.
-Trust the folder once by hand, then run `vhs demo.tape` and convert:
+For the recording, strip the module docstring and the `# BUG` comment from the
+copy (keep the `# /// script` block), so Claude has to find the bug by calling
+the tool. Trust the folder once by hand, then run `vhs demo.tape` and convert:
 
 ```bash
 ffmpeg -i demo.mp4 -vf "fps=10,scale=1000:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" -loop 0 docs/demo-hot-reload.gif
