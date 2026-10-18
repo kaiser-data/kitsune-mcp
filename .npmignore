@@ -14,7 +14,6 @@ dist/
 pyproject.toml
 Makefile
 smithery.yaml
-agent_manifest.json
 *.png
 *.svg
 *.excalidraw

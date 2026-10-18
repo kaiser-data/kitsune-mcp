@@ -1,29 +1,26 @@
-.PHONY: install dev test lint format build publish run clean
-
-install:
-	uv pip install -e .
+.PHONY: dev test lint format docs build run clean
 
 dev:
-	uv pip install -e ".[dev]"
+	uv sync --extra dev --group docs
 
 test:
-	uv run --extra dev -m pytest tests/ -v
+	uv run --extra dev pytest tests/ -q
 
 lint:
-	uv run --extra dev -m ruff check .
-	uv run --extra dev -m ruff format --check .
+	uv run --extra dev ruff check .
+	uv run --extra dev ruff format --check .
 
 format:
-	uv run --extra dev -m ruff format .
+	uv run --extra dev ruff format .
+
+docs:
+	uv run --only-group docs mkdocs serve
 
 build:
-	uv run -m build
-
-publish:
-	uv run -m twine upload dist/*
+	uv build
 
 run:
-	uv run python server.py
+	uv run kitsune-mcp
 
 clean:
-	rm -rf dist/ build/ *.egg-info __pycache__ .pytest_cache
+	rm -rf dist/ build/ site/ *.egg-info __pycache__ .pytest_cache .ruff_cache .coverage

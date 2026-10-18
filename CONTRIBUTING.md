@@ -9,10 +9,11 @@ Questions or ideas? Open an [issue](https://github.com/kaiser-data/kitsune-mcp/i
 ```bash
 git clone https://github.com/kaiser-data/kitsune-mcp
 cd kitsune-mcp
-make dev        # installs kitsune-mcp + dev deps (pytest, ruff)
+make dev        # install kitsune-mcp, dev deps and docs deps (uv)
 make test       # run all tests
-make lint       # ruff lint check
+make lint       # ruff check + format check
 make format     # auto-format with ruff
+make docs       # preview the docs site at http://127.0.0.1:8000
 ```
 
 > **Running pytest directly?** The test config in `pyproject.toml` (`addopts`)
@@ -22,7 +23,7 @@ make format     # auto-format with ruff
 
 ## Tool Patterns
 
-Every tool in `server.py` follows this pattern:
+Tools live in `kitsune_mcp/tools/` and follow this pattern:
 
 ```python
 @mcp.tool()
@@ -37,11 +38,12 @@ Rules:
 - Use `_truncate()` on any response that could be large
 - Use `_clean_response()` on raw external content
 - Update `session["stats"]` for call counts
-- Add tool name to `_BASE_TOOL_NAMES` if it's a base tool (not a proxy)
+- Add the tool name to `_BASE_TOOL_NAMES` in `kitsune_mcp/tools/_state.py`,
+  and to `_LEAN_TOOL_NAMES` only if it belongs in the default profile
 
 ## Transport Patterns
 
-Adding a new transport? Subclass `BaseTransport`:
+Adding a new transport? Subclass `BaseTransport` in `kitsune_mcp/transport.py`:
 
 ```python
 class MyTransport(BaseTransport):
@@ -65,8 +67,8 @@ test: add test_connect_returns_tool_list
 
 - [ ] `make test` passes
 - [ ] `make lint` passes (zero ruff errors)
-- [ ] New tools are in `_BASE_TOOL_NAMES` if base-level
-- [ ] New tools are documented in `docs/tools.md`
+- [ ] New tools are in `_BASE_TOOL_NAMES` (and `_LEAN_TOOL_NAMES` if lean)
+- [ ] New tools are documented in `docs/tools.md`; `make docs` renders it
 - [ ] Tests cover the happy path + at least one error case
 
 ## Adding a New Server Integration
@@ -79,18 +81,18 @@ If you found a server that works well with Kitsune, open a "New Server" issue:
 ## Project Structure
 
 ```
-server.py          # all tools, transports, registries — single file
-tests/
-  conftest.py      # shared fixtures (mock HTTP, mock subprocess)
-  test_transports.py
-  test_registry.py
-  test_shapeshift.py  # tests shapeshift/shiftback helpers
-  test_tools.py
-  test_persistent.py
-docs/
-  quickstart.md
-  tools.md
-  transports.md
-  hardware.md
-  agent-patterns.md
+server.py              # entry point: loads .env, registers tools, prunes to the profile
+server_forge.py        # kitsune-forge entry point (all tools)
+kitsune_mcp/
+  app.py               # the shared FastMCP instance
+  tools/               # the MCP tools (discovery, exec, shapeshift, onboarding)
+    _state.py          # tool-name sets for the lean and full profiles
+  transport.py         # stdio, HTTP/SSE, WebSocket, persistent and Docker transports
+  registry.py          # registry clients (official, MCP Registry, Glama, npm, PyPI, Smithery)
+  shapeshift.py        # mounting proxied tools, resources and prompts
+  credentials.py       # .env handling and credential checks
+  guard.py, pins.py    # action guard and version pins
+tests/                 # pytest suite
+docs/                  # the docs site (MkDocs Material, see mkdocs.yml)
+examples/              # demo servers and scenarios
 ```
