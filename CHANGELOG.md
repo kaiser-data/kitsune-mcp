@@ -8,6 +8,25 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.22.4] — 2026-10-19
+
+Docs and packaging only; no runtime changes.
+
+### Added
+- **Docs site and homepage** at https://kaiser-data.github.io/kitsune-mcp/ (MkDocs Material, deployed from `main`). PyPI's Homepage/Documentation links, npm's `homepage` and the registry's `websiteUrl` now point there.
+- **Hot-reload demo GIF** at the top of the README: a real Claude Code session, 59°C → fix → `reload("dev")` → 15°C, 31 s.
+
+### Changed
+- **Docs checked against the real tool surface.** The tools reference is regenerated from the registered signatures and adds the missing `reload`, `compare`, `onboard` and `setup`, with lean vs full profile marked. Quickstart and agent patterns had `call()` arguments in the wrong order and used `shiftback()`, which only exists in the full profile.
+- **Shorter, plainer copy** on the README, homepage, hot-reload tutorial and quickstart.
+- The demo server pins mcp 1.x in PEP 723 inline metadata, so `uv run weather_server.py` just works.
+- Makefile uses uv; CONTRIBUTING describes the real `kitsune_mcp/` layout.
+
+### Removed
+- Internal plans, drafts and the unrelated `evals/` framework from the public repo; the stale `agent_manifest.json`.
+
+---
+
 ## [0.22.3] — 2026-10-18
 
 ### Added
