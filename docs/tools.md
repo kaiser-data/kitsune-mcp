@@ -156,7 +156,15 @@ compare("github", limit=4)
 ### `shapeshift`
 
 ```python
-shapeshift(server_id="", tools=None, keep=False, confirm=False, source="auto", server_args=None, sandbox=None)
+shapeshift(
+    server_id="",
+    tools=None,
+    keep=False,
+    confirm=False,
+    source="auto",
+    server_args=None,
+    sandbox=None,
+)
 ```
 
 Mount a server's tools as native tools in your client. The client receives
