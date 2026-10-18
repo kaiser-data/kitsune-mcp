@@ -3,10 +3,8 @@
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
   <h1>🦊 Kitsune MCP</h1>
   <p><strong>Let your agent test the MCP server it's building.</strong><br/>
-  It edits the tool, calls <code>reload("dev")</code>, calls it again and sees the result.<br/>
-  No client restart, no config edit, no human in the loop.<br/>
-  Plus: mount any of 130,000+ community servers mid-session, caged in Docker.</p>
-  <p>⭐ <strong>If Kitsune saves you a client restart, <a href="https://github.com/kaiser-data/kitsune-mcp">star it on GitHub</a></strong>. It's how other MCP developers find it.</p>
+  Edit a tool, <code>reload("dev")</code>, call it again. No client restart.</p>
+  <p>⭐ Saved you a restart? <a href="https://github.com/kaiser-data/kitsune-mcp"><strong>Star it on GitHub</strong></a> so others find it.</p>
   <p>📖 <a href="https://kaiser-data.github.io/kitsune-mcp/"><strong>Documentation</strong></a> · <a href="https://kaiser-data.github.io/kitsune-mcp/hot-reload/">Hot-reload tutorial</a> · <a href="https://kaiser-data.github.io/kitsune-mcp/tools/">Tools reference</a></p>
 </div>
 
@@ -22,18 +20,16 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/demo-hot-reload.gif" alt="Claude Code connects a weather MCP server through Kitsune, gets 59°C for Berlin, fixes the Fahrenheit conversion, calls reload(&quot;dev&quot;) and gets 15°C in the same session" width="800" />
-  <br/><sub>One prompt. Claude finds the bug, fixes it, reloads, and checks again. No restart. (Real recording, 31 s.)</sub>
+  <br/><sub>One prompt: Claude finds the bug, fixes it, reloads, checks again. Real recording, 31 s.</sub>
 </p>
 
 ---
 
-## The problem
+## Why
 
-When an agent writes an MCP server, it can't test its own change. The client still runs the old process, so after every edit a person has to restart the client or reconnect the server (and in some clients, register it in the config first) before the agent can call the tool and see whether the fix worked.
+Your agent edits an MCP tool, but the client still runs the old process. Someone has to restart it before the agent can test the fix.
 
-Kitsune hands that loop to the agent. `connect`, `call` and `reload` are tool calls, so the agent can run the tool, see it fail, fix the code, reload and check again on its own, in any MCP client.
-
-Kitsune is one MCP server that sits in your client config and loads other servers **while the session is running**. Your own server under development, or any server from 7 registries. Their tools show up as native tools. Drop them and the session carries on.
+With Kitsune, `connect`, `call` and `reload` are tools. The agent runs the whole loop itself:
 
 ```python
 connect("uvx --from . my-mcp-server", name="dev")  # start your server
@@ -46,7 +42,9 @@ reload("dev")  # restart on fresh code, remount
 call("summarize", arguments={"url": "https://example.com"})  # new code, same session
 ```
 
-Try it in 30 seconds with the planted-bug demo server: [`examples/demo-hot-reload/`](examples/demo-hot-reload/).
+It also mounts any of 130,000+ servers from 7 registries mid-session, caged in Docker.
+
+Try it: [hot-reload tutorial](https://kaiser-data.github.io/kitsune-mcp/hot-reload/) · [`examples/demo-hot-reload/`](examples/demo-hot-reload/)
 
 ## Install
 

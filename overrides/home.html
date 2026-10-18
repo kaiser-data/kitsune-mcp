@@ -7,9 +7,8 @@
       <div class="ks-hero__copy">
         <h1>Let your agent test the MCP server it's building.</h1>
         <p class="ks-hero__lede">
-          Your agent edits a tool, calls <code>reload("dev")</code>, calls the tool
-          again and sees the result. No client restart, no config edit, no human
-          in the loop.
+          Edit a tool, <code>reload("dev")</code>, call it again.
+          No client restart.
         </p>
         <div class="ks-install">
           <p class="ks-install__label" id="ks-install-label">Add it to Claude Code</p>
@@ -17,10 +16,10 @@
             <code id="ks-install-cmd" aria-labelledby="ks-install-label">claude mcp add -s user kitsune -- uvx kitsune-mcp</code>
             <button type="button" class="ks-install__copy" data-copy="#ks-install-cmd">Copy</button>
           </div>
-          <a class="ks-install__other" href="{{ 'installation/' | url }}">Cursor, Claude Desktop, pip, npx and other clients</a>
+          <a class="ks-install__other" href="{{ 'installation/' | url }}">Other clients</a>
         </div>
         <div class="ks-hero__actions">
-          <a class="md-button md-button--primary" href="{{ 'hot-reload/' | url }}">Try the hot-reload demo</a>
+          <a class="md-button md-button--primary" href="{{ 'hot-reload/' | url }}">See how it works</a>
           <a class="md-button ks-star" href="https://github.com/kaiser-data/kitsune-mcp">Star on GitHub</a>
         </div>
       </div>
@@ -28,7 +27,7 @@
         <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/demo-hot-reload.gif"
              alt="Claude Code connects a weather MCP server through Kitsune, gets 59°C for Berlin, fixes the Fahrenheit conversion, calls reload and gets 15°C in the same session"
              width="1000" height="633" loading="eager">
-        <figcaption>A real, unedited Claude Code session. One prompt, 31 seconds.</figcaption>
+        <figcaption>Real Claude Code session, one prompt, 31 s.</figcaption>
       </figure>
     </div>
   </section>
