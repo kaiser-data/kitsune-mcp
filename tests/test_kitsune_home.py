@@ -85,3 +85,18 @@ class TestAllModulesHonorKitsuneHome:
         )
         assert out.returncode == 0, out.stderr
         assert out.stdout.strip().splitlines()[-1] == "from-iso-home"
+
+
+class TestFirstRunHint:
+    def test_prints_once_to_stderr(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("KITSUNE_HOME", str(tmp_path))
+        from server import _first_run_hint
+
+        _first_run_hint()
+        first = capsys.readouterr()
+        assert "github.com/kaiser-data/kitsune-mcp" in first.err
+        assert first.out == ""  # stdout is the MCP stdio channel
+        assert (tmp_path / ".first_run_done").exists()
+
+        _first_run_hint()
+        assert capsys.readouterr().err == ""

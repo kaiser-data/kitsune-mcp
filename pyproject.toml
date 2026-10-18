@@ -77,7 +77,7 @@ dev = [
 ]
 
 [project.scripts]
-kitsune-mcp = "server:mcp.run"
+kitsune-mcp = "server:main"
 kitsune-forge = "server_forge:mcp.run"
 
 [project.urls]
