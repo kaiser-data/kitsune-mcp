@@ -1,69 +1,81 @@
-# Quickstart — First Shapeshift in 2 Minutes
+# Quickstart
+
+Your first borrowed server in two minutes. If you are here to iterate on your
+own MCP server, go to the [hot-reload tutorial](hot-reload.md) instead.
 
 ## 1. Install
 
-```bash
-# Recommended — no pip needed, runs in an isolated env:
-uvx kitsune-mcp
+=== "Claude Code"
 
-# Or install globally:
-pip install kitsune-mcp
+    ```bash
+    claude mcp add -s user kitsune -- uvx kitsune-mcp
+    ```
 
-# Or via npm:
-npx kitsune-mcp
-```
+=== "Any other client"
 
-## 2. Add to Claude Desktop
+    Add this to your client's MCP config (Claude Desktop, Cursor, Windsurf,
+    Cline, Zed, …):
 
-Add this to your `claude_desktop_config.json`
-(usually at `~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "kitsune": {
-      "command": "uvx",
-      "args": ["kitsune-mcp"],
-      "env": {
-        "SMITHERY_API_KEY": "your-key-here"
+    ```json
+    {
+      "mcpServers": {
+        "kitsune": { "command": "uvx", "args": ["kitsune-mcp"] }
       }
     }
-  }
-}
+    ```
+
+Then start a new session. More options, including pip and npx, are on the
+[installation page](installation.md).
+
+## 2. Find a server
+
+Ask your agent, or call the tool yourself:
+
+```python
+search("current time")
 ```
 
-Get a free Smithery API key at [smithery.ai/account/api-keys](https://smithery.ai/account/api-keys).
+`search()` covers 7 registries: the official servers repo, the MCP Registry,
+Glama, npm, PyPI, GitHub and Smithery. No API key is needed; Smithery's
+hosted servers need a free key, see [configuration](configuration.md).
 
-> **No API key?** Kitsune still works — it falls back to npm registry search. You'll have access to hundreds of npm-published MCP servers.
+## 3. Mount it
 
-## 3. Restart Claude and try your first shapeshift
-
-In Claude, type:
-
-```
-search("web search")
+```python
+shapeshift("mcp-server-time")
 ```
 
-Pick a server from the results, then:
+Its tools now appear in your client as native tools. Packages from npm or PyPI
+are community code: Kitsune asks you to repeat the call with `confirm=True`
+and runs them in a hardened Docker container when Docker is available. See
+[safety](safety.md).
 
-```
-shapeshift("exa/exa")
-```
+Mount only the tools you need with `tools=[...]`:
 
-Now call its tools directly — they appear in your tool list instantly:
-
-```
-web_search_exa(query="latest AI news")
-```
-
-Done! To return to base form:
-
-```
-shiftback()
+```python
+shapeshift("mcp-server-time", tools=["get_current_time"])
 ```
 
-## Next Steps
+## 4. Use it
 
-- [Tools Reference](tools.md) — all tools with examples
-- [Transports Guide](transports.md) — when to use HTTP vs stdio vs persistent
-- [Agent Patterns](agent-patterns.md) — chain shapeshifts, quality gates, pipelines
+```python
+get_current_time(timezone="Asia/Tokyo")
+```
+
+## 5. Drop it
+
+```python
+shapeshift()
+```
+
+The tools disappear, the process stops, and your session carries on.
+
+!!! tip "One-shot alternative"
+    `auto("current time in Tokyo", server_hint="mcp-server-time")` searches,
+    mounts, calls and releases in one step.
+
+## Next steps
+
+- [Hot-reload tutorial](hot-reload.md): let your agent test its own MCP server
+- [Tools reference](tools.md): every tool and its parameters
+- [Agent patterns](agent-patterns.md): recipes that combine the tools

@@ -43,4 +43,4 @@ Fewer visible tools also helps selection reliability (Gorilla / ToolBench); on m
 
 ---
 
-[← README](../README.md)
+[← README](https://github.com/kaiser-data/kitsune-mcp#readme)
