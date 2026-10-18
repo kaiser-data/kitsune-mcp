@@ -22,9 +22,9 @@ Kitsune MCP sends MCP notifications when the tool/resource/prompt list changes �
 | `shapeshift()` succeeds | `notifications/tools/list_changed` | Always (at least 1 tool registered) |
 | `shapeshift()` registers resources | `notifications/resources/list_changed` | Only if ≥1 resource proxied |
 | `shapeshift()` registers prompts | `notifications/prompts/list_changed` | Only if ≥1 prompt proxied |
-| `shiftback()` | `notifications/tools/list_changed` | Always |
-| `shiftback()` after mounted resources | `notifications/resources/list_changed` | Only if resources were present |
-| `shiftback()` after mounted prompts | `notifications/prompts/list_changed` | Only if prompts were present |
+| `shapeshift()` (unmount) or `shiftback()` | `notifications/tools/list_changed` | Always |
+| Unmount after mounted resources | `notifications/resources/list_changed` | Only if resources were present |
+| Unmount after mounted prompts | `notifications/prompts/list_changed` | Only if prompts were present |
 | `craft()` | `notifications/tools/list_changed` | Always |
 
 Notification failures are silently suppressed — Kitsune continues to work even if the client doesn't support notifications.
@@ -36,11 +36,11 @@ To fill in missing rows, run the following steps in your client and record the r
 1. Connect to `kitsune-mcp` (lean profile)
 2. Call `shapeshift("@modelcontextprotocol/server-filesystem")` — verify filesystem tools appear
 3. Call any filesystem tool (e.g. `list_directory(path="/tmp")`) — verify it works
-4. Call `shiftback()` — verify filesystem tools disappear
+4. Call `shapeshift()` with no argument — verify filesystem tools disappear
 5. Check whether each step required a manual refresh or happened automatically
 
 Open a PR to update this table with your findings, or file an issue with your test results.
 
 ## Fallback behaviour
 
-If a client doesn't support notifications, tools still work correctly — the client just won't auto-refresh its tool list. Users may need to manually restart or refresh to see the updated tool list after `shapeshift()` / `shiftback()`.
+If a client doesn't support notifications, tools still work correctly — the client just won't auto-refresh its tool list. Users may need to manually restart or refresh to see the updated tool list after `shapeshift()`.

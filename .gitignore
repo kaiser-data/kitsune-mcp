@@ -14,3 +14,6 @@ server.json.bak
 graphify-out/
 .coverage
 coverage.xml
+
+# MkDocs build output
+site/

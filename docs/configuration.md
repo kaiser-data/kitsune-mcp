@@ -84,4 +84,4 @@ shapeshift()  # always drop when the task is done
 
 ---
 
-[← README](../README.md)
+[← README](https://github.com/kaiser-data/kitsune-mcp#readme)

@@ -7,6 +7,7 @@
   No client restart, no config edit, no human in the loop.<br/>
   Plus: mount any of 130,000+ community servers mid-session, caged in Docker.</p>
   <p>⭐ <strong>If Kitsune saves you a client restart, <a href="https://github.com/kaiser-data/kitsune-mcp">star it on GitHub</a></strong>. It's how other MCP developers find it.</p>
+  <p>📖 <a href="https://kaiser-data.github.io/kitsune-mcp/"><strong>Documentation</strong></a> · <a href="https://kaiser-data.github.io/kitsune-mcp/hot-reload/">Hot-reload tutorial</a> · <a href="https://kaiser-data.github.io/kitsune-mcp/tools/">Tools reference</a></p>
 </div>
 
 [![GitHub stars](https://img.shields.io/github/stars/kaiser-data/kitsune-mcp?style=social)](https://github.com/kaiser-data/kitsune-mcp)

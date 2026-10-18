@@ -1,0 +1,109 @@
+site_name: Kitsune MCP
+site_description: >-
+  Let your agent test the MCP server it's building. Hot-reload for MCP servers,
+  plus any of 130,000+ community servers mid-session, caged in Docker.
+site_url: https://kaiser-data.github.io/kitsune-mcp/
+repo_url: https://github.com/kaiser-data/kitsune-mcp
+repo_name: kaiser-data/kitsune-mcp
+edit_uri: edit/main/docs/
+copyright: MIT licensed · Kitsune MCP contributors
+
+theme:
+  name: material
+  custom_dir: overrides
+  logo: assets/logo.png
+  favicon: assets/favicon.png
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.tabs.link
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kaiser-data/kitsune-mcp
+      name: GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/kitsune-mcp/
+      name: PyPI
+    - icon: fontawesome/brands/npm
+      link: https://www.npmjs.com/package/kitsune-mcp
+      name: npm
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+exclude_docs: |
+  internal/
+  superpowers/
+  article.md
+  demo-script.md
+  demo-realtime.md
+  *.excalidraw
+
+not_in_nav: |
+  /index.md
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Installation: installation.md
+      - Quickstart: quickstart.md
+      - Hot-reload tutorial: hot-reload.md
+  - Guides:
+      - Agent patterns: agent-patterns.md
+      - Configuration: configuration.md
+      - Transports: transports.md
+      - Safety: safety.md
+      - Performance: performance.md
+  - Reference:
+      - Tools: tools.md
+      - Client compatibility: compatibility.md
+      - Benchmarks: benchmarks.md
+  - Project:
+      - Changelog: changelog.md
+      - Contributing: contributing.md
+      - Security: security.md

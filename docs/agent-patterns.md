@@ -1,146 +1,99 @@
-# Agent Patterns
+# Agent patterns
 
-Common patterns for AI agents using Kitsune MCP.
+Recipes that combine Kitsune's tools. Tools marked *full profile* in the
+[tools reference](tools.md) need `KITSUNE_TOOLS=all`.
 
-## Pattern 1: Search → Quality Gate → Shapeshift
+## Test the server you're building
 
-Validate a server before committing to it:
+The MCP REPL. Your agent runs, fixes and re-runs its own tool without anyone
+restarting the client:
 
 ```python
-# Step 1: Find candidates
+connect("uv run python my_server.py", name="dev")
+shapeshift("dev")
+call("summarize", arguments={"url": "https://example.com"})  # wrong result
+
+# … the agent edits the tool …
+
+reload("dev")  # fresh code, tools remounted
+call("summarize", arguments={"url": "https://example.com"})  # check the fix
+release("dev")  # when done
+```
+
+Full walkthrough with a planted bug: [hot-reload tutorial](hot-reload.md).
+
+## Check a server before you rely on it
+
+*Uses `inspect` and `test` from the full profile.*
+
+```python
 search("web scraping", limit=5)
-
-# Step 2: Quality gate
-score = test("exa/exa")
-# → Score: 85/100 (Good) — proceed
-
-# Step 3: Shapeshift only if quality is acceptable
-shapeshift("exa/exa")
-web_search_exa(query="latest Python news")
+inspect("firecrawl")  # tools, schemas, required credentials
+test("firecrawl")  # quality score 0–100
+shapeshift("firecrawl", tools=["scrape_url"])
 ```
 
-## Pattern 2: Chain Shapeshifts
+## Chain servers for a multi-step task
 
-Shapeshift into multiple servers in sequence for a multi-step task:
+Mount one server at a time and drop it before the next:
 
 ```python
-# Step 1: Research
-shapeshift("exa/exa")
-results = web_search_exa(query="MCP server list 2025")
-shiftback()
+shapeshift("brave", tools=["brave_web_search"])
+brave_web_search(query="MCP server list")
+shapeshift()
 
-# Step 2: Fetch and extract
-shapeshift("fetch-mcp/fetch-mcp")
-content = fetch_page(url="https://example.com/mcp-servers")
-shiftback()
-
-# Step 3: Write output
-shapeshift("@modelcontextprotocol/server-filesystem")
-write_file(path="/tmp/report.md", content=f"# Research\n{results}\n\n{content}")
-shiftback()
+shapeshift("mcp-server-fetch")
+fetch(url="https://example.com/mcp-servers")
+shapeshift()
 ```
 
-## Pattern 3: Hardware Pipeline
+`shapeshift("next-server")` also replaces the current form on its own; the
+explicit `shapeshift()` keeps the transcript easier to follow.
 
-Audio processing with persistent connections:
+## Keep a stateful server alive
 
-```python
-# Connect audio server once
-connect("uvx voice-mode", name="audio", timeout=30)
-
-# Shapeshift uses the persistent process
-shapeshift("voice-mode")
-
-# Pipeline: listen → process → speak
-transcript = listen(duration=10)
-# (call other tools to process transcript)
-speak(text=f"I heard: {transcript}")
-
-shiftback()
-release("audio")
-```
-
-## Pattern 4: Auto-Discovery with Fallback
-
-Let Kitsune pick the best server, with a manual fallback:
+Servers that hold a device or a session (audio, browsers, databases) should
+run as a persistent connection, so every call reaches the same process:
 
 ```python
-# Try auto-discovery first
-result = auto("search for Python packages", "search", {"query": "httpx"})
-
-# If auto fails, fall back to a known server
-if "No servers found" in result:
-    result = call("mcp-server-npm", "search", {"query": "httpx"})
-```
-
-## Pattern 5: Benchmark Before Batch
-
-Benchmark latency before running many calls:
-
-```python
-# Check if server is fast enough for batch work
-bench("exa/exa", "web_search_exa", {"query": "test"}, iterations=3)
-# → p50: 234ms | p95: 891ms
-
-# If p95 < 1000ms, proceed with batch
-queries = ["AI news", "Python MCP", "FastAPI tutorial"]
-shapeshift("exa/exa")
-for q in queries:
-    web_search_exa(query=q)
-shiftback()
-```
-
-## Pattern 6: Multi-Registry Discovery
-
-Search both Smithery and npm, compare results:
-
-```python
-smithery_results = search("file system", registry="smithery", limit=3)
-npm_results = search("file system", registry="npm", limit=3)
-
-# Inspect the top result from each
-inspect(smithery_results[0].id)
-inspect(npm_results[0].id)
-
-# Pick the one with better tooling
-shapeshift("@modelcontextprotocol/server-filesystem")
-```
-
-## Anti-Patterns to Avoid
-
-### Don't shapeshift without shiftback
-```python
-shapeshift("server-a")
-shapeshift("server-b")  # ✓ Auto-reverts server-a first
-# But explicit shiftback() is clearer:
-shapeshift("server-a")
-shiftback()
-shapeshift("server-b")
-```
-
-### Don't use call() for hardware tools
-```python
-# ❌ Spawns new process every call — audio device disconnects
-call("voice-mode", "speak", {"text": "Hello"})
-call("voice-mode", "speak", {"text": "World"})
-
-# ✓ Use connect() to keep process alive
-connect("uvx voice-mode", name="voice")
-call("voice-mode", "speak", {"text": "Hello"})
-call("voice-mode", "speak", {"text": "World"})
+connect("uvx voice-mode", name="voice", timeout=30)
+call("speak", "voice", {"text": "Hello"})
+call("speak", "voice", {"text": "World"})  # same process, device stays open
 release("voice")
 ```
 
-### Don't forget to release() hardware connections
-```python
-# ❌ Process leaks
-connect("uvx voice-mode", name="voice")
-# ... work ...
-shiftback()  # only kills the *shapeshifted* form's process, not connect()'d ones!
+`shapeshift()` with no argument unmounts tools but does not stop a
+`connect()`ed process. Always `release()` it.
 
-# ✓ Always release hardware connections
-connect("uvx voice-mode", name="voice")
-# ... work ...
-shiftback()
-release("voice")
+## Let Kitsune pick the server
+
+```python
+auto("current time in Tokyo")
+auto("list issues on acme/api", server_hint="github")
 ```
+
+`auto()` searches, picks a server, infers arguments and calls. Give a
+`server_hint` when you already know the server; it skips the search.
+
+## Benchmark before a batch
+
+*Uses `bench` from the full profile.*
+
+```python
+bench("mcp-server-time", "get_current_time", {"timezone": "UTC"}, iterations=3)
+# p50 / p95 / min / max in ms
+
+shapeshift("mcp-server-time")
+for tz in ["UTC", "Asia/Tokyo", "Europe/Berlin"]:
+    get_current_time(timezone=tz)
+shapeshift()
+```
+
+## Compare candidates
+
+```python
+search("postgres", compare=True)  # token cost and credentials side by side
+```
+
+With the full profile, `compare("postgres", limit=4)` probes the candidates in
+parallel.

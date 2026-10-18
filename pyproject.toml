@@ -81,10 +81,10 @@ kitsune-mcp = "server:main"
 kitsune-forge = "server_forge:mcp.run"
 
 [project.urls]
-Homepage = "https://github.com/kaiser-data/kitsune-mcp"
+Homepage = "https://kaiser-data.github.io/kitsune-mcp/"
 Repository = "https://github.com/kaiser-data/kitsune-mcp"
 Issues = "https://github.com/kaiser-data/kitsune-mcp/issues"
-Documentation = "https://github.com/kaiser-data/kitsune-mcp/tree/main/docs"
+Documentation = "https://kaiser-data.github.io/kitsune-mcp/"
 
 [tool.hatch.build.targets.wheel]
 # Ship ONLY the package plus the two entry-point shims. `packages = ["."]` used
@@ -117,3 +117,9 @@ markers = [
 ]
 # Dump tracebacks of all threads if a test runs longer than this (belt-and-braces).
 faulthandler_timeout = 90
+
+[dependency-groups]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5,<10",
+]
