@@ -88,7 +88,7 @@ Documentation = "https://kaiser-data.github.io/kitsune-mcp/"
 
 [tool.hatch.build.targets.wheel]
 # Ship ONLY the package plus the two entry-point shims. `packages = ["."]` used
-# to pull the whole repo root into site-packages (tests/, docs/, evals/,
+# to pull the whole repo root into site-packages (tests/, docs/,
 # .github/, PLAN.md, .gitignore ...) and silently made `include` a no-op.
 packages = ["kitsune_mcp"]
 

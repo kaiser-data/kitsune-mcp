@@ -221,6 +221,5 @@ with guardrails you understand. One config entry. No restarts."*
 
 ---
 
-*Companion to the launch script in [`demo-script.md`](demo-script.md). Commands
-reflect the real tool surface; see [`../README.md`](../README.md) for the
-authoritative reference.*
+*Commands reflect the real tool surface; see the
+[tools reference](https://kaiser-data.github.io/kitsune-mcp/tools/).*

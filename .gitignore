@@ -17,3 +17,6 @@ coverage.xml
 
 # MkDocs build output
 site/
+
+# Internal notes, plans and drafts: kept locally, not published
+docs/internal/

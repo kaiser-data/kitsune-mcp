@@ -47,7 +47,7 @@ jobs:
         run: pip install -e ".[dev]" pytest-cov
 
       - name: Lint with ruff
-        # Whole repo, not just the shipped package: evals/, examples/ and
+        # Whole repo, not just the shipped package: examples/ and
         # .github/scripts/ were previously unlinted and had accumulated errors.
         run: ruff check .
 
