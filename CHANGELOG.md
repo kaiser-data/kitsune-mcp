@@ -8,6 +8,19 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.22.3] — 2026-10-18
+
+### Added
+- **Star hint.** The README (also the PyPI page) asks for a GitHub star under the hero and shows a stars badge. The first time `kitsune-mcp` starts it prints a one-line star hint to stderr, once, recorded in `$KITSUNE_HOME/.first_run_done`. stdout stays the clean MCP channel.
+
+### Changed
+- The `kitsune-mcp` console script now points at `server:main` (was `server:mcp.run`).
+
+### Removed
+- The Smithery badge: the listing returns 404 and the badge image 500.
+
+---
+
 ## [0.22.2] — 2026-10-12
 
 ### Fixed
