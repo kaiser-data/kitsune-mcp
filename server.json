@@ -6,6 +6,7 @@
     "url": "https://github.com/kaiser-data/kitsune-mcp",
     "source": "github"
   },
+  "websiteUrl": "https://kaiser-data.github.io/kitsune-mcp/",
   "version": "0.22.3",
   "packages": [
     {
