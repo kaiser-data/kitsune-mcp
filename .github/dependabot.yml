@@ -7,6 +7,10 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    ignore:
+      # mcp 2.x removed mcp.server.fastmcp; lift together with the migration (#79).
+      - dependency-name: "mcp"
+        versions: [">=2"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
