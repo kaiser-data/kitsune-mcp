@@ -1,9 +1,9 @@
 Output demo.mp4
 
 Set Shell "zsh"
-Set FontSize 20
-Set Width 1400
-Set Height 860
+Set FontSize 24
+Set Width 1200
+Set Height 760
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 25ms
@@ -21,12 +21,12 @@ Wait+Screen@60s /Try "/
 Sleep 1s
 Show
 
-Type `Connect my MCP server with kitsune: connect("uv run --with mcp~=1.27 python weather_server.py", name="dev"). Get the weather for Berlin. If it looks wrong, fix the code, reload("dev") and check again.`
+Type `Use kitsune: connect("uv run weather_server.py", name="dev"), then call get_weather for Berlin before reading any code. If it looks wrong, fix the code, reload("dev") and check again. Answer in one short line.`
 Sleep 800ms
 Enter
 
 Wait+Screen@480s /15 ?°C|15 degrees/
-Sleep 6s
+Sleep 8s
 
 Hide
 Ctrl+C

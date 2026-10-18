@@ -22,7 +22,7 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/demo-hot-reload.gif" alt="Claude Code connects a weather MCP server through Kitsune, gets 59°C for Berlin, fixes the Fahrenheit conversion, calls reload(&quot;dev&quot;) and gets 15°C in the same session" width="800" />
-  <br/><sub>One prompt. Claude finds the bug, fixes it, reloads, and checks again. No restart. (Real recording, 36 s.)</sub>
+  <br/><sub>One prompt. Claude finds the bug, fixes it, reloads, and checks again. No restart. (Real recording, 31 s.)</sub>
 </p>
 
 ---
