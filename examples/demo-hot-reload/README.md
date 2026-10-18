@@ -55,3 +55,15 @@ the two tool results (59°C and 15°C) on screen for at least a second each.
 - **Claude fixes the number by hand instead of the code:** say "fix it in the server code".
 - **`Already connected: dev`:** a previous take is still running; `release("dev")` first.
 - **Berlin already shows 15°C:** you forgot step 2 of the setup.
+
+## Re-recording with vhs
+
+`demo.tape` is the script behind `docs/demo-hot-reload.gif`. It expects a copy of
+`weather_server.py` in `~/my-weather-mcp/` (outside any repo, so no CLAUDE.md
+leaks in) and `~/.kitsune-demo-mcp.json` with
+`{"mcpServers": {"kitsune": {"command": "uvx", "args": ["kitsune-mcp@0.22.3"]}}}`.
+Trust the folder once by hand, then run `vhs demo.tape` and convert:
+
+```bash
+ffmpeg -i demo.mp4 -vf "fps=10,scale=1000:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" -loop 0 docs/demo-hot-reload.gif
+```
