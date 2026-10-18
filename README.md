@@ -6,8 +6,10 @@
   It edits the tool, calls <code>reload("dev")</code>, calls it again and sees the result.<br/>
   No client restart, no config edit, no human in the loop.<br/>
   Plus: mount any of 130,000+ community servers mid-session, caged in Docker.</p>
+  <p>⭐ <strong>If Kitsune saves you a client restart, <a href="https://github.com/kaiser-data/kitsune-mcp">star it on GitHub</a></strong>. It's how other MCP developers find it.</p>
 </div>
 
+[![GitHub stars](https://img.shields.io/github/stars/kaiser-data/kitsune-mcp?style=social)](https://github.com/kaiser-data/kitsune-mcp)
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
 [![npm](https://img.shields.io/npm/v/kitsune-mcp?color=cb3837&label=npm&logo=npm)](https://www.npmjs.com/package/kitsune-mcp)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-8a2be2)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kaiser-data%2Fkitsune-mcp)
@@ -15,7 +17,6 @@
 [![CI](https://github.com/kaiser-data/kitsune-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/kaiser-data/kitsune-mcp/actions)
 [![Coverage](https://codecov.io/gh/kaiser-data/kitsune-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/kaiser-data/kitsune-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Smithery](https://smithery.ai/badge/@kaiser-data/kitsune-mcp)](https://smithery.ai/server/@kaiser-data/kitsune-mcp)
 [![Glama](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp/badges/score.svg)](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp)
 
 ---

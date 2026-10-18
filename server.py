@@ -14,6 +14,7 @@ KITSUNE_TOOLS env var controls which tools are registered:
 """
 
 import contextlib
+import sys
 
 from dotenv import load_dotenv
 
@@ -161,5 +162,26 @@ for _t in _BASE_TOOL_NAMES - _active_tools:
 
 _restore_crafted_tools()
 
-if __name__ == "__main__":
+
+def _first_run_hint() -> None:
+    """Print a one-time star hint to stderr (stdout is the MCP stdio channel)."""
+    marker = kitsune_home() / ".first_run_done"
+    with contextlib.suppress(OSError):
+        if marker.exists():
+            return
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+        print(
+            "🦊 Kitsune MCP is running. If it saves you a client restart, "
+            "a ⭐ helps others find it: https://github.com/kaiser-data/kitsune-mcp",
+            file=sys.stderr,
+        )
+
+
+def main() -> None:
+    _first_run_hint()
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()
