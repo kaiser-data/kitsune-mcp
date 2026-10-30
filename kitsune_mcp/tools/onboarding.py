@@ -20,6 +20,8 @@ from kitsune_mcp.credentials import (
     _save_to_env,
     _smithery_available,
     _to_env_var,
+    invalid_env_entry,
+    invalid_env_message,
     is_protected_env_var,
     protected_env_message,
 )
@@ -131,6 +133,8 @@ async def key(env_var: str, value: str) -> str:
     var = env_var.upper().replace(" ", "_")
     if is_protected_env_var(var):
         return protected_env_message(var)
+    if invalid_env_entry(var, value):
+        return invalid_env_message(var, value)
     _save_to_env(var, value)
     _state._registry.bust_cache()  # credentials changed — invalidate cached server records
     preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
@@ -165,6 +169,9 @@ async def auto(
     protected = [k for k in keys if is_protected_env_var(k)]
     if protected:
         return protected_env_message(protected[0])
+    for env_var, value in keys.items():
+        if invalid_env_entry(env_var.upper(), str(value)):
+            return invalid_env_message(env_var.upper(), str(value))
     for env_var, value in keys.items():
         _save_to_env(env_var.upper(), str(value))
 
@@ -297,10 +304,12 @@ async def auto(
 
         # For stdio servers with no registry tools, fetch live schemas
         if not tools and srv and srv.transport == "stdio":
-            cmd = srv.install_cmd or ["npx", "-y", server_id]
+            # Starting the package to read tools/list already runs its code, so
+            # discovery goes through the same cage policy as the call below.
+            discovery_transport, _ = _state.transport_for_exec(server_id, srv)
             with contextlib.suppress(Exception):
                 tools = await asyncio.wait_for(
-                    _state.PersistentStdioTransport(cmd).list_tools(), timeout=TIMEOUT_STDIO_INIT
+                    discovery_transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
                 )
 
         if not tools:
@@ -1364,7 +1373,11 @@ async def setup(
         saved: list[str] = []
         for env_var, value in harvested.items():
             # don't overwrite existing values; never import protected knobs
-            if not os.getenv(env_var) and not is_protected_env_var(env_var):
+            if (
+                not os.getenv(env_var)
+                and not is_protected_env_var(env_var)
+                and not invalid_env_entry(env_var, value)
+            ):
                 _save_to_env(env_var, value)
                 saved.append(env_var)
         harvest_summary = (
@@ -1499,6 +1512,8 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
         var = name.upper().replace(" ", "_").replace("-", "_")
         if is_protected_env_var(var):
             return protected_env_message(var)
+        if invalid_env_entry(var, value):
+            return invalid_env_message(var, value)
         _save_to_env(var, value)
         _state._registry.bust_cache()
         preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"

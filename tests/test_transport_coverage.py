@@ -594,6 +594,106 @@ class TestHTTPSessionReuse:
         assert tp._http_sessions == {}
 
 
+class TestHTTPNoReplay:
+    """A tools/call that may already have run must not be sent a second time (Codex P0)."""
+
+    async def test_plain_json_response_is_read_not_replayed(self):
+        t, patcher = _patched_transport()
+        body = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "j"}]}}
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    httpx.Response(200, json=body),
+                    httpx.Response(200, json=body),
+                ]
+            )
+            assert "j" in await t.execute("tool", {}, {})
+            assert "j" in await t.execute("tool", {}, {})
+        assert _methods(route).count("tools/call") == 2
+        assert _methods(route).count("initialize") == 1
+
+    async def test_unreadable_success_on_cached_session_is_not_replayed(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok("first"),
+                    httpx.Response(200, text="not json at all"),
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok("replayed"),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            result = await t.execute("tool", {}, {})
+        assert "replayed" not in result
+        assert "may have run" in result
+        assert _methods(route).count("tools/call") == 2
+
+    @pytest.mark.parametrize(
+        "failure", [httpx.ReadTimeout("slow"), httpx.RemoteProtocolError("cut")]
+    )
+    async def test_lost_response_on_cached_session_is_not_replayed(self, failure):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok("first"),
+                    failure,
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok("replayed"),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            result = await t.execute("tool", {}, {})
+        assert "may have run" in result
+        assert _methods(route).count("tools/call") == 2
+
+    async def test_server_error_on_cached_session_is_not_replayed(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok("first"),
+                    httpx.Response(500),
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok("replayed"),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            result = await t.execute("tool", {}, {})
+        assert "may have run" in result
+        assert _methods(route).count("tools/call") == 2
+
+    async def test_list_tools_still_retries_after_lost_response(self):
+        t, patcher = _patched_transport()
+        tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}]}}
+        with patcher, respx.mock:
+            respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _sse(tools),
+                    httpx.ReadTimeout("slow"),
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _sse(tools),
+                ]
+            )
+            await t.list_tools()
+            assert [x["name"] for x in await t.list_tools()] == ["a"]
+
+
 # ---------------------------------------------------------------------------
 # StdioTransport error paths
 # ---------------------------------------------------------------------------
@@ -835,7 +935,9 @@ class TestPersistentExecuteRetries:
             result = await t.execute("tool", {}, {})
         assert "Failed to send to mycmd: weird" in result
 
-    async def test_death_while_waiting_for_response_retries(self):
+    async def test_death_while_waiting_for_response_is_not_replayed(self):
+        # The request reached the process before it died, so the tool may have
+        # run. Sending it again could repeat a mutation (Codex P0).
         t = PersistentStdioTransport(["mycmd"])
         dying = _make_entry()
         dying.proc.stdout = make_stdout_with_responses([])  # EOF right away
@@ -844,14 +946,15 @@ class TestPersistentExecuteRetries:
             dying.proc.returncode = 1  # dies after the write lands
 
         dying.proc.stdin.write = MagicMock(side_effect=_mark_dead)
-        good = _make_entry()
-        good.proc.stdout = make_stdout_with_responses([TOOL_OK])
+        start = AsyncMock()
         with (
             patch.object(t, "_get_or_start", AsyncMock(return_value=dying)),
-            patch.object(t, "_start_process", AsyncMock(return_value=good)),
+            patch.object(t, "_start_process", start),
         ):
             result = await t.execute("tool", {}, {})
-        assert "ok!" in result
+        start.assert_not_called()
+        assert "may have run" in result
+        assert t._pool_key not in tp._process_pool
 
     async def test_no_response_while_alive_reports_tool_name(self):
         t = PersistentStdioTransport(["mycmd"])

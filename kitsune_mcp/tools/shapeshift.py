@@ -271,24 +271,28 @@ async def shapeshift(
             # so quoted paths (e.g. "/path with spaces") are never mangled.
             cmd = conn.get("install_cmd") or shlex.split(conn["command"])
             tool_names = conn.get("tools", [])
-            _state._do_shed()
-            session["current_form_local_install"] = None
+            # Same shed→register sequence as the registry path, same lock.
+            async with _registry_lock:
+                _state._do_shed()
+                session["current_form_local_install"] = None
 
-            transport: BaseTransport = _state.PersistentStdioTransport(cmd)
-            raw_tools = await transport.list_tools()
-            if not raw_tools and tool_names:
-                raw_tools = [{"name": n, "description": "", "inputSchema": {}} for n in tool_names]
+                transport: BaseTransport = _state.PersistentStdioTransport(cmd)
+                raw_tools = await transport.list_tools()
+                if not raw_tools and tool_names:
+                    raw_tools = [
+                        {"name": n, "description": "", "inputSchema": {}} for n in tool_names
+                    ]
 
-            return await _commit_shapeshift(
-                server_id,
-                transport,
-                raw_tools,
-                {},
-                tools,
-                ctx,
-                json.dumps(cmd, sort_keys=True),
-                "\n⚠️  Source: pool connection (local — verify command before use)",
-            )
+                return await _commit_shapeshift(
+                    server_id,
+                    transport,
+                    raw_tools,
+                    {},
+                    tools,
+                    ctx,
+                    json.dumps(cmd, sort_keys=True),
+                    "\n⚠️  Source: pool connection (local — verify command before use)",
+                )
 
     # Registry path — source controls which registries/transports are preferred
     if source == "smithery" and not _state._smithery_available():
@@ -558,6 +562,10 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
         n_res = len(session.get("shapeshift_resources", []))
         n_prompts = len(session.get("shapeshift_prompts", []))
         removed = _state._do_shed()
+        # Snapshot the process this call unmounts. After the lock is released a
+        # concurrent mount may set its own pool key, which must not be killed.
+        exact_key = session.pop("current_form_pool_key", None)
+        has_process = session.pop("current_form_has_process", None)
     # Lock released — kill/uninstall I/O runs outside the lock
 
     with contextlib.suppress(Exception):
@@ -583,8 +591,6 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
         # edge case), do NOT fall back to killing all pool entries — that would terminate
         # unrelated connect() sessions. HTTP/SSE servers have no backing process and
         # pool_key is None by design — silently skip rather than surfacing an alarming warning.
-        exact_key = session.pop("current_form_pool_key", None)
-        has_process = session.pop("current_form_has_process", None)
         killed = []
         if not exact_key and has_process is True:
             # Truly unexpected: was a stdio server but lost its pool key.
