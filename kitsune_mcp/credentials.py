@@ -164,9 +164,39 @@ def protected_env_message(name: str) -> str:
     )
 
 
+class InvalidEnvEntryError(ValueError):
+    """Raised when a name or value can't be written as a single .env line."""
+
+
+_ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# A line break or NUL in a value would start a new .env line, e.g. one that
+# sets KITSUNE_SANDBOX=off, which dotenv then loads past the protected check.
+_ENV_VALUE_FORBIDDEN = ("\n", "\r", "\x00")
+
+
+def invalid_env_entry(name: str, value: str) -> str | None:
+    """Return why name=value can't be stored safely, or None if it can."""
+    if not _ENV_NAME_RE.match(name):
+        return f"'{name}' is not a valid environment variable name"
+    if any(ch in value for ch in _ENV_VALUE_FORBIDDEN):
+        return "the value contains a line break or NUL character"
+    return None
+
+
+def invalid_env_message(name: str, value: str) -> str:
+    return (
+        f"✗ Blocked: {invalid_env_entry(name, value)}\n"
+        f"  Why: it could add extra lines to ~/.kitsune/.env\n"
+        f"  Fix: pass the key as a single line"
+    )
+
+
 def _save_to_env(env_var: str, value: str) -> None:
     if is_protected_env_var(env_var):
         raise ProtectedEnvVarError(env_var)
+    problem = invalid_env_entry(env_var, value)
+    if problem:
+        raise InvalidEnvEntryError(problem)
     try:
         _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
         try:
