@@ -267,3 +267,51 @@ class TestRunSandboxesByDefault:
         result = await exec_mod.run("some-pkg", "ping", {})
         assert captured[0] == ["npx", "-y", "some-pkg"]
         assert "uncaged" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Schema discovery must use the same cage as execution (Codex P0): starting a
+# package to read tools/list already runs its code.
+# ---------------------------------------------------------------------------
+class TestDiscoverySandboxed:
+    def _registry(self, monkeypatch, srv):
+        from kitsune_mcp.tools import _state
+
+        reg = MagicMock()
+        reg.get_server = AsyncMock(return_value=srv)
+        monkeypatch.setattr(_state, "_registry", reg)
+
+    @pytest.mark.asyncio
+    async def test_auto_discovery_caged_when_docker_present(self, monkeypatch):
+        from kitsune_mcp.tools import onboarding
+
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        _docker(True, monkeypatch)
+        captured = _capture_transports(monkeypatch)
+        self._registry(monkeypatch, _srv())
+        await onboarding.auto("do something", server_hint="some-pkg")
+        assert captured, "discovery should start the server"
+        assert all(cmd[:2] == ["docker", "run"] for cmd in captured), captured
+
+    @pytest.mark.asyncio
+    async def test_test_tool_discovery_caged_when_docker_present(self, monkeypatch):
+        from kitsune_mcp.tools import exec as exec_mod
+
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        _docker(True, monkeypatch)
+        captured = _capture_transports(monkeypatch)
+        self._registry(monkeypatch, _srv())
+        await exec_mod.test("some-pkg")
+        assert captured, "test() should start the server"
+        assert all(cmd[:2] == ["docker", "run"] for cmd in captured), captured
+
+    @pytest.mark.asyncio
+    async def test_trusted_source_discovery_not_caged(self, monkeypatch):
+        from kitsune_mcp.tools import exec as exec_mod
+
+        monkeypatch.delenv("KITSUNE_SANDBOX", raising=False)
+        _docker(True, monkeypatch)
+        captured = _capture_transports(monkeypatch)
+        self._registry(monkeypatch, _srv(source="official"))
+        await exec_mod.test("some-pkg")
+        assert captured and captured[0][0] == "npx"

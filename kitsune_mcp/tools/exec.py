@@ -219,10 +219,11 @@ async def test(server_id: str, level: str = "basic") -> str:
     # Check 4: tools/list responds (15 pts)
     tools = srv.tools or []
     if not tools and srv.transport == "stdio":
-        cmd = srv.install_cmd or ["npx", "-y", server_id]
+        # Same cage policy as call(): starting the package already runs its code.
+        discovery_transport, _ = _state.transport_for_exec(server_id, srv)
         try:
             tools = await asyncio.wait_for(
-                _state.PersistentStdioTransport(cmd).list_tools(), timeout=TIMEOUT_STDIO_INIT
+                discovery_transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
             )
         except TimeoutError:
             tools = []

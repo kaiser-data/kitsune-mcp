@@ -304,10 +304,12 @@ async def auto(
 
         # For stdio servers with no registry tools, fetch live schemas
         if not tools and srv and srv.transport == "stdio":
-            cmd = srv.install_cmd or ["npx", "-y", server_id]
+            # Starting the package to read tools/list already runs its code, so
+            # discovery goes through the same cage policy as the call below.
+            discovery_transport, _ = _state.transport_for_exec(server_id, srv)
             with contextlib.suppress(Exception):
                 tools = await asyncio.wait_for(
-                    _state.PersistentStdioTransport(cmd).list_tools(), timeout=TIMEOUT_STDIO_INIT
+                    discovery_transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
                 )
 
         if not tools:
