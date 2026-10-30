@@ -43,7 +43,7 @@ Kitsune makes the restart a tool call, so the agent tests its own fix.
 <div markdown>
 ### Run community code safely
 
-npm and PyPI packages run in a locked-down Docker container.
+npm and PyPI packages run in a locked-down Docker container when Docker is installed. Optional: hot-reload of your own server never needs it.
 
 [Safety](safety.md)
 </div>

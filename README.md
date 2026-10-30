@@ -46,7 +46,9 @@ reload("dev")  # restart on fresh code, remount
 call("summarize", arguments={"url": "https://example.com"})  # new code, same session
 ```
 
-It also mounts any of 130,000+ servers from 7 registries mid-session, caged in Docker.
+No Docker needed: `connect()` runs your own server as a plain local process, so the loop stays fast.
+
+It also mounts any of 130,000+ servers from 7 registries mid-session. If Docker is installed, community packages run caged.
 
 Try it: [hot-reload tutorial](https://kaiser-data.github.io/kitsune-mcp/hot-reload/) · [`examples/demo-hot-reload/`](examples/demo-hot-reload/)
 
@@ -70,7 +72,7 @@ claude mcp add -s user kitsune -- uvx kitsune-mcp
 
 Also on PyPI (`pip install kitsune-mcp`, then `"command": "kitsune-mcp"`) and npm (`npx kitsune-mcp`, delegates to `uvx`).
 
-**Requirements:** Python 3.12+ · [uv](https://github.com/astral-sh/uv) · `node`/`npx` for npm-based servers · Docker optional, used to cage community servers.
+**Requirements:** Python 3.12+ · [uv](https://github.com/astral-sh/uv) · `node`/`npx` for npm-based servers · Docker optional: not used for hot-reload, only to cage community servers when installed.
 
 ## Three things it does
 
