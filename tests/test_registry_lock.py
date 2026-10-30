@@ -1,6 +1,7 @@
 """Tests for _registry_lock — concurrent shapeshift/shiftback safety."""
 
 import asyncio
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -147,3 +148,84 @@ async def test_local_http_only_error_does_not_shed_current_form():
     mock_state._do_shed.assert_not_called()
     assert session["shapeshift_tools"] == ["existing_tool"]
     assert session["current_form"] == "current-server"
+
+
+# --- Real-handler races (Codex P0) ---
+
+
+@pytest.mark.asyncio
+async def test_shiftback_does_not_kill_a_form_mounted_while_it_notifies():
+    """shiftback() awaits client notifications after releasing the lock. A mount
+    that lands in that window owns current_form_pool_key; shiftback must kill
+    the process it unmounted, not the new one."""
+    ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+    from kitsune_mcp.transport import _process_pool
+
+    _reset_session()
+    old_entry, new_entry = MagicMock(name="old"), MagicMock(name="new")
+    old_entry.proc.wait = AsyncMock(return_value=0)
+    old_entry.name = new_entry.name = "srv"
+    _process_pool["old-key"] = old_entry
+    _process_pool["new-key"] = new_entry
+    session["shapeshift_tools"] = ["old_tool"]
+    session["current_form"] = "old"
+    session["current_form_pool_key"] = "old-key"
+    session["current_form_has_process"] = True
+
+    async def concurrent_mount():
+        session["current_form"] = "new"
+        session["current_form_pool_key"] = "new-key"
+        session["current_form_has_process"] = True
+
+    ctx = MagicMock()
+    ctx.session.send_tool_list_changed = AsyncMock(side_effect=concurrent_mount)
+    killed = []
+    try:
+        with (
+            patch.object(ss._state, "_do_shed", return_value=["old_tool"]),
+            patch.object(ss, "_kill_process_tree", side_effect=lambda p: killed.append(p)),
+        ):
+            await ss.shiftback(ctx, kill=True)
+        assert killed == [old_entry.proc]
+        assert "new-key" in _process_pool
+        assert session["current_form_pool_key"] == "new-key"
+    finally:
+        _process_pool.pop("old-key", None)
+        _process_pool.pop("new-key", None)
+        _reset_session()
+
+
+@pytest.mark.asyncio
+async def test_pool_connection_mount_waits_for_registry_lock():
+    """Mounting a connect()ed server sheds and registers tools, so it must hold
+    _registry_lock like the registry path does."""
+    ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+
+    _reset_session()
+    session["connections"] = {"k": {"name": "dev", "command": "python srv.py", "tools": []}}
+    shed = MagicMock(return_value=[])
+    transport = MagicMock()
+    transport.list_tools = AsyncMock(return_value=[])
+    # A fresh lock: the module-level one binds to the first event loop that
+    # contends for it, and each test gets its own loop.
+    lock = asyncio.Lock()
+    try:
+        with (
+            patch.object(ss, "_registry_lock", lock),
+            patch.object(ss._state, "_do_shed", shed),
+            patch.object(ss._state, "PersistentStdioTransport", return_value=transport),
+            patch.object(ss, "_commit_shapeshift", AsyncMock(return_value="ok")),
+        ):
+            await lock.acquire()
+            task = asyncio.create_task(ss.shapeshift("dev", ctx=MagicMock()))
+            for _ in range(5):
+                await asyncio.sleep(0)
+            assert not shed.called, "pool mount shed tools without holding the lock"
+            lock.release()
+            assert await task == "ok"
+            assert shed.called
+    finally:
+        if lock.locked():
+            lock.release()
+        session["connections"] = {}
+        _reset_session()
