@@ -8,6 +8,18 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.22.5] — 2026-10-30
+
+### Fixed
+- **HTTP/Smithery servers reuse their MCP session** (#66). Every `call()` and tool listing used to run the full initialize handshake and drop the `mcp-session-id`, costing two extra round-trips per call and a new upstream session each time. Sessions are now cached per endpoint, keyed by the bearer token and config, so a token refresh or changed credentials start a new one. A rejected session (404/400, network error) falls back to one fresh handshake; 401/403 keeps the existing auth handling. Servers without a session id stay stateless.
+- JSON-RPC request ids are unique within an HTTP session (were always `2`).
+
+### Added
+- README: PyPI and npm download badges.
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1).
+
+---
+
 ## [0.22.4] — 2026-10-19
 
 Docs and packaging only; no runtime changes.
