@@ -485,6 +485,29 @@ def _parse_sse(text: str) -> dict | None:
     return None
 
 
+def _parse_rpc_body(text: str) -> dict | None:
+    """Read a JSON-RPC message from a Streamable HTTP response: SSE or plain JSON."""
+    msg = _parse_sse(text)
+    if msg is not None:
+        return msg
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+class CallOutcomeUnknown(RuntimeError):
+    """A tools/call reached the server but no result came back; it may have run."""
+
+
+def _outcome_unknown_message(tool: str, server: str, reason: str) -> str:
+    return (
+        f"⚠️  '{tool}' on {server}: outcome unknown, {reason}.\n"
+        f"  The call may have run. Check its effect before calling it again."
+    )
+
+
 # MCP sessions from HTTP initialize, reused across calls so each tool call
 # skips the handshake (#66). The key hashes the bearer token and config, so a
 # new token or changed credentials start a new session.
@@ -584,19 +607,37 @@ class HTTPSSETransport(BaseTransport):
             "params": params,
         }
 
+        # Only a request the server provably did not run may be sent again: a
+        # tools/call that got lost after sending could repeat a mutation.
+        replay_safe = method != "tools/call"
         cached = _http_sessions.pop(key, None)
         if cached:
             try:
                 r = await _post(request, *cached)
-            except httpx.HTTPError:
+            except (httpx.ConnectError, httpx.ConnectTimeout):
+                r = None  # never reached the server
+            except httpx.HTTPError as e:
+                if not replay_safe:
+                    _http_sessions[key] = cached
+                    raise CallOutcomeUnknown(
+                        f"connection lost after sending ({type(e).__name__})"
+                    ) from e
                 r = None
             if r is not None and r.status_code in (401, 403):
                 raise PermissionError(f"HTTP {r.status_code}")
             if r is not None and r.is_success:
-                msg = _parse_sse(r.text)
+                msg = _parse_rpc_body(r.text)
                 if msg is not None:
                     _http_sessions[key] = cached
                     return msg
+                if not replay_safe:
+                    _http_sessions[key] = cached
+                    raise CallOutcomeUnknown(
+                        "the server accepted the call but its response was unreadable"
+                    )
+            elif r is not None and r.status_code not in (400, 404) and not replay_safe:
+                # 400/404 mean the session was rejected before the call ran.
+                raise CallOutcomeUnknown(f"HTTP {r.status_code} from the server")
 
         r = await _post(_initialize_request())
         if r.status_code in (401, 403):
@@ -604,7 +645,7 @@ class HTTPSSETransport(BaseTransport):
         r.raise_for_status()
 
         session_id = r.headers.get("mcp-session-id")
-        init_msg = _parse_sse(r.text)
+        init_msg = _parse_rpc_body(r.text)
         if init_msg and "error" in init_msg:
             raise RuntimeError(f"Initialize failed: {init_msg['error']}")
         proto = _negotiated_version(init_msg)
@@ -613,7 +654,7 @@ class HTTPSSETransport(BaseTransport):
 
         r2 = await _post(request, session_id, proto)
         r2.raise_for_status()
-        msg = _parse_sse(r2.text)
+        msg = _parse_rpc_body(r2.text)
         # Stateless servers send no session id; they get a fresh handshake each time.
         if session_id and msg is not None:
             _http_sessions[key] = (session_id, proto)
@@ -635,6 +676,8 @@ class HTTPSSETransport(BaseTransport):
 
         try:
             response = await asyncio.wait_for(_run(token), timeout=TIMEOUT_HTTP_TOOL)
+        except CallOutcomeUnknown as e:
+            return _outcome_unknown_message(tool, self.qualified_name, str(e))
         except TimeoutError:
             return (
                 f"Timeout connecting to {self.qualified_name}. Server may be sleeping — try again."
@@ -1001,14 +1044,13 @@ class PersistentStdioTransport(BaseTransport):
                     entry.proc.stdout, expected_id=msg_id, timeout=TIMEOUT_STDIO_TOOL
                 )
                 if tool_resp is None:
-                    if attempt == 0 and not entry.is_alive():
-                        # Process died while we were waiting — retry once
+                    if not entry.is_alive():
+                        # Died after the request landed: the tool may have run,
+                        # so don't send it again. The next call starts fresh.
                         _process_pool.pop(self._pool_key, None)
-                        try:
-                            entry = await self._start_process()
-                        except RuntimeError as e:
-                            return f"Reconnect failed: {e}"
-                        continue
+                        return _outcome_unknown_message(
+                            tool, self.install_cmd[0], "the server process exited before replying"
+                        )
                     return f"No response from {self.install_cmd[0]} for tool '{tool}'"
                 if "error" in tool_resp:
                     err = tool_resp["error"]
