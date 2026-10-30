@@ -277,3 +277,13 @@ def _clear_process_pool():
         _process_pool.clear()
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _clear_http_sessions():
+    """Cached MCP session ids must not leak between tests that reuse an endpoint."""
+    from kitsune_mcp.transport import _http_sessions
+
+    _http_sessions.clear()
+    yield
+    _http_sessions.clear()

@@ -2,6 +2,8 @@ import asyncio
 import atexit
 import contextlib
 import datetime
+import hashlib
+import itertools
 import json
 import os
 import re
@@ -11,6 +13,8 @@ import time
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+import httpx
 
 import kitsune_mcp.credentials as _creds
 from kitsune_mcp import oauth
@@ -481,6 +485,18 @@ def _parse_sse(text: str) -> dict | None:
     return None
 
 
+# MCP sessions from HTTP initialize, reused across calls so each tool call
+# skips the handshake (#66). The key hashes the bearer token and config, so a
+# new token or changed credentials start a new session.
+_http_sessions: dict[tuple[str, str], tuple[str, str]] = {}
+_http_request_ids = itertools.count(2)
+
+
+def _http_session_key(endpoint: str, bearer: str, config: dict) -> tuple[str, str]:
+    blob = f"{bearer}\0{json.dumps(config, sort_keys=True, default=str)}"
+    return endpoint, hashlib.sha256(blob.encode()).hexdigest()
+
+
 # ---------------------------------------------------------------------------
 # Transports
 # ---------------------------------------------------------------------------
@@ -536,21 +552,23 @@ class HTTPSSETransport(BaseTransport):
         endpoint = f"{_SMITHERY_API_BASE}/connect/{namespace}/{conn_id}/mcp"
         return endpoint, token
 
-    async def execute(self, tool: str, args: dict, config: dict) -> str:
-        result = await self._connect_endpoint(config)
-        if result is None:
-            return self._connect_failure_message()
-        endpoint, token = result
+    async def _rpc(
+        self, endpoint: str, bearer: str, config: dict, method: str, params: dict
+    ) -> dict | None:
+        """Send one JSON-RPC request, reusing this endpoint's MCP session when one is cached.
 
-        def _headers(t: str) -> dict:
-            return {
-                "Authorization": f"Bearer {t}",
+        Raises PermissionError on 401/403. An expired or unknown session (the
+        spec answers 404, some servers 400) falls back to a fresh handshake.
+        """
+        client = _get_http_client()
+        key = _http_session_key(endpoint, bearer, config)
+
+        async def _post(payload, session_id=None, proto=None):
+            hdrs = {
+                "Authorization": f"Bearer {bearer}",
                 "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream",
             }
-
-        async def _post(client, payload, bearer, session_id=None, proto=None):
-            hdrs = _headers(bearer)
             if session_id:
                 hdrs["mcp-session-id"] = session_id
             if proto:
@@ -559,38 +577,60 @@ class HTTPSSETransport(BaseTransport):
                 endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
             )
 
-        async def _run(bearer: str):
-            client = _get_http_client()
-            r = await _post(client, _initialize_request(), bearer)
-            if r.status_code in (401, 403):
+        request = {
+            "jsonrpc": "2.0",
+            "id": next(_http_request_ids),
+            "method": method,
+            "params": params,
+        }
+
+        cached = _http_sessions.pop(key, None)
+        if cached:
+            try:
+                r = await _post(request, *cached)
+            except httpx.HTTPError:
+                r = None
+            if r is not None and r.status_code in (401, 403):
                 raise PermissionError(f"HTTP {r.status_code}")
-            r.raise_for_status()
+            if r is not None and r.is_success:
+                msg = _parse_sse(r.text)
+                if msg is not None:
+                    _http_sessions[key] = cached
+                    return msg
 
-            mcp_session_id = r.headers.get("mcp-session-id")
-            init_msg = _parse_sse(r.text)
-            if init_msg and "error" in init_msg:
-                raise RuntimeError(f"Initialize failed: {init_msg['error']}")
-            proto = _negotiated_version(init_msg)
+        r = await _post(_initialize_request())
+        if r.status_code in (401, 403):
+            raise PermissionError(f"HTTP {r.status_code}")
+        r.raise_for_status()
 
-            await _post(client, _initialized_notification(), bearer, mcp_session_id, proto)
+        session_id = r.headers.get("mcp-session-id")
+        init_msg = _parse_sse(r.text)
+        if init_msg and "error" in init_msg:
+            raise RuntimeError(f"Initialize failed: {init_msg['error']}")
+        proto = _negotiated_version(init_msg)
 
-            r2 = await _post(
-                client,
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {"name": tool, "arguments": args},
-                },
-                bearer,
-                mcp_session_id,
-                proto,
+        await _post(_initialized_notification(), session_id, proto)
+
+        r2 = await _post(request, session_id, proto)
+        r2.raise_for_status()
+        msg = _parse_sse(r2.text)
+        # Stateless servers send no session id; they get a fresh handshake each time.
+        if session_id and msg is not None:
+            _http_sessions[key] = (session_id, proto)
+        return msg
+
+    async def execute(self, tool: str, args: dict, config: dict) -> str:
+        result = await self._connect_endpoint(config)
+        if result is None:
+            return self._connect_failure_message()
+        endpoint, token = result
+
+        async def _run(bearer: str):
+            msg = await self._rpc(
+                endpoint, bearer, config, "tools/call", {"name": tool, "arguments": args}
             )
-            r2.raise_for_status()
-
-            msg = _parse_sse(r2.text)
             if msg is None:
-                raise RuntimeError(f"Empty response: {r2.text[:200]}")
+                raise RuntimeError("Empty response")
             return msg
 
         try:
@@ -657,48 +697,8 @@ class HTTPSSETransport(BaseTransport):
             return []
         endpoint, token = result
 
-        def _headers(t: str) -> dict:
-            return {
-                "Authorization": f"Bearer {t}",
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
-            }
-
-        async def _post(client, payload, bearer, session_id=None, proto=None):
-            hdrs = _headers(bearer)
-            if session_id:
-                hdrs["mcp-session-id"] = session_id
-            if proto:
-                hdrs["MCP-Protocol-Version"] = proto
-            return await client.post(
-                endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
-            )
-
         async def _run(bearer: str) -> list[dict]:
-            client = _get_http_client()
-            r = await _post(client, _initialize_request(), bearer)
-            if r.status_code in (401, 403):
-                raise PermissionError(f"HTTP {r.status_code}")
-            r.raise_for_status()
-            mcp_session_id = r.headers.get("mcp-session-id")
-            proto = _negotiated_version(_parse_sse(r.text))
-
-            await _post(client, _initialized_notification(), bearer, mcp_session_id, proto)
-
-            r2 = await _post(
-                client,
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/list",
-                    "params": {},
-                },
-                bearer,
-                mcp_session_id,
-                proto,
-            )
-            r2.raise_for_status()
-            msg = _parse_sse(r2.text)
+            msg = await self._rpc(endpoint, bearer, config, "tools/list", {})
             if msg and "result" in msg:
                 return msg["result"].get("tools", [])
             return []

@@ -414,6 +414,187 @@ class TestHTTPListTools:
 
 
 # ---------------------------------------------------------------------------
+# HTTP MCP session reuse (#66)
+# ---------------------------------------------------------------------------
+
+INIT_OK = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
+
+
+def _tool_ok(text: str = "ok") -> httpx.Response:
+    return _sse(
+        {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": text}]}}
+    )
+
+
+def _methods(route) -> list[str | None]:
+    return [json.loads(c.request.content).get("method") for c in route.calls]
+
+
+class TestHTTPSessionReuse:
+    async def test_second_call_reuses_session_without_handshake(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok("a"),
+                    _tool_ok("b"),
+                ]
+            )
+            assert "a" in await t.execute("tool", {}, {})
+            assert "b" in await t.execute("tool", {}, {})
+        assert _methods(route) == [
+            "initialize",
+            "notifications/initialized",
+            "tools/call",
+            "tools/call",
+        ]
+        last = route.calls[-1].request
+        assert last.headers["mcp-session-id"] == "sid-1"
+        assert last.headers["MCP-Protocol-Version"] == "2025-06-18"
+
+    async def test_list_tools_and_execute_share_the_session(self):
+        t, patcher = _patched_transport()
+        tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}]}}
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[_sse(INIT_OK, "sid-1"), httpx.Response(202), _sse(tools), _tool_ok()]
+            )
+            await t.list_tools()
+            await t.execute("a", {}, {})
+        assert _methods(route).count("initialize") == 1
+
+    async def test_request_ids_are_unique_within_a_session(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[_sse(INIT_OK, "sid-1"), httpx.Response(202), _tool_ok(), _tool_ok()]
+            )
+            await t.execute("tool", {}, {})
+            await t.execute("tool", {}, {})
+        ids = [
+            json.loads(c.request.content)["id"]
+            for c in route.calls
+            if json.loads(c.request.content).get("method") == "tools/call"
+        ]
+        assert len(set(ids)) == 2
+
+    async def test_changed_config_starts_new_session(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok(),
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok(),
+                ]
+            )
+            await t.execute("tool", {}, {"apiKey": "old"})
+            await t.execute("tool", {}, {"apiKey": "new"})
+        assert _methods(route).count("initialize") == 2
+        assert route.calls[-1].request.headers["mcp-session-id"] == "sid-2"
+
+    async def test_changed_token_starts_new_session(self):
+        t = HTTPSSETransport("org/server")
+        tokens = AsyncMock(side_effect=[(ENDPOINT, "tok-1"), (ENDPOINT, "tok-2")])
+        with patch.object(t, "_connect_endpoint", tokens), respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok(),
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok(),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            await t.execute("tool", {}, {})
+        assert _methods(route).count("initialize") == 2
+
+    @pytest.mark.parametrize("status", [404, 400])
+    async def test_expired_session_falls_back_to_fresh_handshake(self, status):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok("first"),
+                    httpx.Response(status),  # cached session rejected
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok("second"),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            assert "second" in await t.execute("tool", {}, {})
+        assert route.calls[-1].request.headers["mcp-session-id"] == "sid-2"
+        assert list(tp._http_sessions.values()) == [("sid-2", "2025-06-18")]
+
+    async def test_network_error_on_cached_session_falls_back(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok("first"),
+                    httpx.ConnectError("reset"),
+                    _sse(INIT_OK, "sid-2"),
+                    httpx.Response(202),
+                    _tool_ok("second"),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            assert "second" in await t.execute("tool", {}, {})
+
+    async def test_401_on_cached_session_drops_it_and_reports_auth(self):
+        t, patcher = _patched_transport()
+        registry = MagicMock()
+        registry.get_server = AsyncMock(return_value=None)
+        with (
+            patcher,
+            respx.mock,
+            patch.object(tp, "SmitheryRegistry", MagicMock(return_value=registry)),
+        ):
+            respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK, "sid-1"),
+                    httpx.Response(202),
+                    _tool_ok(),
+                    httpx.Response(401),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            result = await t.execute("tool", {}, {})
+        assert "Auth failed" in result
+        assert tp._http_sessions == {}
+
+    async def test_stateless_server_is_not_cached(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=[
+                    _sse(INIT_OK),
+                    httpx.Response(202),
+                    _tool_ok(),
+                    _sse(INIT_OK),
+                    httpx.Response(202),
+                    _tool_ok(),
+                ]
+            )
+            await t.execute("tool", {}, {})
+            await t.execute("tool", {}, {})
+        assert _methods(route).count("initialize") == 2
+        assert tp._http_sessions == {}
+
+
+# ---------------------------------------------------------------------------
 # StdioTransport error paths
 # ---------------------------------------------------------------------------
 
