@@ -8,6 +8,23 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.22.6] — 2026-10-31
+
+Security and reliability fixes from a code review (#90).
+
+### Fixed
+- **No `.env` injection through credential values.** A value containing a newline, CR or NUL could add extra lines to `~/.kitsune/.env`, such as `KITSUNE_SANDBOX=off`, getting past the protected-variable check. `key()`, `auth()` and `auto(keys=)` now refuse such values and invalid variable names; credential harvesting skips them.
+- **Schema discovery uses the Docker cage.** `auto()` and `test()` started a community package uncaged just to read its tool list, and only applied the sandbox policy to the call afterwards. Discovery now follows the same policy as execution.
+- **Tool calls are never replayed when they may already have run.** Over HTTP, a call on a cached session was sent again after a read timeout, a dropped connection, a 5xx, or a response that wasn't SSE. Servers that answer with plain JSON, which Streamable HTTP allows, ran every call twice. Responses are now read as SSE or JSON, and a call is only re-sent when the server provably never ran it (connection refused, or the session rejected with 400/404). Over stdio, a call is no longer re-sent to a new process when the old one died after receiving it. In both cases Kitsune now reports that the outcome is unknown. Read-only requests such as `tools/list` still retry.
+- **Mount and unmount no longer stop the wrong process.** `shapeshift()` with no arguments could kill the process of a server mounted while it was sending its notifications. Mounting a `connect()`ed server now takes the same lock as a registry mount.
+
+### Changed
+- **Behaviour:** a lost tool call now returns "outcome unknown, the call may have run" instead of retrying silently.
+- Docs and package descriptions say clearly that Docker is optional: hot-reload never uses it, it only cages community packages when installed.
+- README badge reads "Awesome MCP Servers: listed".
+
+---
+
 ## [0.22.5] — 2026-10-30
 
 ### Fixed
