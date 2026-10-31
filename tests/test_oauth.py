@@ -665,3 +665,37 @@ class TestLogout:
         assert origin not in oauth._force_login_origins  # flag consumed
         oauth._meta_cache.pop("https://e2e/mcp", None)
         oauth._force_login_origins.discard(origin)
+
+
+# ---------------------------------------------------------------------------
+# stdout is the MCP JSON-RPC channel (Codex P1)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthorizeKeepsStdoutClean:
+    @pytest.mark.parametrize("headless", [True, False])
+    def test_login_messages_go_to_stderr(self, monkeypatch, capsys, headless):
+        meta = oauth.AuthMeta(
+            issuer="https://idp.example",
+            authorization_endpoint="https://idp.example/authorize",
+            token_endpoint="https://idp.example/token",
+            registration_endpoint=None,
+            code_challenge_methods_supported=["S256"],
+            grant_types_supported=["authorization_code"],
+            token_endpoint_auth_methods_supported=["none"],
+        )
+        client = oauth.ClientInfo(
+            client_id="cid", redirect_uri=f"http://127.0.0.1:{oauth._pick_free_port()}/cb"
+        )
+        if headless:
+            monkeypatch.setenv("KITSUNE_NO_BROWSER", "1")
+        else:
+            monkeypatch.delenv("KITSUNE_NO_BROWSER", raising=False)
+            monkeypatch.setattr(oauth.webbrowser, "open", lambda url: True)
+        # No callback ever arrives: authorize() prints its message, then times out.
+        monkeypatch.setattr(oauth, "_OAUTH_LISTENER_TIMEOUT", 0.01)
+        with pytest.raises(TimeoutError):
+            asyncio.run(oauth.authorize(meta, client))
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert "OAuth" in err

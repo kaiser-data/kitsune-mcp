@@ -19,6 +19,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 import urllib.parse
@@ -298,11 +299,13 @@ async def authorize(meta: AuthMeta, client: ClientInfo, force_login: bool = Fals
                 f"   {auth_url}\n"
                 f"Kitsune will capture the callback on {client.redirect_uri}\n"
                 f"(timeout: {int(_OAUTH_LISTENER_TIMEOUT)}s)",
+                file=sys.stderr,  # stdout is the MCP JSON-RPC channel
                 flush=True,
             )
         else:
             print(
                 f"🔐 Opening browser for OAuth to {urllib.parse.urlparse(meta.issuer).netloc}...",
+                file=sys.stderr,  # stdout is the MCP JSON-RPC channel
                 flush=True,
             )
 
