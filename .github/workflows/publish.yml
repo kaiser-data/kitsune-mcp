@@ -76,17 +76,28 @@ jobs:
   mcp-registry:
     name: Publish to MCP Registry
     runs-on: ubuntu-latest
-    needs: [pypi]
+    needs: [pypi, npm]
     # Skipped on tag push — only runs when explicitly requested via
     # workflow_dispatch, because the registry rejects publishes if either
     # the npm or PyPI package entry in server.json isn't live yet.
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_registry
+    # always() lets it run when npm was skipped (publish_npm=false, npm already
+    # out); it still stops if PyPI or npm failed.
+    if: >-
+      always() &&
+      github.event_name == 'workflow_dispatch' && inputs.publish_registry &&
+      needs.pypi.result == 'success' &&
+      (needs.npm.result == 'success' || needs.npm.result == 'skipped')
     permissions:
       id-token: write
       contents: read
 
     steps:
       - uses: actions/checkout@v7
+
+      # A fresh npm release can take minutes to appear; publishing earlier
+      # fails with 400 "version not found".
+      - name: Wait for npm and PyPI to serve the server.json versions
+        run: python3 .github/scripts/wait_for_packages.py server.json 600
 
       - name: Install mcp-publisher
         run: |
