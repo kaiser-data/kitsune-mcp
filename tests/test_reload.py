@@ -73,7 +73,7 @@ class TestReload:
             calls.append(("release", name))
             return f"Released: {name} (PID 99999) | uptime: 1s | calls: 0"
 
-        async def _connect(command, name=""):
+        async def _connect(command, name="", **kw):
             calls.append(("connect", command, name))
             return f"Connected: {name} (PID 12345)\nTools (1): summarize"
 
@@ -107,9 +107,11 @@ class TestReload:
     @pytest.mark.asyncio
     async def test_no_connections_at_all(self):
         ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        from kitsune_mcp.session import session
         from kitsune_mcp.transport import _process_pool
 
         _process_pool.clear()
+        session["connections"].clear()  # a stored launch record alone is reloadable
         out = await ss.reload("dev")
         assert "No active connections" in out
 
@@ -137,7 +139,7 @@ class TestReload:
         async def _release(name):
             return "Released: dev (PID 99999) | uptime: 1s | calls: 0"
 
-        async def _connect(command, name=""):
+        async def _connect(command, name="", **kw):
             return "Timeout starting 'uvx --from . my-mcp-server' after 60s."
 
         async def _shapeshift(server_id="", ctx=None, **kw):
@@ -154,6 +156,97 @@ class TestReload:
         assert "could not restart" in out
         assert "Timeout" in out
         assert remounted == []  # remount skipped when the fresh process failed
+
+
+class TestReloadRecovery:
+    """Codex P1: reload keeps launch settings, survives a failed restart, and
+    doesn't claim a remount that failed."""
+
+    @pytest.mark.asyncio
+    async def test_reload_keeps_custom_launch_settings(self):
+        from kitsune_mcp.session import session
+
+        ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        pool_key, _ = _seed_connection()
+        session["connections"][pool_key].update({"timeout": 180, "inherit_stderr": False})
+        seen = {}
+
+        async def _connect(command, name="", **kw):
+            seen.update(kw)
+            return f"Connected: {name} (PID 1)"
+
+        async def _shapeshift(server_id="", ctx=None, **kw):
+            return "Now: dev"
+
+        with (
+            patch.object(ss, "release", MagicMock(side_effect=_async("Released: dev"))),
+            patch.object(ss, "connect", _connect),
+            patch.object(ss, "shapeshift", _shapeshift),
+        ):
+            await ss.reload("dev")
+        assert seen == {"timeout": 180, "inherit_stderr": False}
+
+    @pytest.mark.asyncio
+    async def test_failed_restart_can_be_retried_with_reload(self):
+        from kitsune_mcp.session import session
+        from kitsune_mcp.transport import _process_pool
+
+        ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        pool_key, _ = _seed_connection()
+        attempts = []
+
+        async def _connect(command, name="", **kw):
+            attempts.append(command)
+            if len(attempts) == 1:
+                return "SyntaxError in my_mcp_server.py line 3"
+            return f"Connected: {name} (PID 2)"
+
+        async def _shapeshift(server_id="", ctx=None, **kw):
+            return "Now: dev"
+
+        try:
+            with (
+                patch.object(ss, "connect", _connect),
+                patch.object(ss, "shapeshift", _shapeshift),
+                patch.object(ss, "_kill_process_tree", MagicMock()),
+            ):
+                first = await ss.reload("dev")
+                assert "could not restart" in first
+                assert pool_key not in _process_pool  # old process is gone
+                second = await ss.reload("dev")  # fixed the syntax error, retry
+        finally:
+            _process_pool.pop(pool_key, None)
+            session["connections"].pop(pool_key, None)
+        assert attempts == ["uvx --from . my-mcp-server"] * 2
+        assert "Reloaded: dev" in second
+
+    @pytest.mark.asyncio
+    async def test_failed_remount_is_not_reported_as_remounted(self):
+        ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        _seed_connection()
+
+        async def _connect(command, name="", **kw):
+            return f"Connected: {name} (PID 3)"
+
+        async def _shapeshift(server_id="", ctx=None, **kw):
+            return "❌ shapeshift failed: no tools could be registered from 'dev'."
+
+        with (
+            patch.object(ss, "release", MagicMock(side_effect=_async("Released: dev"))),
+            patch.object(ss, "connect", _connect),
+            patch.object(ss, "shapeshift", _shapeshift),
+        ):
+            out = await ss.reload("dev")
+        assert "remounted" not in out.lower().split("\n")[0]
+        assert "remount failed" in out.lower()
+        assert "❌ shapeshift failed" in out
+
+
+def _async(value):
+    async def _f(*a, **k):
+        return value
+
+    return _f
 
 
 # ---------------------------------------------------------------------------
