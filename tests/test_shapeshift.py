@@ -393,6 +393,32 @@ class TestRegisterProxyPrompts:
         # Cleanup
         mcp._prompt_manager._prompts.pop("greet_user", None)
 
+    async def test_each_proxy_calls_its_own_prompt(self):
+        """Registering two prompts must not leave both proxies calling the last
+        one (loop-variable late binding, Codex P1)."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from kitsune_mcp.app import mcp
+        from server import _register_proxy_prompts
+
+        transport = MagicMock()
+        transport.get_prompt = AsyncMock(
+            side_effect=lambda name, args: [{"role": "user", "content": {"text": f"from {name}"}}]
+        )
+        prompts = [
+            {"name": "first_prompt", "arguments": []},
+            {"name": "second_prompt", "arguments": []},
+        ]
+        try:
+            _register_proxy_prompts(transport, prompts)
+            first = await mcp._prompt_manager._prompts["first_prompt"].fn()
+            second = await mcp._prompt_manager._prompts["second_prompt"].fn()
+        finally:
+            mcp._prompt_manager._prompts.pop("first_prompt", None)
+            mcp._prompt_manager._prompts.pop("second_prompt", None)
+        assert "from first_prompt" in first
+        assert "from second_prompt" in second
+
     async def test_skips_empty_name(self):
         from server import _register_proxy_prompts
 
