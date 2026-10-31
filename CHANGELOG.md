@@ -6,6 +6,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.22.7] — 2026-10-31
+
+Hot-reload reliability (#94) and a release-pipeline fix (#93).
+
 ### Fixed
 - **`uvx --from .` doesn't reload your code.** uv builds a local project once and keeps serving that cached build, so `reload()` restarted the old code (measured on every source edit). The docs now use `uv run my-mcp-server`, which installs the project editable, and `connect()`/`reload()` warn when they see `uvx --from <local path>` without a refresh flag.
 - **`reload()` recovers from a failed restart.** A restart that failed (say, a syntax error) dropped the connection record, so the next `reload("dev")` answered "No connection named 'dev'". The record is kept and `reload()` starts it again. Custom `timeout` and `inherit_stderr` from `connect()` now survive a reload, and a failed remount is reported as one instead of "remounted".
@@ -14,6 +20,9 @@ All notable changes to this project are documented here.
 
 ### Added
 - End-to-end test: edit a real server's source, `reload()`, and check the new code runs.
+
+### Changed
+- Release pipeline: the MCP Registry job waits until npm and PyPI serve the exact `server.json` versions (#93), instead of failing with "version not found" and needing a manual rerun.
 
 ---
 

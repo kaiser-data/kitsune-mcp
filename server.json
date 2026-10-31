@@ -7,12 +7,12 @@
     "source": "github"
   },
   "websiteUrl": "https://kaiser-data.github.io/kitsune-mcp/",
-  "version": "0.22.6",
+  "version": "0.22.7",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "kitsune-mcp",
-      "version": "0.22.6",
+      "version": "0.22.7",
       "transport": {
         "type": "stdio"
       },
@@ -29,7 +29,7 @@
     {
       "registryType": "pypi",
       "identifier": "kitsune-mcp",
-      "version": "0.22.6",
+      "version": "0.22.7",
       "transport": {
         "type": "stdio"
       },
