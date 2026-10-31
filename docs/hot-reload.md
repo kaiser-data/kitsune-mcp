@@ -43,9 +43,16 @@ release("dev")  # stop when done
 Swap the command. The loop stays the same.
 
 ```python
-connect("uvx --from . my-mcp-server", name="dev")  # Python package
+connect("uv run my-mcp-server", name="dev")  # Python package
 connect("node build/index.js", name="dev")  # Node
 ```
+
+Use `uv run`, not `uvx --from .`, for a Python package you're editing.
+`uv run` installs the project in editable mode, so every `reload()` runs your
+latest code. `uvx --from .` builds the project once and keeps serving that
+cached build, so `reload()` would restart the old code; Kitsune warns when it
+sees that command. If Kitsune runs from another directory, point uv at the
+project: `uv run --directory /path/to/project my-mcp-server`.
 
 ## Troubleshooting
 
@@ -58,3 +65,7 @@ Tools don't appear in the client
 
 Server crashes on start
 :   The traceback is in Kitsune's stderr. Fix it, then `reload("dev")`.
+
+`reload()` still runs the old code
+:   You probably launched with `uvx --from .`, which serves a cached build.
+    `release("dev")`, then `connect("uv run my-mcp-server", name="dev")`.

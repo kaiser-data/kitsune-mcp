@@ -353,3 +353,57 @@ class TestCallOnConnectAlias:
             session["current_form_pool_key"] = None
 
         assert used == [pool_key]
+
+
+class TestStaleUvxWarning:
+    """`uvx --from <local dir>` serves uv's cached build, so reload() would
+    restart the old code. Measured on uv 0.7: stale on every source edit until
+    --refresh-package/--reinstall; `uv run` (editable install) stays fresh."""
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "uvx --from . my-mcp-server",
+            "uvx --from ./srv my-mcp-server",
+            "uvx --from /home/me/srv my-mcp-server",
+            "uvx --from=~/srv my-mcp-server",
+        ],
+    )
+    def test_local_uvx_build_is_flagged(self, command):
+        ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        note = ss._stale_build_note(command.split())
+        assert "uv run" in note
+        assert "old code" in note
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "uvx my-mcp-server",
+            "uvx --from my-mcp-server==1.2 my-mcp-server",
+            "uvx --from git+https://github.com/a/b my-mcp-server",
+            "uvx --refresh-package my-mcp-server --from . my-mcp-server",
+            "uvx --reinstall --from . my-mcp-server",
+            "uvx --no-cache --from . my-mcp-server",
+            "uv run my-mcp-server",
+            "python server.py",
+        ],
+    )
+    def test_fresh_or_remote_launches_are_not_flagged(self, command):
+        ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        assert ss._stale_build_note(command.split()) == ""
+
+    @pytest.mark.asyncio
+    async def test_reload_output_carries_the_warning(self):
+        ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+        _seed_connection()
+
+        async def _connect(command, name="", **kw):
+            return f"Connected: {name} (PID 4)"
+
+        with (
+            patch.object(ss, "release", MagicMock(side_effect=_async("Released: dev"))),
+            patch.object(ss, "connect", _connect),
+            patch.object(ss, "shapeshift", MagicMock(side_effect=_async("Now: dev"))),
+        ):
+            out = await ss.reload("dev")
+        assert "uv run" in out

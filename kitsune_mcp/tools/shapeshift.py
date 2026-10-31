@@ -736,6 +736,39 @@ async def craft(
     )
 
 
+_FRESH_BUILD_FLAGS = (
+    "--refresh",
+    "--refresh-package",
+    "--reinstall",
+    "--reinstall-package",
+    "--no-cache",
+)
+
+
+def _stale_build_note(argv: list[str]) -> str:
+    """Warn when uvx would serve a cached build of a local project.
+
+    `uvx --from <dir>` builds the project once and keeps reusing that build, so
+    a reload() restarts the old code. `uv run` installs it editable instead.
+    """
+    if not argv or argv[0] != "uvx" or any(a.split("=")[0] in _FRESH_BUILD_FLAGS for a in argv):
+        return ""
+    source = ""
+    for i, arg in enumerate(argv):
+        if arg == "--from" and i + 1 < len(argv):
+            source = argv[i + 1]
+        elif arg.startswith("--from="):
+            source = arg.split("=", 1)[1]
+    if not source.startswith((".", "/", "~")):
+        return ""
+    script = argv[-1]
+    return (
+        f"\n⚠️  uvx --from {source} reuses a cached build: reload() would restart the old code.\n"
+        f'   Use connect("uv run --directory {source} {script}") for live edits, '
+        f"or add --refresh-package <name>."
+    )
+
+
 @mcp.tool()
 async def connect(
     command: str, name: str = "", timeout: int = 60, inherit_stderr: bool = True
@@ -822,6 +855,9 @@ async def connect(
         tool_summary,
         f"Release with: release('{friendly}')",
     ]
+    stale_note = _stale_build_note(install_cmd)
+    if stale_note:
+        parts.append(stale_note)
     if setup_guide:
         parts.append(setup_guide)
         parts.append(f"\nCall setup('{friendly}') for step-by-step guidance.")
@@ -927,8 +963,11 @@ async def reload(name: str, ctx: Context | None = None) -> str:
     mount_out = await shapeshift(label, ctx)
     if mount_out.startswith("❌"):
         return f"Restarted: {label} ({old}), but remount failed\n\n{connect_out}\n\n{mount_out}"
+    stale_note = _stale_build_note(shlex.split(command))
+    if stale_note and stale_note.strip() in connect_out:
+        stale_note = ""  # connect() already warned
     return (
-        f"Reloaded: {label} ({old}, restarted, remounted)\n\n"
+        f"Reloaded: {label} ({old}, restarted, remounted){stale_note}\n\n"
         f"{connect_out}\n\n"
         f"Remounted:\n{mount_out}"
     )
