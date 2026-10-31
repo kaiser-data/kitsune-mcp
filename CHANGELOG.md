@@ -6,6 +6,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **`uvx --from .` doesn't reload your code.** uv builds a local project once and keeps serving that cached build, so `reload()` restarted the old code (measured on every source edit). The docs now use `uv run my-mcp-server`, which installs the project editable, and `connect()`/`reload()` warn when they see `uvx --from <local path>` without a refresh flag.
+- **`reload()` recovers from a failed restart.** A restart that failed (say, a syntax error) dropped the connection record, so the next `reload("dev")` answered "No connection named 'dev'". The record is kept and `reload()` starts it again. Custom `timeout` and `inherit_stderr` from `connect()` now survive a reload, and a failed remount is reported as one instead of "remounted".
+- **Prompt proxies call their own prompt.** With two or more prompts mounted, every proxy called the last one.
+- **OAuth login messages go to stderr.** They were printed to stdout, the MCP server's protocol channel on stdio.
+
+### Added
+- End-to-end test: edit a real server's source, `reload()`, and check the new code runs.
+
 ---
 
 ## [0.22.6] — 2026-10-31

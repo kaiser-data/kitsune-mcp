@@ -189,6 +189,21 @@ def _register_proxy_resources(transport: "BaseTransport", resources: list[dict])
     return registered
 
 
+def _make_prompt_proxy(transport: "BaseTransport", name: str):
+    """Build one prompt proxy. A factory, so each proxy binds its own name:
+    a closure defined in the registration loop would call the last prompt."""
+
+    async def _proxy(**kwargs) -> str:
+        messages = await transport.get_prompt(name, kwargs)
+        return "\n---\n".join(
+            f"[{m.get('role', 'user')}]: {m.get('content', {}).get('text', '')}"
+            for m in messages
+            if isinstance(m, dict)
+        )
+
+    return _proxy
+
+
 def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> list[str]:
     """Proxy prompts from a transport.
 
@@ -202,15 +217,7 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
             continue
         description = (prompt_schema.get("description") or "")[:120]
         args_schema = prompt_schema.get("arguments", [])
-        _name, _t = name, transport
-
-        async def _proxy(**kwargs) -> str:  # noqa: B023
-            messages = await _t.get_prompt(_name, kwargs)  # noqa: B023
-            return "\n---\n".join(
-                f"[{m.get('role', 'user')}]: {m.get('content', {}).get('text', '')}"
-                for m in messages
-                if isinstance(m, dict)
-            )
+        _proxy = _make_prompt_proxy(transport, name)
 
         # Build named parameter signature so FastMCP / Pydantic see correct arguments.
         # MUST set both __signature__ (for inspect) and __annotations__ (for Pydantic's

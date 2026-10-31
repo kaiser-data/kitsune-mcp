@@ -35,7 +35,7 @@ You're building `my-mcp-server`. It has a `summarize` tool that's returning junk
 
 ```python
 # Start the work-in-progress server as a pooled process, then mount its tools
-connect("uvx --from . my-mcp-server", name="dev")
+connect("uv run my-mcp-server", name="dev")
 shapeshift("dev")
 ```
 ```

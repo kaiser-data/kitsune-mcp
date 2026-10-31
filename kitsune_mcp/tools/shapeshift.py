@@ -736,6 +736,39 @@ async def craft(
     )
 
 
+_FRESH_BUILD_FLAGS = (
+    "--refresh",
+    "--refresh-package",
+    "--reinstall",
+    "--reinstall-package",
+    "--no-cache",
+)
+
+
+def _stale_build_note(argv: list[str]) -> str:
+    """Warn when uvx would serve a cached build of a local project.
+
+    `uvx --from <dir>` builds the project once and keeps reusing that build, so
+    a reload() restarts the old code. `uv run` installs it editable instead.
+    """
+    if not argv or argv[0] != "uvx" or any(a.split("=")[0] in _FRESH_BUILD_FLAGS for a in argv):
+        return ""
+    source = ""
+    for i, arg in enumerate(argv):
+        if arg == "--from" and i + 1 < len(argv):
+            source = argv[i + 1]
+        elif arg.startswith("--from="):
+            source = arg.split("=", 1)[1]
+    if not source.startswith((".", "/", "~")):
+        return ""
+    script = argv[-1]
+    return (
+        f"\n⚠️  uvx --from {source} reuses a cached build: reload() would restart the old code.\n"
+        f'   Use connect("uv run --directory {source} {script}") for live edits, '
+        f"or add --refresh-package <name>."
+    )
+
+
 @mcp.tool()
 async def connect(
     command: str, name: str = "", timeout: int = 60, inherit_stderr: bool = True
@@ -793,6 +826,8 @@ async def connect(
         "name": friendly,
         "command": command,
         "install_cmd": install_cmd,  # parsed argv — avoids shlex.split() at shapeshift time
+        "timeout": timeout,  # launch settings, so reload() restarts the same way
+        "inherit_stderr": inherit_stderr,
         "pid": entry.pid(),
         "started_at": entry.started_at,
         "tools": tool_names,
@@ -820,6 +855,9 @@ async def connect(
         tool_summary,
         f"Release with: release('{friendly}')",
     ]
+    stale_note = _stale_build_note(install_cmd)
+    if stale_note:
+        parts.append(stale_note)
     if setup_guide:
         parts.append(setup_guide)
         parts.append(f"\nCall setup('{friendly}') for step-by-step guidance.")
@@ -880,34 +918,56 @@ async def reload(name: str, ctx: Context | None = None) -> str:
             found_entry = entry
             break
 
-    if found_key is None or found_entry is None:
+    if found_key is None:
+        # No process (it crashed, or an earlier reload failed to restart it):
+        # the stored launch record is enough to start it again.
+        for pool_key, conn in session["connections"].items():
+            if conn.get("name") == name and conn.get("command"):
+                found_key = pool_key
+                break
+
+    if found_key is None:
         active = [e.name or k for k, e in _process_pool.items()]
         if active:
             return f"No connection named '{name}'. Active: {', '.join(active)}"
         return "No active connections. connect(...) to start one first."
 
     # The launch command, stored at connect() time, is what lets us restart fresh code.
-    conn = session["connections"].get(found_key, {})
+    conn = dict(session["connections"].get(found_key, {}))
     command = conn.get("command")
-    label = found_entry.name or name
+    label = (found_entry.name if found_entry else None) or name
     if not command:
         return (
             f"Cannot reload '{label}': no stored launch command (connection predates "
             f"reload support). release('{label}') and connect(...) manually."
         )
 
-    old_pid = found_entry.pid()
+    launch = {k: conn[k] for k in ("timeout", "inherit_stderr") if k in conn}
+    if found_entry is not None:
+        old = f"was PID {found_entry.pid()} — killed"
+        await release(label)
+    else:
+        old = "no process was running"
 
     # 1. Kill the stale process. 2. Start fresh code. 3. Remount so the client
     # sees the new schemas — the step users forget in the manual loop.
-    await release(label)
-    connect_out = await connect(command, name=label)
+    connect_out = await connect(command, name=label, **launch)
     if not connect_out.startswith("Connected:"):
-        return f"reload('{label}') could not restart the process:\n{connect_out}"
+        # Keep the launch record so reload(name) can retry once the code is fixed.
+        session["connections"][found_key] = {**conn, "pid": None}
+        return (
+            f"reload('{label}') could not restart the process:\n{connect_out}\n\n"
+            f"Fix the error, then reload('{label}') again."
+        )
 
     mount_out = await shapeshift(label, ctx)
+    if mount_out.startswith("❌"):
+        return f"Restarted: {label} ({old}), but remount failed\n\n{connect_out}\n\n{mount_out}"
+    stale_note = _stale_build_note(shlex.split(command))
+    if stale_note and stale_note.strip() in connect_out:
+        stale_note = ""  # connect() already warned
     return (
-        f"Reloaded: {label} (was PID {old_pid} — killed, restarted, remounted)\n\n"
+        f"Reloaded: {label} ({old}, restarted, remounted){stale_note}\n\n"
         f"{connect_out}\n\n"
         f"Remounted:\n{mount_out}"
     )

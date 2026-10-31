@@ -36,7 +36,7 @@ Your agent edits an MCP tool, but the client still runs the old process. Someone
 With Kitsune, `connect`, `call` and `reload` are tools. The agent runs the whole loop itself:
 
 ```python
-connect("uvx --from . my-mcp-server", name="dev")  # start your server
+connect("uv run my-mcp-server", name="dev")  # start your server
 shapeshift("dev")  # its tools appear in the client
 call("summarize", arguments={"url": "https://example.com"})
 
