@@ -16,8 +16,8 @@ startCommand:
       SMITHERY_API_KEY:
         type: string
         description: >
-          Smithery API key for searching and accessing 3,000+ verified MCP servers.
-          Get yours at smithery.ai/account/api-keys
+          Optional. Adds Smithery to registry search; the other registries need no key.
+          Get one at smithery.ai/account/api-keys
         required: false
     additionalProperties: false
   commandFunction: |
