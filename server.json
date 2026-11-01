@@ -19,7 +19,7 @@
       "environmentVariables": [
         {
           "name": "SMITHERY_API_KEY",
-          "description": "Smithery API key for accessing 3,000+ verified MCP servers. Get yours at smithery.ai/account/api-keys",
+          "description": "Optional. Adds Smithery to registry search; the other registries need no key. Get one at smithery.ai/account/api-keys",
           "isRequired": false,
           "isSecret": true,
           "format": "string"
@@ -36,7 +36,7 @@
       "environmentVariables": [
         {
           "name": "SMITHERY_API_KEY",
-          "description": "Smithery API key for accessing 3,000+ verified MCP servers. Get yours at smithery.ai/account/api-keys",
+          "description": "Optional. Adds Smithery to registry search; the other registries need no key. Get one at smithery.ai/account/api-keys",
           "isRequired": false,
           "isSecret": true,
           "format": "string"
