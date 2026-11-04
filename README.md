@@ -8,6 +8,8 @@
   <p>📖 <a href="https://kaiser-data.github.io/kitsune-mcp/"><strong>Documentation</strong></a> · <a href="https://kaiser-data.github.io/kitsune-mcp/hot-reload/">Hot-reload tutorial</a> · <a href="https://kaiser-data.github.io/kitsune-mcp/tools/">Tools reference</a></p>
 </div>
 
+> **AI agents installing this server** (Cline, Claude Code, Cursor, …): follow [llms-install.md](llms-install.md). No clone or build needed. Add the `uvx kitsune-mcp` entry to your MCP settings.
+
 [![GitHub stars](https://img.shields.io/github/stars/kaiser-data/kitsune-mcp?style=social)](https://github.com/kaiser-data/kitsune-mcp)
 [![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
 [![npm](https://img.shields.io/npm/v/kitsune-mcp?color=cb3837&label=npm&logo=npm)](https://www.npmjs.com/package/kitsune-mcp)
