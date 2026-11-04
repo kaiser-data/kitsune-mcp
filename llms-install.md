@@ -2,6 +2,8 @@
 
 Kitsune MCP is a stdio MCP server. It needs no API keys and no Docker.
 
+Do not clone or build the repository. `uvx` fetches the published package from PyPI. The install is complete once the entry below is in your MCP settings file and the server shows as connected.
+
 ## 1. Check requirements
 
 - Python 3.12 or newer
