@@ -2,10 +2,12 @@ import asyncio
 
 from mcp.server.fastmcp import FastMCP
 
-from kitsune_mcp._fastmcp_compat import _assert_internals
+from kitsune_mcp import __version__
+from kitsune_mcp._fastmcp_compat import _assert_internals, set_server_version
 
 mcp = FastMCP("kitsune")
 _assert_internals(mcp)
+set_server_version(mcp, __version__)
 
 # Guards all mutations to the tool registry (mcp.add_tool / remove_tool) and the
 # session state that mirrors it (shapeshift_tools, current_form, etc.).

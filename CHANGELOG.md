@@ -6,6 +6,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **`initialize` reports Kitsune's version.** `serverInfo.version` was the mcp SDK's version (`1.30.0`) instead of Kitsune's.
+
 ---
 
 ## [0.22.8] — 2026-11-07
