@@ -16,6 +16,9 @@ make format     # auto-format with ruff
 make docs       # preview the docs site at http://127.0.0.1:8000
 ```
 
+Optional: `uv tool install pre-commit && pre-commit install` runs the same ruff
+checks as CI (plus YAML/TOML and whitespace checks) on every commit.
+
 > **Running pytest directly?** The test config in `pyproject.toml` (`addopts`)
 > requires `pytest-timeout`, which is a dev dependency. A bare `uv run pytest`
 > fails to start with `unrecognized arguments: --timeout`. Use `make test`, or
