@@ -20,6 +20,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/kitsune-mcp)](https://pypi.org/project/kitsune-mcp/)
 [![CI](https://github.com/kaiser-data/kitsune-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/kaiser-data/kitsune-mcp/actions)
 [![Coverage](https://codecov.io/gh/kaiser-data/kitsune-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/kaiser-data/kitsune-mcp)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kaiser-data/kitsune-mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/kaiser-data/kitsune-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Glama](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp/badges/score.svg)](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp)
 [![Listed in Awesome MCP Servers](https://img.shields.io/badge/Awesome%20MCP%20Servers-listed-fc60a8?logo=awesomelists&logoColor=white)](https://github.com/punkpeye/awesome-mcp-servers#aggregators)

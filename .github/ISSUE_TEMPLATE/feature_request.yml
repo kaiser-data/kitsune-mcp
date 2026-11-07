@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "[FEAT] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What are you trying to do, and what problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: How do you handle this today, if at all?
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like Kitsune to do? Be as specific as you can.
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you like to contribute a PR?
+      options: ["yes", "maybe", "no"]

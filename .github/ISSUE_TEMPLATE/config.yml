@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/kaiser-data/kitsune-mcp/discussions
+    about: Ask how to do something, or share what you built.
+  - name: Security vulnerability
+    url: https://github.com/kaiser-data/kitsune-mcp/security/advisories/new
+    about: Report privately. Please don't open a public issue.
+  - name: Documentation
+    url: https://kaiser-data.github.io/kitsune-mcp/
+    about: Installation, tutorials and the tools reference.

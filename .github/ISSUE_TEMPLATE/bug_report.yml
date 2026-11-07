@@ -1,0 +1,63 @@
+name: Bug report
+description: Something is broken in Kitsune MCP
+title: "[BUG] "
+labels: [bug]
+body:
+  - type: input
+    id: server
+    attributes:
+      label: Server ID
+      description: As used in shapeshift() or call(), if a server is involved.
+      placeholder: "@modelcontextprotocol/server-filesystem"
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options: [stdio, persistent stdio (connect), HTTP + SSE, WebSocket, Docker, not sure]
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The exact calls, in order.
+      render: python
+      placeholder: |
+        shapeshift("server-id")
+        call("tool_name", arguments={...})
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Error or unexpected output
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kitsune version
+      description: "`status()` prints it, or run `pip show kitsune-mcp`."
+      placeholder: "0.22.8"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and version
+      placeholder: "Claude Code 2.1.x / Cursor / Cline / …"
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [macOS, Linux, Windows, other]
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Tool profile
+      options: ["lean (default)", "forge (KITSUNE_TOOLS=all)", "custom KITSUNE_TOOLS"]
