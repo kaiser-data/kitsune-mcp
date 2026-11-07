@@ -63,7 +63,7 @@
   <rect x="20" y="132" width="720" height="178" rx="14" class="kitsune"/>
 
   <text x="380" y="161" text-anchor="middle" class="h1" font-size="20" font-weight="800">🦊  Kitsune MCP</text>
-  <text x="380" y="180" text-anchor="middle" class="label-green" font-size="10.5" font-weight="700">V0.20.6  ·  SIX BUILT-IN TOOLS</text>
+  <text x="380" y="180" text-anchor="middle" class="label-green" font-size="10.5" font-weight="700">CORE TOOLS  ·  LEAN PROFILE</text>
 
   <line x1="60" y1="194" x2="700" y2="194" class="accent-line"/>
 
