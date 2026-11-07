@@ -60,7 +60,7 @@ async def _commit_shapeshift(
     tool_schemas: list,
     resolved_config: dict,
     tools: list[str] | None,
-    ctx: Context,
+    ctx: Context | None,
     pool_key: str | None,
     trust_note: str,
     lean_eligible: bool = False,
@@ -110,13 +110,7 @@ async def _commit_shapeshift(
     # it lazily instead. Keyed by server_id so re-mounts in the same session
     # don't double-count. Only counts what we actually registered (lean=subset).
     registered_names = set(registered)
-    mounted_schemas = [
-        ts
-        for ts in tool_schemas
-        if isinstance(ts, dict)
-        and _state._register_proxy_tools  # truthy guard for static analysis
-        and ts.get("name")
-    ]
+    mounted_schemas = [ts for ts in tool_schemas if isinstance(ts, dict) and ts.get("name")]
     # Filter by lean selection — only what's currently visible counts as "avoided".
     from kitsune_mcp.shapeshift import _proxy_name_for
 
@@ -131,14 +125,15 @@ async def _commit_shapeshift(
         # setdefault for resilience against tests that replace stats with a minimal dict
         session["stats"].setdefault("tokens_avoided_shapeshift", {})[server_id] = mount_cost
 
-    with contextlib.suppress(Exception):
-        await ctx.session.send_tool_list_changed()
-    if shapeshift_resources:
+    if ctx is not None:
         with contextlib.suppress(Exception):
-            await ctx.session.send_resource_list_changed()
-    if shapeshift_prompts:
-        with contextlib.suppress(Exception):
-            await ctx.session.send_prompt_list_changed()
+            await ctx.session.send_tool_list_changed()
+        if shapeshift_resources:
+            with contextlib.suppress(Exception):
+                await ctx.session.send_resource_list_changed()
+        if shapeshift_prompts:
+            with contextlib.suppress(Exception):
+                await ctx.session.send_prompt_list_changed()
 
     missing_env: list[str] = []
     with contextlib.suppress(Exception):
@@ -281,7 +276,7 @@ async def shapeshift(
                 session["current_form_local_install"] = None
 
                 transport: BaseTransport = _state.PersistentStdioTransport(cmd)
-                raw_tools = await transport.list_tools()
+                raw_tools = await transport.list_tools()  # type: ignore[attr-defined]
                 if not raw_tools and tool_names:
                     raw_tools = [
                         {"name": n, "description": "", "inputSchema": {}} for n in tool_names
@@ -708,7 +703,7 @@ async def craft(
 
     _endpoint_proxy.__name__ = name
     _endpoint_proxy.__doc__ = description[:120]
-    _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)
+    _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)  # type: ignore[attr-defined]
 
     # Remove previous registration if re-crafting the same name
     if name in session["crafted_tools"]:

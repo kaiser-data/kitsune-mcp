@@ -547,7 +547,7 @@ class MultiRegistry(BaseRegistry):
         seen: set[str] = set()
         candidates: list[ServerInfo] = []
         for name, batch in zip(self._reg_names, all_results, strict=False):
-            if isinstance(batch, Exception):
+            if isinstance(batch, BaseException):
                 self.last_registry_errors[name] = type(batch).__name__
                 continue
             for srv in batch:
@@ -578,9 +578,9 @@ class MultiRegistry(BaseRegistry):
         self.last_registry_errors = {
             name: type(r).__name__
             for name, r in zip(self._reg_names, results, strict=False)
-            if isinstance(r, Exception)
+            if isinstance(r, BaseException)
         }
-        valid = [r for r in results if r and not isinstance(r, Exception)]
+        valid = [r for r in results if r and not isinstance(r, BaseException)]
         # Source preference filtering — applied before the smithery-key filter
         if source_preference:
             preferred = [r for r in valid if r.source == source_preference]
@@ -951,9 +951,10 @@ class _LazyMultiRegistry:
     _instance: "MultiRegistry | None" = None
 
     def _get(self) -> "MultiRegistry":
-        if self._instance is None:
-            self.__class__._instance = MultiRegistry()
-        return self._instance
+        inst = self._instance
+        if inst is None:
+            inst = self.__class__._instance = MultiRegistry()
+        return inst
 
     def __getattr__(self, name: str):
         return getattr(self._get(), name)

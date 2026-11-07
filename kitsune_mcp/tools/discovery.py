@@ -82,7 +82,10 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
     elif srv.transport == "http":
         try:
             transport = _state._get_transport(srv.id, srv)
-            tools = await asyncio.wait_for(transport.list_tools(), timeout=TIMEOUT_STDIO_INIT)
+            tools = await asyncio.wait_for(
+                transport.list_tools(),  # type: ignore[attr-defined]
+                timeout=TIMEOUT_STDIO_INIT,
+            )
             if tools:
                 row["tools"] = len(tools)
                 row["tokens"] = _estimate_tokens(tools)
@@ -300,7 +303,8 @@ async def inspect(server_id: str, probe: bool = False) -> str:
             if can_probe_via_oauth:
                 transport = _state._get_transport(srv.id, srv)
                 live_tools = await asyncio.wait_for(
-                    transport.list_tools(), timeout=TIMEOUT_STDIO_INIT
+                    transport.list_tools(),  # type: ignore[attr-defined]
+                    timeout=TIMEOUT_STDIO_INIT,
                 )
             else:
                 probe_env = _state._probe_env(srv)

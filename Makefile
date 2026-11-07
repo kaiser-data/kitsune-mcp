@@ -9,6 +9,7 @@ test:
 lint:
 	uv run --extra dev ruff check .
 	uv run --extra dev ruff format --check .
+	uv run --extra dev mypy
 
 format:
 	uv run --extra dev ruff format .

@@ -70,6 +70,8 @@ dev = [
     # gate and ruff's formatting output changes between minor releases, so an
     # unbounded pin means CI formats differently from the committed tree.
     "ruff>=0.16.6,<0.17",
+    # Type-check gate in CI (`mypy kitsune_mcp`); minor-pinned like ruff.
+    "mypy>=2.4,<2.5",
     "respx>=0.21.0",
     # Needed so the suite actually exercises the WebSocket transport rather
     # than skipping it (tests patch `websockets.connect`).
@@ -95,6 +97,15 @@ packages = ["kitsune_mcp"]
 [tool.hatch.build.targets.wheel.force-include]
 "server.py" = "server.py"
 "server_forge.py" = "server_forge.py"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["kitsune_mcp"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+# Third-party packages without type information (python-dotenv ships stubs; mcp is typed).
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100

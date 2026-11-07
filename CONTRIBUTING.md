@@ -11,7 +11,7 @@ git clone https://github.com/kaiser-data/kitsune-mcp
 cd kitsune-mcp
 make dev        # install kitsune-mcp, dev deps and docs deps (uv)
 make test       # run all tests
-make lint       # ruff check + format check
+make lint       # ruff check + format check + mypy
 make format     # auto-format with ruff
 make docs       # preview the docs site at http://127.0.0.1:8000
 ```

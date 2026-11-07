@@ -137,7 +137,7 @@ def _restore_crafted_tools() -> None:
 
         _endpoint_proxy.__name__ = name
         _endpoint_proxy.__doc__ = description[:120]
-        _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)
+        _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)  # type: ignore[attr-defined]
         return _endpoint_proxy
 
     for tool_name, info in crafted.items():
