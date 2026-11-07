@@ -54,6 +54,9 @@ jobs:
       - name: Check formatting with ruff
         run: ruff format --check .
 
+      - name: Type-check with mypy
+        run: mypy
+
       # The suite hangs on Linux runners in a way that is unkillable (suspected
       # uninterruptible D-state): SIGKILL, pytest-timeout, job cancellation and even
       # STEP-level timeouts could not surface evidence — when the runner's teardown

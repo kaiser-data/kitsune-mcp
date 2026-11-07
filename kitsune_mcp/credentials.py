@@ -56,7 +56,7 @@ _dotenv_revision: int = 0
 
 def _dotenv_mtimes() -> tuple:
     """Return (mtime_ns, size) per .env path (None if absent)."""
-    result = []
+    result: list[tuple[int, int] | None] = []
     for p in _DOTENV_PATHS:
         try:
             st = p.stat()

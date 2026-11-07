@@ -179,7 +179,8 @@ async def _fetch_resource_docs(transport: "BaseTransport") -> str:
     """Fetch high-priority resource docs from a transport (best-effort)."""
     try:
         resources = await asyncio.wait_for(
-            transport.list_resources(), timeout=TIMEOUT_RESOURCE_LIST
+            transport.list_resources(),  # type: ignore[attr-defined]
+            timeout=TIMEOUT_RESOURCE_LIST,
         )
         all_uris = [r["uri"] for r in resources]
         doc_uris = sorted(
@@ -188,7 +189,10 @@ async def _fetch_resource_docs(transport: "BaseTransport") -> str:
         )[:MAX_RESOURCE_DOCS]
         parts = await asyncio.gather(
             *[
-                asyncio.wait_for(transport.read_resource(u), timeout=TIMEOUT_RESOURCE_READ)
+                asyncio.wait_for(
+                    transport.read_resource(u),  # type: ignore[attr-defined]
+                    timeout=TIMEOUT_RESOURCE_READ,
+                )
                 for u in doc_uris
             ],
             return_exceptions=True,

@@ -52,7 +52,7 @@ def _make_proxy(
     tool_schema: dict,
     transport: BaseTransport,
     config: dict,
-    proxy_name: str = None,
+    proxy_name: str | None = None,
 ) -> Callable:
     """Create a proxy callable that forwards calls to a remote/local MCP tool.
 
@@ -118,7 +118,7 @@ def _make_proxy(
 
     proxy_fn.__name__ = fn_name
     proxy_fn.__doc__ = (tool_schema.get("description") or "")[:120]
-    proxy_fn.__signature__ = _inspect.Signature(params, return_annotation=str)
+    proxy_fn.__signature__ = _inspect.Signature(params, return_annotation=str)  # type: ignore[attr-defined]
     return proxy_fn
 
 
@@ -174,7 +174,7 @@ def _register_proxy_resources(transport: "BaseTransport", resources: list[dict])
             except Exception as e:
                 return f"[Resource unavailable: {e}]"
 
-        _proxy.__name__ = name  # type: ignore[attr-defined]
+        _proxy.__name__ = name
         try:
             r = _FunctionResource.from_function(
                 fn=_proxy,
@@ -195,7 +195,7 @@ def _make_prompt_proxy(transport: "BaseTransport", name: str):
     a closure defined in the registration loop would call the last prompt."""
 
     async def _proxy(**kwargs) -> str:
-        messages = await transport.get_prompt(name, kwargs)
+        messages = await transport.get_prompt(name, kwargs)  # type: ignore[attr-defined]
         return "\n---\n".join(
             f"[{m.get('role', 'user')}]: {m.get('content', {}).get('text', '')}"
             for m in messages
@@ -239,9 +239,9 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
                 )
             )
             annotations[arg_name] = str
-        _proxy.__signature__ = _inspect.Signature(params)  # type: ignore[attr-defined]
-        _proxy.__annotations__ = annotations  # type: ignore[attr-defined]
-        _proxy.__name__ = name  # type: ignore[attr-defined]
+        _proxy.__signature__ = _inspect.Signature(params)
+        _proxy.__annotations__ = annotations
+        _proxy.__name__ = name
         _proxy.__doc__ = description
 
         try:
@@ -266,7 +266,7 @@ def _register_proxy_tools(
     tools: list,
     transport: "BaseTransport",
     config: dict,
-    base_tool_names: set = None,
+    base_tool_names: set | None = None,
     only: set[str] | None = None,
 ) -> tuple[list[str], list[tuple[str, str]]]:
     """Register proxy tools for a server, handling name collisions with base tools.

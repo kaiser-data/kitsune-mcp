@@ -13,6 +13,7 @@ import time
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
@@ -99,6 +100,13 @@ def _validate_install_cmd(cmd: list[str]) -> None:
         raise ValueError(f"Path traversal in command: {argv0!r}")
 
 
+def _stdin(proc: asyncio.subprocess.Process) -> asyncio.StreamWriter:
+    """proc.stdin, typed. Every child here is spawned with stdin=PIPE, so None is a bug."""
+    if proc.stdin is None:
+        raise RuntimeError("subprocess was started without a stdin pipe")
+    return proc.stdin
+
+
 class BaseTransport(ABC):
     @abstractmethod
     async def execute(self, tool: str, args: dict, config: dict) -> str: ...
@@ -111,8 +119,9 @@ class BaseTransport(ABC):
 # Spawn each child in a fresh process group so we can signal the whole tree on
 # shutdown. uvx/npx fork a real server as a child — killing only the wrapper
 # orphans the child and leaks one zombie per shapeshift cycle (#kill-tree).
+_SUBPROC_SPAWN_KWARGS: dict[str, Any]
 if sys.platform == "win32":
-    _SUBPROC_SPAWN_KWARGS: dict = {
+    _SUBPROC_SPAWN_KWARGS = {
         "creationflags": getattr(__import__("subprocess"), "CREATE_NEW_PROCESS_GROUP", 0),
     }
 else:
@@ -280,13 +289,13 @@ async def _ping(entry: "_PoolEntry", timeout: float = 2.0) -> bool:
         async with entry.lock:
             msg_id = entry.next_id
             entry.next_id += 1
-            entry.proc.stdin.write(
+            _stdin(entry.proc).write(
                 json.dumps(
                     {"jsonrpc": "2.0", "id": msg_id, "method": "tools/list", "params": {}}
                 ).encode()
                 + b"\n"
             )
-            await entry.proc.stdin.drain()
+            await _stdin(entry.proc).drain()
             resp = await asyncio.wait_for(
                 _read_stdio_response(entry.proc.stdout, msg_id),
                 timeout=timeout,
@@ -796,8 +805,8 @@ class StdioTransport(BaseTransport):
 
         try:
             # 1. Initialize (allow extra time for first-run package download)
-            proc.stdin.write(self._frame(_initialize_request()))
-            await proc.stdin.drain()
+            _stdin(proc).write(self._frame(_initialize_request()))
+            await _stdin(proc).drain()
 
             init_resp = await self._read_response(
                 proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
@@ -808,8 +817,8 @@ class StdioTransport(BaseTransport):
                 return f"Initialize error from {self.install_cmd[0]}: {init_resp['error']}"
 
             # 2. Notify initialized + 3. Call tool — batched into one flush
-            proc.stdin.write(self._frame(_initialized_notification()))
-            proc.stdin.write(
+            _stdin(proc).write(self._frame(_initialized_notification()))
+            _stdin(proc).write(
                 self._frame(
                     {
                         "jsonrpc": "2.0",
@@ -819,7 +828,7 @@ class StdioTransport(BaseTransport):
                     }
                 )
             )
-            await proc.stdin.drain()
+            await _stdin(proc).drain()
 
             tool_resp = await self._read_response(
                 proc.stdout, expected_id=2, timeout=TIMEOUT_STDIO_TOOL
@@ -845,7 +854,7 @@ class StdioTransport(BaseTransport):
             return f"Stdio transport error: {e}"
         finally:
             with contextlib.suppress(Exception):
-                proc.stdin.close()
+                _stdin(proc).close()
             # Drain stdout/stderr while reaping — a child that flooded its PIPE
             # would otherwise deadlock proc.wait(). See _reap().
             await _reap(proc, timeout=TIMEOUT_RESOURCE_LIST)
@@ -914,8 +923,8 @@ class PersistentStdioTransport(BaseTransport):
         )
 
         # MCP initialize handshake
-        proc.stdin.write(self._frame(_initialize_request()))
-        await proc.stdin.drain()
+        _stdin(proc).write(self._frame(_initialize_request()))
+        await _stdin(proc).drain()
 
         init_resp = await StdioTransport._read_response(
             proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
@@ -927,8 +936,8 @@ class PersistentStdioTransport(BaseTransport):
             _kill_process_tree(proc)
             raise RuntimeError(f"Initialize error: {init_resp['error']}")
 
-        proc.stdin.write(self._frame(_initialized_notification()))
-        await proc.stdin.drain()
+        _stdin(proc).write(self._frame(_initialized_notification()))
+        await _stdin(proc).drain()
 
         entry.dotenv_revision = _creds._dotenv_revision
         _process_pool[self._pool_key] = entry
@@ -957,10 +966,10 @@ class PersistentStdioTransport(BaseTransport):
         async with entry.lock:
             msg_id = entry.next_id
             entry.next_id += 1
-            entry.proc.stdin.write(
+            _stdin(entry.proc).write(
                 self._frame({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params})
             )
-            await entry.proc.stdin.drain()
+            await _stdin(entry.proc).drain()
             resp = await _read_stdio_response(
                 entry.proc.stdout, expected_id=msg_id, timeout=timeout
             )
@@ -1014,7 +1023,7 @@ class PersistentStdioTransport(BaseTransport):
                 entry.next_id += 1
 
                 try:
-                    entry.proc.stdin.write(
+                    _stdin(entry.proc).write(
                         self._frame(
                             {
                                 "jsonrpc": "2.0",
@@ -1024,7 +1033,7 @@ class PersistentStdioTransport(BaseTransport):
                             }
                         )
                     )
-                    await entry.proc.stdin.drain()
+                    await _stdin(entry.proc).drain()
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     if attempt == 0:
                         # Process died mid-write — evict and retry
@@ -1081,7 +1090,7 @@ class WebSocketTransport(BaseTransport):
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
         try:
-            import websockets  # type: ignore[import]
+            import websockets
         except ImportError:
             return "WebSocket transport requires 'websockets': pip install 'kitsune-mcp[ws]'"
 

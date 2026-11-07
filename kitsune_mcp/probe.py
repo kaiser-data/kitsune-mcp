@@ -79,7 +79,8 @@ def _probe_requirements(tools: list[dict], extra_text: str = "") -> dict:
 
     # Local URLs: probe with a short TCP connect
     local_urls = sorted(set(_LOCAL_URL_RE.findall(all_text)))
-    reachable, unreachable = [], []
+    reachable: list[str] = []
+    unreachable: list[str] = []
     for url in local_urls:
         try:
             from urllib.parse import urlparse as _urlparse
@@ -157,7 +158,7 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
 
     has_service_tool = bool(tools) and any(
         any(p.endswith(sfx) for sfx in PROVIDER_PARAM_SUFFIXES)
-        for t in tools
+        for t in tools or []
         for p in (t.get("inputSchema") or {}).get("properties", {})
     )
 
@@ -165,7 +166,9 @@ def _format_setup_guide(reqs: dict, name: str, tools: list | None = None) -> str
 
     if providers:
         for param, opts in providers.items():
-            cloud_opts, local_opts, other_opts = [], [], []
+            cloud_opts: list = []
+            local_opts: list = []
+            other_opts: list = []
             for opt in opts:
                 linked_creds = [
                     v
