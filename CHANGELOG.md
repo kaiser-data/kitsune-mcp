@@ -8,6 +8,23 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.22.8] — 2026-11-07
+
+Hot-path performance (#102), docs for clients with tool deferral (#100), and repo cleanup (#101).
+
+### Changed
+- **`.env` files are re-read only when they change.** Every `call()`, every `search()` result row and every `auto()` candidate re-parsed all `.env` files; now a stat of `(mtime_ns, size)` decides (2.4 ms → 4 µs per check).
+- **Large responses are cut before cleaning.** Four regex passes ran over the whole payload before truncating to ~6,000 characters (1.5 MB response: 20 ms → 0.6 ms, same output).
+- **`call()` on the mounted form skips the registry lookup.** It reuses the record `shapeshift()` resolved, instead of fanning out to 7 registries whenever the 5-minute server cache had expired.
+- **`search(registry=…)` keeps one instance per registry**, so the npm and PyPI result caches hit between searches.
+- **`status()` doesn't wait on busy servers.** A server with a call in flight shows `alive+busy` instead of stalling `status()` up to the 30 s tool timeout; memory checks run off the event loop.
+
+### Docs
+- Token cost is stated per client: ~1,774 tokens/turn where every tool schema loads up front, ~70 on Claude Code with Tool Search (measured on 2.1.319).
+- Removed unreferenced diagrams and finished planning docs; the README architecture diagram no longer carries a stale version label.
+
+---
+
 ## [0.22.7] — 2026-10-31
 
 Hot-reload reliability (#94) and a release-pipeline fix (#93).
