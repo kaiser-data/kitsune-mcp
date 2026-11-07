@@ -53,7 +53,8 @@ npm and PyPI packages run in a locked-down Docker container when Docker is insta
 ## Skip it if…
 
 - you only use 1–3 trusted servers. Configure them directly.
-- you want to save tokens. Kitsune itself costs ~1,774 per turn.
+- you want to save tokens. Clients with tool deferral (e.g. Claude Code's Tool Search)
+  already keep configured servers cheap; without deferral Kitsune itself costs ~1,774 per turn.
 - you need sub-second first calls. A cold mount takes 1–15 s.
 
 Works with Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Zed and
