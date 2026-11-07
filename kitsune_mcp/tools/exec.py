@@ -82,6 +82,9 @@ async def call(
         srv = None
     elif server_id.startswith(("http://", "https://")):
         srv = _state._synthetic_http_server(server_id)
+    elif server_id == session.get("current_form") and session.get("current_form_srv"):
+        # Mounted form: shapeshift() already resolved it; don't re-query registries.
+        srv = session["current_form_srv"]
     else:
         srv = await _state._registry.get_server(server_id)
     credentials = srv.credentials if srv else {}

@@ -145,6 +145,7 @@ def _do_shed() -> list[str]:
     session["shapeshift_prompts"] = []
 
     session["current_form"] = None
+    session["current_form_srv"] = None
     return removed
 
 

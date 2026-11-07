@@ -38,11 +38,10 @@ from kitsune_mcp.credentials import SMITHERY_API_KEY, _credentials_guide, _resol
 from kitsune_mcp.registry import SmitheryRegistry
 from kitsune_mcp.session import _save_state, session
 from kitsune_mcp.utils import (
-    _clean_response,
+    _clean_truncate,
     _estimate_tokens,
     _extract_content,
     _get_http_client,
-    _truncate,
 )
 
 # ---------------------------------------------------------------------------
@@ -717,7 +716,7 @@ class HTTPSSETransport(BaseTransport):
         session["stats"]["tokens_sent"] += tokens_out
         session["stats"]["tokens_received"] += tokens_in
 
-        return _truncate(_clean_response(raw))
+        return _clean_truncate(raw)
 
     def _connect_failure_message(self) -> str:
         if self.direct:
@@ -840,7 +839,7 @@ class StdioTransport(BaseTransport):
             session["stats"]["tokens_sent"] += tokens_out
             session["stats"]["tokens_received"] += tokens_in
 
-            return _truncate(_clean_response(raw))
+            return _clean_truncate(raw)
 
         except Exception as e:
             return f"Stdio transport error: {e}"
@@ -1066,7 +1065,7 @@ class PersistentStdioTransport(BaseTransport):
                 session["stats"]["total_calls"] += 1
                 session["stats"]["tokens_sent"] += tokens_out
                 session["stats"]["tokens_received"] += tokens_in
-                return _truncate(_clean_response(raw))
+                return _clean_truncate(raw)
 
         return f"Failed to call '{tool}' after reconnect"  # unreachable but satisfies type checker
 
@@ -1148,7 +1147,7 @@ class WebSocketTransport(BaseTransport):
         session["stats"]["total_calls"] += 1
         session["stats"]["tokens_sent"] += tokens_out
         session["stats"]["tokens_received"] += tokens_in
-        return _truncate(_clean_response(raw_text))
+        return _clean_truncate(raw_text)
 
 
 def _hardened_docker_flags(config: dict, tmpfs_exec: bool = False) -> list[str]:

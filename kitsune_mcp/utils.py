@@ -121,6 +121,16 @@ def _clean_response(text: str) -> str:
     return text.strip()
 
 
+def _clean_truncate(text: str, max_tokens: int = MAX_RESPONSE_TOKENS) -> str:
+    """_truncate(_clean_response(text)) without regex passes over megabytes we drop anyway."""
+    max_chars = max_tokens * 4
+    cap = max_chars * 8  # headroom for what cleaning collapses
+    if len(text) <= cap:
+        return _truncate(_clean_response(text), max_tokens)
+    cleaned = _clean_response(text[:cap])
+    return cleaned[:max_chars] + f"\n[...truncated at ~{max_tokens} tokens]"
+
+
 def _strip_html(text: str) -> str:
     text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
