@@ -151,6 +151,19 @@ async def _compare_probe(srv, allow_low_trust: bool) -> dict:
     return row
 
 
+# One instance per registry class for registry-scoped search(), so per-instance
+# caches (npm, PyPI) survive between calls. Keyed by class: a test that patches
+# _state.NpmRegistry gets a fresh instance of its patched class.
+_SCOPED_REGISTRIES: dict = {}
+
+
+def _scoped_registry(cls):
+    reg = _SCOPED_REGISTRIES.get(cls)
+    if reg is None:
+        reg = _SCOPED_REGISTRIES[cls] = cls()
+    return reg
+
+
 @mcp.tool()
 async def search(
     query: Annotated[
@@ -183,20 +196,22 @@ async def search(
         return await _run_compare(query, limit)
 
     if registry == "smithery":
-        reg = _state.SmitheryRegistry()
+        reg = _scoped_registry(_state.SmitheryRegistry)
     elif registry == "npm":
-        reg = _state.NpmRegistry()
+        reg = _scoped_registry(_state.NpmRegistry)
     elif registry == "pypi":
-        reg = _state.PyPIRegistry()
+        reg = _scoped_registry(_state.PyPIRegistry)
     elif registry in ("official", "mcpregistry", "glama"):
         from kitsune_mcp.official_registry import OfficialMCPRegistry
         from kitsune_mcp.registry import GlamaRegistry, McpRegistryIO
 
-        reg = {
-            "official": OfficialMCPRegistry(),
-            "mcpregistry": McpRegistryIO(),
-            "glama": GlamaRegistry(),
-        }[registry]
+        reg = _scoped_registry(
+            {
+                "official": OfficialMCPRegistry,
+                "mcpregistry": McpRegistryIO,
+                "glama": GlamaRegistry,
+            }[registry]
+        )
     else:
         reg = _state._registry
 
@@ -557,22 +572,37 @@ async def status() -> str:
 
     if _process_pool:
         pool_items = list(_process_pool.items())
-        ping_results = await asyncio.gather(
-            *[_ping(entry) for _, entry in pool_items],
-            return_exceptions=True,
+
+        async def _health(entry):
+            # A call in flight holds entry.lock; pinging would wait behind it
+            # (up to the tool timeout). It is alive and serving: report busy.
+            if entry.is_alive() and entry.lock.locked():
+                return "busy"
+            return await _ping(entry)
+
+        ping_results, mem_results = await asyncio.gather(
+            asyncio.gather(*[_health(entry) for _, entry in pool_items], return_exceptions=True),
+            # _rss_mb shells out to `ps` on macOS; keep it off the event loop.
+            asyncio.gather(
+                *[asyncio.to_thread(_rss_mb, entry.pid()) for _, entry in pool_items],
+                return_exceptions=True,
+            ),
         )
         lines.append(f"PERSISTENT CONNECTIONS ({len(pool_items)})")
-        for (pool_key, entry), responsive in zip(pool_items, ping_results, strict=False):
+        for (pool_key, entry), responsive, mem in zip(
+            pool_items, ping_results, mem_results, strict=False
+        ):
             label = entry.name or pool_key
             if not entry.is_alive():
                 health = "dead"
+            elif responsive == "busy":
+                health = "alive+busy"
             elif responsive is True:
                 health = "alive+responsive"
             else:
                 health = "alive+unresponsive"
             uptime = int(entry.uptime_seconds())
-            mem = _rss_mb(entry.pid())
-            mem_str = f" | mem: {mem}" if mem else ""
+            mem_str = f" | mem: {mem}" if isinstance(mem, str) and mem else ""
             conn_info = session["connections"].get(pool_key, {})
             tool_names = conn_info.get("tools", [])
             tool_str = f"Tools: {', '.join(tool_names)}" if tool_names else "Tools: none"

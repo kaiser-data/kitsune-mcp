@@ -64,6 +64,7 @@ async def _commit_shapeshift(
     pool_key: str | None,
     trust_note: str,
     lean_eligible: bool = False,
+    srv=None,
 ) -> str:
     """Register tools/resources/prompts, update session, notify client, return output string.
 
@@ -97,6 +98,9 @@ async def _commit_shapeshift(
     session["shapeshift_prompts"] = shapeshift_prompts
     session["current_form"] = server_id
     session["current_form_pool_key"] = pool_key
+    # Registry record for the mounted form, so call() on it skips a registry
+    # lookup (a 7-registry fan-out whenever the 5-minute server cache expired).
+    session["current_form_srv"] = srv
     # True only for stdio transports that own a real subprocess; HTTP/SSE servers
     # have no backing process to kill so shiftback(kill=True) is a no-op for them.
     session["current_form_has_process"] = pool_key is not None
@@ -543,6 +547,7 @@ async def shapeshift(
             pool_key,
             trust_note,
             lean_eligible=True,
+            srv=srv,
         )
 
 

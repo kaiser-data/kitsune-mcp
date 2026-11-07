@@ -55,11 +55,12 @@ _dotenv_revision: int = 0
 
 
 def _dotenv_mtimes() -> tuple:
-    """Return mtime tuple for all .env paths (None if absent)."""
+    """Return (mtime_ns, size) per .env path (None if absent)."""
     result = []
     for p in _DOTENV_PATHS:
         try:
-            result.append(p.stat().st_mtime)
+            st = p.stat()
+            result.append((st.st_mtime_ns, st.st_size))
         except OSError:
             result.append(None)
     return tuple(result)
@@ -72,11 +73,17 @@ _last_dotenv_mtimes: tuple = _dotenv_mtimes()
 
 
 def _reload_dotenv() -> None:
-    """Re-read all .env locations. CWD wins. Increments _dotenv_revision when files change."""
+    """Re-read all .env locations when any changed on disk. CWD wins.
+
+    Hot path (every call/search row/auto candidate): a stat per file is cheap,
+    re-parsing every file is not, so parse only when (mtime_ns, size) moved.
+    _save_to_env updates os.environ itself, so skipping the re-parse loses nothing.
+    Increments _dotenv_revision when files change.
+    """
     global _dotenv_revision, _last_dotenv_mtimes
     current_mtimes = _dotenv_mtimes()
-    _load_dotenv_files()
     if current_mtimes != _last_dotenv_mtimes:
+        _load_dotenv_files()
         _dotenv_revision += 1
         _last_dotenv_mtimes = current_mtimes
 
