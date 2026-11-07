@@ -10,7 +10,7 @@ All notable changes to this project are documented here.
 
 ## [0.22.8] — 2026-11-07
 
-Hot-path performance (#102), docs for clients with tool deferral (#100), and repo cleanup (#101).
+Hot-path performance (#102), type checking (#105), supply-chain hardening (#104), docs for clients with tool deferral (#100), and repo cleanup (#101).
 
 ### Changed
 - **`.env` files are re-read only when they change.** Every `call()`, every `search()` result row and every `auto()` candidate re-parsed all `.env` files; now a stat of `(mtime_ns, size)` decides (2.4 ms → 4 µs per check).
@@ -19,7 +19,13 @@ Hot-path performance (#102), docs for clients with tool deferral (#100), and rep
 - **`search(registry=…)` keeps one instance per registry**, so the npm and PyPI result caches hit between searches.
 - **`status()` doesn't wait on busy servers.** A server with a call in flight shows `alive+busy` instead of stalling `status()` up to the 30 s tool timeout; memory checks run off the event loop.
 
+- **Type-checked.** mypy runs in CI and the wheel ships `py.typed`. A child process without a stdin pipe now raises a clear error, and a cancelled registry lookup is recorded as that registry's error instead of breaking the search loop (#105).
+
+### Security
+- Every GitHub Action is pinned to a commit SHA, workflows default to read-only tokens, and an OpenSSF Scorecard workflow runs weekly (#104).
+
 ### Docs
+- Issue templates are now forms, with questions routed to Discussions and vulnerabilities to private advisories. `CODEOWNERS`, `.editorconfig` and a pre-commit config were added (#104).
 - Token cost is stated per client: ~1,774 tokens/turn where every tool schema loads up front, ~70 on Claude Code with Tool Search (measured on 2.1.319).
 - Removed unreferenced diagrams and finished planning docs; the README architecture diagram no longer carries a stale version label.
 
