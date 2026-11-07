@@ -43,3 +43,15 @@ def remove_prompt(mcp: Any, name: str) -> bool:
     if pm is None:
         return False
     return pm._prompts.pop(name, None) is not None
+
+
+def set_server_version(mcp: Any, version: str) -> None:
+    """Report our own version in the initialize response's serverInfo.
+
+    FastMCP's constructor takes no version, so the low-level server falls back
+    to the mcp SDK's version (clients saw "1.30.0" instead of Kitsune's).
+    Best-effort: if the attribute moves, serverInfo just keeps the SDK default.
+    """
+    server = getattr(mcp, "_mcp_server", None)
+    if server is not None and hasattr(server, "version"):
+        server.version = version
