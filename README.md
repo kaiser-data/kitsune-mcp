@@ -117,7 +117,7 @@ Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 |---|---|
 | You're building an MCP server and want an edit/reload loop | You only use 1–3 trusted servers (configure them natively) |
 | A task needs a server that isn't in your config | Every turn hits the same server (keep it always-on) |
-| You want to evaluate community MCP code without installing it for good | You want lower token use: the base cost is ~1,774 tokens/turn, and modern clients already defer tool schemas |
+| You want to evaluate community MCP code without installing it for good | You want lower token use: modern clients already defer tool schemas, so most configured servers cost little up front |
 | Your MCP config is crowded ([GATEWAY](docs/configuration.md#gateway-consolidate-always-on-servers)) | You need a sub-second first call (cold mount takes ~1–15 s) |
 
 ## How it works
@@ -137,7 +137,7 @@ Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 
 ## Tools
 
-Default profile: **9 tools, ~1,774 tokens/turn** (measured with `python examples/benchmark.py`).
+Default profile: **9 tools**. Standing cost: **~1,774 tokens/turn** on clients that load every tool schema up front (measured with `python examples/benchmark.py`); **~70 tokens/turn** on Claude Code with Tool Search, where schemas load only on first use (measured on Claude Code 2.1.319, 2026-11-06).
 
 | Tool | Role |
 |---|---|

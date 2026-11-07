@@ -6,7 +6,8 @@ in `kitsune_mcp/tools/`.
 ## Tool profiles
 
 Kitsune registers a **lean profile** by default, so its own footprint stays
-around 1,774 tokens per turn:
+around 1,774 tokens per turn on clients that load every schema up front, and
+~70 tokens per turn on Claude Code with Tool Search (schemas deferred until first use):
 
 `status` · `search` · `auth` · `shapeshift` · `call` · `auto` · `connect` · `release` · `reload`
 

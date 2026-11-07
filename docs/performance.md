@@ -14,9 +14,9 @@ Use `prewarm` (forge) when you know you'll need a server soon.
 
 ## Token overhead (secondary)
 
-> Real vs **fully-mounted always-on** or clients **without** Tool Search. On Claude Code 2.1.7+ with native deferral, this is mostly not a Kitsune-specific win. Product pitch is reach + REPL above — not this table.
+> Real vs **fully-mounted always-on** or clients **without** Tool Search. On Claude Code with native deferral, this is not a Kitsune-specific win: measured on Claude Code 2.1.319 (2026-11-06), a configured server adds only ~30–500 tokens per request (tool names only; schemas load on first use), and Kitsune itself ~70. Product pitch is reach + REPL above — not this table.
 
-Every Kitsune figure **includes** the ~1,774 floor. Reproduce: `python examples/benchmark.py`. Methodology: [`benchmarks.md`](benchmarks.md).
+Every Kitsune figure **includes** the ~1,774 floor (non-deferring clients). Reproduce: `python examples/benchmark.py`. Methodology: [`benchmarks.md`](benchmarks.md).
 
 <div align="center">
   <picture>
