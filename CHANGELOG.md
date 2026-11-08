@@ -14,6 +14,10 @@ All notable changes to this project are documented here.
 - **MCP Registry entries parse again.** The adapter read the old field names (`registry_name`, `name`, `environment_variables`), so current entries got no install command and no credentials. It now reads `registryType`, `identifier` and `environmentVariables` from the `/v0.1` API, with the old names as a fallback. Each entry's version goes into the command (`npx -y pkg@1.2.3`, `uvx pkg==1.2.3`), so Kitsune's pinning records it, and fixed `packageArguments` are kept. Only the latest version of each server is listed; before, every published version appeared. Deleted entries are skipped, and so are entries Kitsune can't run (Docker or mcpb packages only, or a remote URL with `{variables}` to fill in).
 - **MCP Registry search covers the whole registry.** Search used to look only at the first 500 entries (alphabetical, mostly `ai.*`). It now also queries the registry for each word of the query, and lookups by exact name ask the registry directly.
 
+### Added
+- **Fallback for old HTTP+SSE servers.** Kitsune now also connects to servers that still speak the 2024-11-05 HTTP+SSE transport. When such a server rejects the `initialize` POST with 400, 404 or 405, Kitsune opens its GET event stream as the spec says, and responses on that stream are matched by request id. The `endpoint` event must name a URL on the server's own origin, so the bearer token is never sent to another host.
+- **Fixture-server tests.** A new test file runs the HTTP transport against real mcp SDK servers on localhost: Streamable HTTP with SSE responses, Streamable HTTP with JSON responses, stateless Streamable HTTP, and legacy HTTP+SSE. The test tool sends progress and log notifications before its result.
+
 ---
 
 ## [0.22.8] — 2026-11-07

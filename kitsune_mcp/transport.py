@@ -481,6 +481,8 @@ class _SSEParser:
 
     def __init__(self) -> None:
         self._data: list[str] = []
+        self._event = ""
+        self.last_event = "message"  # name of the event flush() returned last
 
     def feed_line(self, line: str) -> str | None:
         if line == "":
@@ -492,13 +494,17 @@ class _SSEParser:
             value = value[1:]
         if name == "data":
             self._data.append(value)
+        elif name == "event":
+            self._event = value
         return None
 
     def flush(self) -> str | None:
+        event, self._event = self._event, ""
         if not self._data:
             return None
         data = "\n".join(self._data)
         self._data = []
+        self.last_event = event or "message"
         return data
 
 
@@ -576,6 +582,7 @@ class _HTTPSession:
     bearer: str
     session_id: str | None  # None: the server is stateless and issued no id
     proto: str
+    legacy: "_LegacySSEStream | None" = None  # set for 2024-11-05 HTTP+SSE servers
     created_at: float = field(default_factory=time.monotonic)
 
     def expired(self) -> bool:
@@ -686,8 +693,141 @@ async def _http_post(
         return _HTTPReply(r.status_code, r.headers, _parse_rpc_body(body, request_id))
 
 
+class _LegacySSEStream:
+    """Client side of the deprecated 2024-11-05 HTTP+SSE transport.
+
+    The client opens one long-lived GET stream. Its first event, `endpoint`,
+    names the URL to POST messages to; responses then arrive on the GET
+    stream, matched to their request by id. Kept for servers that predate
+    Streamable HTTP (spec: "Backwards compatibility").
+    """
+
+    def __init__(self, url: str, bearer: str) -> None:
+        self.url = url
+        self.bearer = bearer
+        self.post_url: str | None = None
+        self.closed = False
+        self._pending: dict[Any, asyncio.Future[dict]] = {}
+        self._ready: asyncio.Future[str] | None = None
+        self._task: asyncio.Task[None] | None = None
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.bearer}", "Content-Type": "application/json"}
+
+    async def open(self, timeout: float) -> None:
+        self._ready = asyncio.get_running_loop().create_future()
+        self._task = asyncio.create_task(self._read(self._ready))
+        try:
+            self.post_url = await asyncio.wait_for(asyncio.shield(self._ready), timeout)
+        except BaseException:
+            await self.close()
+            raise
+
+    def _endpoint_url(self, data: str) -> str:
+        """Resolve the endpoint event; it must stay on the server's origin.
+
+        The bearer token goes with every POST, so a stream that names another
+        host must not be able to redirect it there.
+        """
+        url = urllib.parse.urljoin(self.url, data.strip())
+        a, b = urllib.parse.urlsplit(self.url), urllib.parse.urlsplit(url)
+        if (a.scheme, a.netloc) != (b.scheme, b.netloc):
+            raise RuntimeError(f"legacy SSE endpoint {url!r} is on another origin")
+        return url
+
+    async def _read(self, ready: "asyncio.Future[str]") -> None:
+        error: BaseException = httpx.RemoteProtocolError("legacy SSE stream ended")
+        try:
+            async with _get_http_client().stream(
+                "GET",
+                self.url,
+                headers={"Authorization": f"Bearer {self.bearer}", "Accept": "text/event-stream"},
+                timeout=httpx.Timeout(TIMEOUT_HTTP_TOOL, read=None),
+            ) as r:
+                if r.status_code in (401, 403):
+                    raise PermissionError(f"HTTP {r.status_code}")
+                ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
+                if not r.is_success or ctype != "text/event-stream":
+                    raise RuntimeError(f"legacy SSE stream: HTTP {r.status_code} ({ctype})")
+                parser = _SSEParser()
+                async for line in r.aiter_lines():
+                    data = parser.feed_line(line)
+                    if data is None:
+                        continue
+                    if parser.last_event == "endpoint":
+                        if not ready.done():
+                            ready.set_result(self._endpoint_url(data))
+                        continue
+                    for msg in _json_messages(data):
+                        await self._dispatch(msg)
+        except asyncio.CancelledError:
+            error = httpx.RemoteProtocolError("legacy SSE stream closed")
+            raise
+        except Exception as e:
+            error = e
+        finally:
+            self.closed = True
+            if not ready.done():
+                ready.set_exception(error)
+            lost = httpx.RemoteProtocolError(f"legacy SSE stream lost: {error}")
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(lost)
+
+    async def _dispatch(self, msg: dict) -> None:
+        if "method" in msg:
+            if "id" in msg and self.post_url:
+                await _answer_server_request(self.post_url, self.bearer, None, msg)
+            return
+        fut = self._pending.get(msg.get("id"))
+        if fut is not None and not fut.done():
+            fut.set_result(msg)
+
+    async def request(self, payload: dict) -> _HTTPReply:
+        """POST one message; for a request, wait for its response on the stream."""
+        if self.closed or not self.post_url:
+            # Nothing was sent, so the caller may safely start a new session.
+            raise httpx.ConnectError("legacy SSE stream is closed")
+        request_id = payload.get("id") if "method" in payload else None
+        fut: asyncio.Future[dict] | None = None
+        if request_id is not None:
+            fut = asyncio.get_running_loop().create_future()
+            self._pending[request_id] = fut
+        try:
+            r = await _get_http_client().post(
+                self.post_url,
+                content=json.dumps(payload),
+                headers=self._headers(),
+                timeout=TIMEOUT_HTTP_TOOL,
+            )
+            if fut is None or not r.is_success:
+                return _HTTPReply(r.status_code, r.headers, None)
+            try:
+                msg = await asyncio.wait_for(fut, TIMEOUT_HTTP_TOOL)
+            except TimeoutError as e:
+                raise httpx.ReadTimeout("no response on the legacy SSE stream") from e
+            return _HTTPReply(r.status_code, r.headers, msg)
+        finally:
+            if request_id is not None:
+                self._pending.pop(request_id, None)
+
+    def close_nowait(self) -> None:
+        self.closed = True
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+
+    async def close(self) -> None:
+        self.close_nowait()
+        if self._task is not None:
+            with contextlib.suppress(BaseException):
+                await self._task
+
+
 async def _close_http_session(sess: _HTTPSession) -> None:
     """Tell the server a session is no longer needed (spec: DELETE; 405 is allowed)."""
+    if sess.legacy is not None:
+        await sess.legacy.close()
+        return
     if not sess.session_id:
         return
     with contextlib.suppress(httpx.HTTPError):
@@ -707,6 +847,8 @@ def _drop_http_session(key: tuple[str, str], sess: _HTTPSession) -> None:
     """Remove sess from the cache unless another caller already replaced it."""
     if _http_sessions.get(key) is sess:
         del _http_sessions[key]
+    if sess.legacy is not None:
+        sess.legacy.close_nowait()
 
 
 # ---------------------------------------------------------------------------
@@ -783,28 +925,67 @@ class HTTPSSETransport(BaseTransport):
                 await _close_http_session(cur)
 
             r = await _http_post(endpoint, bearer, None, _initialize_request())
-            if r.status in (401, 403):
-                raise PermissionError(f"HTTP {r.status}")
-            if not r.ok:
-                raise RuntimeError(f"Initialize failed: HTTP {r.status}")
-            init_msg = r.message
-            if init_msg and "error" in init_msg:
-                raise RuntimeError(f"Initialize failed: {init_msg['error']}")
-            sess = _HTTPSession(
-                endpoint=endpoint,
-                bearer=bearer,
-                session_id=r.headers.get("mcp-session-id"),
-                proto=_negotiated_version(init_msg),
-            )
-            note = await _http_post(endpoint, bearer, sess, _initialized_notification())
-            if note.status in (401, 403):
-                raise PermissionError(f"HTTP {note.status}")
+            if r.status in (400, 404, 405):
+                # Spec backwards compatibility: an old HTTP+SSE server rejects
+                # the POST; try its GET stream before giving up.
+                sess = await self._legacy_session(endpoint, bearer, r.status)
+            else:
+                sess = await self._streamable_session(endpoint, bearer, r)
 
             _http_sessions[key] = sess
             while len(_http_sessions) > HTTP_SESSION_MAX_COUNT:
                 oldest_key = min(_http_sessions, key=lambda k: _http_sessions[k].created_at)
                 await _close_http_session(_http_sessions.pop(oldest_key))
             return sess, True
+
+    @staticmethod
+    def _check_init(r: _HTTPReply) -> dict | None:
+        if r.status in (401, 403):
+            raise PermissionError(f"HTTP {r.status}")
+        if not r.ok:
+            raise RuntimeError(f"Initialize failed: HTTP {r.status}")
+        if r.message and "error" in r.message:
+            raise RuntimeError(f"Initialize failed: {r.message['error']}")
+        return r.message
+
+    async def _streamable_session(self, endpoint: str, bearer: str, r: _HTTPReply) -> _HTTPSession:
+        init_msg = self._check_init(r)
+        sess = _HTTPSession(
+            endpoint=endpoint,
+            bearer=bearer,
+            session_id=r.headers.get("mcp-session-id"),
+            proto=_negotiated_version(init_msg),
+        )
+        note = await _http_post(endpoint, bearer, sess, _initialized_notification())
+        if note.status in (401, 403):
+            raise PermissionError(f"HTTP {note.status}")
+        return sess
+
+    async def _legacy_session(self, endpoint: str, bearer: str, post_status: int) -> _HTTPSession:
+        stream = _LegacySSEStream(endpoint, bearer)
+        try:
+            await stream.open(TIMEOUT_HTTP_TOOL)
+        except PermissionError:
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Initialize failed: HTTP {post_status}, and no legacy SSE stream ({e})"
+            ) from e
+        try:
+            init_msg = self._check_init(await stream.request(_initialize_request()))
+            sess = _HTTPSession(
+                endpoint=endpoint,
+                bearer=bearer,
+                session_id=None,
+                proto=_negotiated_version(init_msg),
+                legacy=stream,
+            )
+            await stream.request(_initialized_notification())
+        except BaseException:
+            await stream.close()
+            raise
+
+        return sess
 
     async def _rpc(
         self, endpoint: str, bearer: str, config: dict, method: str, params: dict
@@ -831,7 +1012,10 @@ class HTTPSSETransport(BaseTransport):
             sess, fresh = await self._session(key, endpoint, bearer, stale)
             can_retry = attempt == 0 and not fresh
             try:
-                r = await _http_post(endpoint, bearer, sess, request)
+                if sess.legacy is not None:
+                    r = await sess.legacy.request(request)
+                else:
+                    r = await _http_post(endpoint, bearer, sess, request)
             except (httpx.ConnectError, httpx.ConnectTimeout):
                 if not can_retry:
                     raise
