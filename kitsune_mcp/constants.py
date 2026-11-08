@@ -63,7 +63,7 @@ OFFICIAL_REGISTRY_URL = (
 )
 OFFICIAL_REGISTRY_CACHE_TTL = 86400  # 24 hours — list rarely changes
 
-MCP_REGISTRY_IO_URL = "https://registry.modelcontextprotocol.io/v0/servers"
+MCP_REGISTRY_IO_URL = "https://registry.modelcontextprotocol.io/v0.1/servers"
 MCP_REGISTRY_IO_TTL = 3600  # 1 hour — entries are published formally, stable
 GLAMA_REGISTRY_URL = "https://glama.ai/api/mcp/v1/servers"
 GLAMA_REGISTRY_TTL = 3600  # 1 hour
