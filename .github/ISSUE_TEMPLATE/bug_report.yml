@@ -43,7 +43,7 @@ body:
     attributes:
       label: Kitsune version
       description: "`status()` prints it, or run `pip show kitsune-mcp`."
-      placeholder: "0.22.8"
+      placeholder: "0.23.0"
     validations:
       required: true
   - type: input

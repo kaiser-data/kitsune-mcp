@@ -4,7 +4,14 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased]
+## [0.23.0] — 2026-11-08
+
+Wire-correct: the first milestone on the road to 1.0. The HTTP, legacy SSE and WebSocket transports now follow the protocol (#107, #109, #110). Public HTTP servers connect without a login, and logins follow the current MCP authorization spec (#112). Mounted tools keep their exact schemas, arguments and results (#113). MCP Registry entries parse again and search covers the whole registry (#111). Also: CodeQL fixes (#114) and an animated README logo (#108).
+
+**Behaviour changes to know about:**
+- Tools mounted with `shapeshift()` return the downstream result as sent (structured content, `isError`, images) instead of cleaned, truncated text. The hub's own `call()` tool still returns text.
+- A downstream tool call that may already have run is never sent again; Kitsune reports "outcome unknown" instead. This now also applies to HTTP, legacy SSE and WebSocket servers.
+- Direct HTTP servers get no token until they ask for one with a 401. Logins stored by older versions move to the new per-URL storage on first use; no new login is needed.
 
 ### Fixed
 - **Two CodeQL findings.** HTML-to-text extraction now uses the standard library's HTML parser. Before, a regex missed end tags like `</script >` and `</SCRIPT>`, so script contents could show up in fetched page text. The Glama adapter now checks the parsed host of a repository URL instead of searching the URL text for `github.com`, which also matched URLs like `https://evil.example/github.com/…`.
