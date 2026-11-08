@@ -1,12 +1,27 @@
 """Shared test fixtures for Chameleon MCP tests."""
 
+import atexit
 import json
+import os
 import shutil
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import respx
+
+# Isolate the suite from the developer's real Kitsune state. Every state path
+# (credentials .env, state.json, skills.json, OAuth tokens, pins, absorbed
+# servers, guard policy) derives from kitsune_home(), and several modules bind
+# it at import time — so KITSUNE_HOME must be set here, before any test module
+# imports kitsune_mcp. Without this, running the suite wrote test servers,
+# skills and keys into ~/.kitsune, where a real Kitsune install picked them up.
+_TEST_KITSUNE_HOME = tempfile.mkdtemp(prefix="kitsune-test-home-")
+os.environ["KITSUNE_HOME"] = _TEST_KITSUNE_HOME
+atexit.register(shutil.rmtree, _TEST_KITSUNE_HOME, ignore_errors=True)
+_REAL_KITSUNE_HOME = Path.home() / ".kitsune"
 
 _REAL_WHICH = shutil.which
 

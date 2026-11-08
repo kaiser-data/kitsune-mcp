@@ -30,6 +30,40 @@ class TestKitsuneHomeHelper:
         assert kitsune_home() == Path("/tmp/kitsune-iso")
 
 
+class TestSuiteIsolation:
+    """The suite itself must never touch the developer's real ~/.kitsune."""
+
+    def test_suite_runs_with_temp_kitsune_home(self):
+        from tests.conftest import _REAL_KITSUNE_HOME, _TEST_KITSUNE_HOME
+
+        assert os.environ["KITSUNE_HOME"] == _TEST_KITSUNE_HOME
+        assert Path(_TEST_KITSUNE_HOME) != _REAL_KITSUNE_HOME
+
+    def test_state_paths_bound_at_import_avoid_real_home(self):
+        import kitsune_mcp.credentials as c
+        import kitsune_mcp.gateway as g
+        import kitsune_mcp.oauth as o
+        import kitsune_mcp.session as s
+        from kitsune_mcp.guard import policy_path
+        from kitsune_mcp.pins import _pins_path
+        from tests.conftest import _REAL_KITSUNE_HOME, _TEST_KITSUNE_HOME
+
+        paths = {
+            "state": s._STATE_PATH,
+            "skills": s.SKILLS_PATH,
+            "env": c.ENV_PATH,
+            "absorbed": g._ABSORBED_PATH,
+            "backup": g._BACKUP_DIR,
+            "oauth": o._KITSUNE_DIR,
+            "pins": _pins_path(),
+            "policy": policy_path(),
+        }
+        for name, p in paths.items():
+            p = Path(p)
+            assert p.is_relative_to(_TEST_KITSUNE_HOME), f"{name} escapes the test home: {p}"
+            assert not p.is_relative_to(_REAL_KITSUNE_HOME), f"{name} points at ~/.kitsune: {p}"
+
+
 class TestAllModulesHonorKitsuneHome:
     """Module-level path constants are bound at import time, so derivation is
     asserted in a subprocess with KITSUNE_HOME set — full isolation, no
