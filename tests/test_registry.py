@@ -840,7 +840,7 @@ class TestMcpRegistryIO:
 
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
-            respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
+            respx.get("https://registry.modelcontextprotocol.io/v0.1/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
             )
             reg = McpRegistryIO()
@@ -854,7 +854,7 @@ class TestMcpRegistryIO:
 
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
-            respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
+            respx.get("https://registry.modelcontextprotocol.io/v0.1/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
             )
             reg = McpRegistryIO()
@@ -868,7 +868,7 @@ class TestMcpRegistryIO:
 
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
-            respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
+            respx.get("https://registry.modelcontextprotocol.io/v0.1/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
             )
             reg = McpRegistryIO()
@@ -882,7 +882,7 @@ class TestMcpRegistryIO:
 
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
-            respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
+            respx.get("https://registry.modelcontextprotocol.io/v0.1/servers").mock(
                 return_value=httpx.Response(200, json=self._RESPONSE)
             )
             reg = McpRegistryIO()
@@ -896,7 +896,7 @@ class TestMcpRegistryIO:
 
         reg_mod.McpRegistryIO._CACHE.clear()
         with respx.mock:
-            respx.get("https://registry.modelcontextprotocol.io/v0/servers").mock(
+            respx.get("https://registry.modelcontextprotocol.io/v0.1/servers").mock(
                 return_value=httpx.Response(503, text="Unavailable")
             )
             reg = McpRegistryIO()
@@ -1136,3 +1136,145 @@ class TestRelevanceScoreCredentialBonus:
         assert _relevance_score(exact_cred, "filesystem") > _relevance_score(
             weak_free, "filesystem"
         )
+
+
+# ---------------------------------------------------------------------------
+# McpRegistryIO against real v0.1 publications (Codex P1: registry adapter)
+# ---------------------------------------------------------------------------
+
+_V01_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "mcp_registry_v0_1.json")
+_V01_URL = "https://registry.modelcontextprotocol.io/v0.1/servers"
+
+
+class TestMcpRegistryIOv01:
+    """Entries captured from registry.modelcontextprotocol.io on 2026-11-08."""
+
+    @staticmethod
+    async def _servers():
+        import json
+
+        import kitsune_mcp.registry as reg_mod
+
+        reg_mod.McpRegistryIO._CACHE.clear()
+        with open(_V01_FIXTURE) as f:
+            payload = json.load(f)
+        with respx.mock:
+            route = respx.get(_V01_URL).mock(return_value=httpx.Response(200, json=payload))
+            servers = await reg_mod.McpRegistryIO()._all_servers()
+        return {s.id: s for s in servers}, route
+
+    async def test_asks_for_latest_versions_only(self):
+        _, route = await self._servers()
+        assert route.calls[0].request.url.params["version"] == "latest"
+
+    async def test_own_server_json_parses(self):
+        servers, _ = await self._servers()
+        k = servers["io.github.kaiser-data/kitsune-mcp"]
+        assert k.transport == "stdio"
+        assert k.install_cmd == ["npx", "-y", "kitsune-mcp@0.22.8"]
+
+    async def test_pypi_package_pinned_with_arguments(self):
+        servers, _ = await self._servers()
+        s = servers["ai.arsentev/contextburn"]
+        assert s.install_cmd == ["uvx", "contextburn==0.2.1", "mcp"]
+
+    async def test_required_argument_without_value_is_left_out(self):
+        servers, _ = await self._servers()
+        s = servers["ai.aquex/stage1"]
+        assert s.install_cmd == ["npx", "-y", "@aquex/stage1@0.7.0", "stage1-mcp"]
+
+    async def test_templated_remote_only_entry_is_skipped(self):
+        # https://{api_host}/mcp needs a value Kitsune cannot supply.
+        servers, _ = await self._servers()
+        assert "ai.autorfp/mcp" not in servers
+
+    async def test_sse_remote_is_http(self):
+        servers, _ = await self._servers()
+        s = servers["ai.agentrapay/agentra"]
+        assert s.transport == "http" and s.url == "https://api.agentrapay.ai/mcp"
+
+    async def test_oci_only_entry_is_skipped(self):
+        servers, _ = await self._servers()
+        assert "ai.aliengiraffe/spotdb" not in servers
+
+    async def test_search_asks_the_registry_per_word(self):
+        import json
+
+        import kitsune_mcp.registry as reg_mod
+
+        reg_mod.McpRegistryIO._CACHE.clear()
+        with open(_V01_FIXTURE) as f:
+            payload = json.load(f)
+        hit = {"servers": [e for e in payload["servers"] if "contextburn" in e["server"]["name"]]}
+        empty = {"servers": [], "metadata": {}}
+
+        def handler(request):
+            term = request.url.params.get("search")
+            return httpx.Response(200, json=hit if term == "contextburn" else empty)
+
+        with respx.mock:
+            route = respx.get(_V01_URL).mock(side_effect=handler)
+            results = await reg_mod.McpRegistryIO().search("contextburn tokens", 5)
+        assert [s.id for s in results] == ["ai.arsentev/contextburn"]
+        terms = {c.request.url.params.get("search") for c in route.calls}
+        assert {"contextburn", "tokens"} <= terms
+
+    async def test_get_server_finds_entry_beyond_the_cached_pages(self):
+        import json
+
+        import kitsune_mcp.registry as reg_mod
+
+        reg_mod.McpRegistryIO._CACHE.clear()
+        with open(_V01_FIXTURE) as f:
+            payload = json.load(f)
+        own = {"servers": [payload["servers"][0]]}
+
+        def handler(request):
+            if request.url.params.get("search") == "io.github.kaiser-data/kitsune-mcp":
+                return httpx.Response(200, json=own)
+            return httpx.Response(200, json={"servers": [], "metadata": {}})
+
+        with respx.mock:
+            respx.get(_V01_URL).mock(side_effect=handler)
+            srv = await reg_mod.McpRegistryIO().get_server("io.github.kaiser-data/kitsune-mcp")
+        assert srv is not None and srv.install_cmd == ["npx", "-y", "kitsune-mcp@0.22.8"]
+
+    async def test_versions_feed_the_pin_parser(self):
+        from kitsune_mcp.pins import _parse_spec
+
+        servers, _ = await self._servers()
+        assert _parse_spec(servers["io.github.kaiser-data/kitsune-mcp"].install_cmd) == (
+            2,
+            "kitsune-mcp",
+            "0.22.8",
+            "@",
+        )
+        assert _parse_spec(servers["ai.arsentev/contextburn"].install_cmd) == (
+            1,
+            "contextburn",
+            "0.2.1",
+            "==",
+        )
+
+    def test_deleted_entry_is_skipped(self):
+        from kitsune_mcp.registry import McpRegistryIO
+
+        entry = {
+            "server": {"name": "x/gone", "packages": []},
+            "_meta": {"io.modelcontextprotocol.registry/official": {"status": "deleted"}},
+        }
+        assert McpRegistryIO._to_server_info(entry) is None
+
+    def test_env_vars_from_camel_case(self):
+        from kitsune_mcp.registry import McpRegistryIO
+
+        srv = {
+            "packages": [
+                {
+                    "registryType": "npm",
+                    "identifier": "p",
+                    "environmentVariables": [{"name": "TOKEN", "description": "d"}],
+                }
+            ]
+        }
+        assert McpRegistryIO._credentials(srv) == {"TOKEN": "d"}
