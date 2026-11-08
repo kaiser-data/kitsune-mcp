@@ -470,39 +470,84 @@ async def _ensure_smithery_connection(namespace: str, conn_id: str, mcp_url: str
         return False
 
 
-def _parse_sse(text: str) -> dict | None:
-    """Extract the JSON payload from an SSE response body.
+class _SSEParser:
+    """Incremental text/event-stream parser (WHATWG rules).
 
-    SSE events may spread a single JSON value across multiple `data:` lines.
-    RFC 6455 says concatenate them with newlines before parsing. We collect
-    all data lines per event (blank line = event boundary) and try each.
+    Feed it one line at a time (without the line terminator); it returns an
+    event's data when a blank line ends that event. Multiple `data:` lines in
+    one event are joined with newlines; only one space after the colon is
+    stripped; comment lines (starting with `:`) are ignored.
     """
-    events: list[list[str]] = [[]]
-    for line in text.splitlines():
+
+    def __init__(self) -> None:
+        self._data: list[str] = []
+
+    def feed_line(self, line: str) -> str | None:
         if line == "":
-            events.append([])
-        elif line.startswith("data:"):
-            events[-1].append(line[5:].strip())
-    for parts in events:
-        if not parts:
-            continue
-        try:
-            return json.loads("\n".join(parts))
-        except json.JSONDecodeError:
-            pass
-    return None
-
-
-def _parse_rpc_body(text: str) -> dict | None:
-    """Read a JSON-RPC message from a Streamable HTTP response: SSE or plain JSON."""
-    msg = _parse_sse(text)
-    if msg is not None:
-        return msg
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
+            return self.flush()
+        if line.startswith(":"):
+            return None
+        name, _, value = line.partition(":")
+        if value.startswith(" "):
+            value = value[1:]
+        if name == "data":
+            self._data.append(value)
         return None
-    return parsed if isinstance(parsed, dict) else None
+
+    def flush(self) -> str | None:
+        if not self._data:
+            return None
+        data = "\n".join(self._data)
+        self._data = []
+        return data
+
+
+def _json_messages(data: str) -> list[dict]:
+    """JSON-RPC messages in one payload: a single object or a batch array."""
+    try:
+        parsed = json.loads(data)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(parsed, dict):
+        return [parsed]
+    if isinstance(parsed, list):
+        return [m for m in parsed if isinstance(m, dict)]
+    return []
+
+
+def _is_response(msg: dict, request_id: int | None) -> bool:
+    """True for a JSON-RPC response (not a request or notification) to request_id.
+
+    request_id=None accepts a response to any request.
+    """
+    if "method" in msg or ("result" not in msg and "error" not in msg):
+        return False
+    return request_id is None or msg.get("id") == request_id
+
+
+def _sse_messages(text: str) -> list[dict]:
+    parser = _SSEParser()
+    out: list[dict] = []
+    for line in [*text.splitlines(), ""]:
+        data = parser.feed_line(line)
+        if data is not None:
+            out.extend(_json_messages(data))
+    return out
+
+
+def _parse_sse(text: str) -> dict | None:
+    """First JSON object carried by a buffered SSE body, or None."""
+    messages = _sse_messages(text)
+    return messages[0] if messages else None
+
+
+def _parse_rpc_body(text: str, request_id: int | None = None) -> dict | None:
+    """The response to request_id in a buffered Streamable HTTP body: SSE or plain JSON.
+
+    Notifications and server-to-client requests on the same stream are skipped.
+    """
+    messages = _sse_messages(text) or _json_messages(text)
+    return next((m for m in messages if _is_response(m, request_id)), None)
 
 
 class CallOutcomeUnknown(RuntimeError):
@@ -518,14 +563,150 @@ def _outcome_unknown_message(tool: str, server: str, reason: str) -> str:
 
 # MCP sessions from HTTP initialize, reused across calls so each tool call
 # skips the handshake (#66). The key hashes the bearer token and config, so a
-# new token or changed credentials start a new session.
-_http_sessions: dict[tuple[str, str], tuple[str, str]] = {}
+# new token or changed credentials start a new session. Records are immutable
+# and stay in the cache while requests use them, so concurrent callers share
+# one session; a per-key lock makes sure only one of them runs the handshake.
+HTTP_SESSION_MAX_AGE = 30 * 60.0  # seconds; older sessions are closed and re-made
+HTTP_SESSION_MAX_COUNT = 64  # oldest session is closed beyond this
+
+
+@dataclass(frozen=True)
+class _HTTPSession:
+    endpoint: str
+    bearer: str
+    session_id: str | None  # None: the server is stateless and issued no id
+    proto: str
+    created_at: float = field(default_factory=time.monotonic)
+
+    def expired(self) -> bool:
+        return time.monotonic() - self.created_at > HTTP_SESSION_MAX_AGE
+
+
+@dataclass
+class _HTTPReply:
+    status: int
+    headers: httpx.Headers
+    message: dict | None  # the JSON-RPC response to our request, if one arrived
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status < 300
+
+
+_http_sessions: dict[tuple[str, str], _HTTPSession] = {}
+_http_session_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _http_request_ids = itertools.count(2)
 
 
 def _http_session_key(endpoint: str, bearer: str, config: dict) -> tuple[str, str]:
     blob = f"{bearer}\0{json.dumps(config, sort_keys=True, default=str)}"
     return endpoint, hashlib.sha256(blob.encode()).hexdigest()
+
+
+def _http_headers(bearer: str, sess: _HTTPSession | None) -> dict[str, str]:
+    hdrs = {
+        "Authorization": f"Bearer {bearer}",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if sess is not None:
+        if sess.session_id:
+            hdrs["mcp-session-id"] = sess.session_id
+        hdrs["MCP-Protocol-Version"] = sess.proto
+    return hdrs
+
+
+async def _answer_server_request(
+    endpoint: str, bearer: str, sess: _HTTPSession | None, msg: dict
+) -> None:
+    """Reply to a server-to-client request seen on a response stream.
+
+    Kitsune offers no client capabilities (sampling, roots, elicitation), so
+    anything but ping gets "method not found"; leaving it unanswered could make
+    the server wait forever before it sends our result.
+    """
+    if msg.get("method") == "ping":
+        reply: dict[str, Any] = {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
+    else:
+        reply = {
+            "jsonrpc": "2.0",
+            "id": msg["id"],
+            "error": {"code": -32601, "message": f"Method not supported: {msg.get('method')}"},
+        }
+    with contextlib.suppress(httpx.HTTPError):
+        await _get_http_client().post(
+            endpoint,
+            content=json.dumps(reply),
+            headers=_http_headers(bearer, sess),
+            timeout=TIMEOUT_HTTP_TOOL,
+        )
+
+
+async def _http_post(
+    endpoint: str, bearer: str, sess: _HTTPSession | None, payload: dict
+) -> _HTTPReply:
+    """POST one JSON-RPC message and read the reply as the spec allows.
+
+    The server may answer with application/json or with an SSE stream. A
+    stream is read incrementally and closed as soon as the response matching
+    our request id arrives; notifications on it are skipped and server-to-client
+    requests are answered. Notifications (no id) only need the status code.
+    """
+    request_id = payload.get("id") if "method" in payload else None
+    client = _get_http_client()
+    async with client.stream(
+        "POST",
+        endpoint,
+        content=json.dumps(payload),
+        headers=_http_headers(bearer, sess),
+        timeout=TIMEOUT_HTTP_TOOL,
+    ) as r:
+        if request_id is None or not r.is_success:
+            await r.aread()
+            return _HTTPReply(r.status_code, r.headers, None)
+
+        ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
+        if ctype == "text/event-stream":
+            parser = _SSEParser()
+            async for line in r.aiter_lines():
+                data = parser.feed_line(line)
+                for msg in _json_messages(data) if data is not None else []:
+                    if _is_response(msg, request_id):
+                        return _HTTPReply(r.status_code, r.headers, msg)
+                    if "method" in msg and "id" in msg:
+                        await _answer_server_request(endpoint, bearer, sess, msg)
+            tail = parser.flush()
+            for msg in _json_messages(tail) if tail is not None else []:
+                if _is_response(msg, request_id):
+                    return _HTTPReply(r.status_code, r.headers, msg)
+            return _HTTPReply(r.status_code, r.headers, None)
+
+        # application/json, or a body with a missing or wrong content type.
+        body = (await r.aread()).decode("utf-8", errors="replace")
+        return _HTTPReply(r.status_code, r.headers, _parse_rpc_body(body, request_id))
+
+
+async def _close_http_session(sess: _HTTPSession) -> None:
+    """Tell the server a session is no longer needed (spec: DELETE; 405 is allowed)."""
+    if not sess.session_id:
+        return
+    with contextlib.suppress(httpx.HTTPError):
+        await _get_http_client().delete(
+            sess.endpoint, headers=_http_headers(sess.bearer, sess), timeout=5.0
+        )
+
+
+async def close_http_sessions() -> None:
+    """Close every cached HTTP MCP session (for shutdown and tests)."""
+    sessions = list(_http_sessions.values())
+    _http_sessions.clear()
+    await asyncio.gather(*(_close_http_session(s) for s in sessions))
+
+
+def _drop_http_session(key: tuple[str, str], sess: _HTTPSession) -> None:
+    """Remove sess from the cache unless another caller already replaced it."""
+    if _http_sessions.get(key) is sess:
+        del _http_sessions[key]
 
 
 # ---------------------------------------------------------------------------
@@ -583,90 +764,114 @@ class HTTPSSETransport(BaseTransport):
         endpoint = f"{_SMITHERY_API_BASE}/connect/{namespace}/{conn_id}/mcp"
         return endpoint, token
 
+    async def _session(
+        self, key: tuple[str, str], endpoint: str, bearer: str, stale: _HTTPSession | None
+    ) -> tuple[_HTTPSession, bool]:
+        """Return (session, fresh): the cached session for key, or a new one.
+
+        Initialization runs under a per-key lock, so concurrent callers make
+        one handshake and then share its session. `stale` is a session the
+        caller just saw rejected; it is never handed back.
+        """
+        lock = _http_session_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            cur = _http_sessions.get(key)
+            if cur is not None and cur is not stale:
+                if not cur.expired():
+                    return cur, False
+                _drop_http_session(key, cur)
+                await _close_http_session(cur)
+
+            r = await _http_post(endpoint, bearer, None, _initialize_request())
+            if r.status in (401, 403):
+                raise PermissionError(f"HTTP {r.status}")
+            if not r.ok:
+                raise RuntimeError(f"Initialize failed: HTTP {r.status}")
+            init_msg = r.message
+            if init_msg and "error" in init_msg:
+                raise RuntimeError(f"Initialize failed: {init_msg['error']}")
+            sess = _HTTPSession(
+                endpoint=endpoint,
+                bearer=bearer,
+                session_id=r.headers.get("mcp-session-id"),
+                proto=_negotiated_version(init_msg),
+            )
+            note = await _http_post(endpoint, bearer, sess, _initialized_notification())
+            if note.status in (401, 403):
+                raise PermissionError(f"HTTP {note.status}")
+
+            _http_sessions[key] = sess
+            while len(_http_sessions) > HTTP_SESSION_MAX_COUNT:
+                oldest_key = min(_http_sessions, key=lambda k: _http_sessions[k].created_at)
+                await _close_http_session(_http_sessions.pop(oldest_key))
+            return sess, True
+
     async def _rpc(
         self, endpoint: str, bearer: str, config: dict, method: str, params: dict
     ) -> dict | None:
-        """Send one JSON-RPC request, reusing this endpoint's MCP session when one is cached.
+        """Send one JSON-RPC request over this endpoint's (shared) MCP session.
 
-        Raises PermissionError on 401/403. An expired or unknown session (the
-        spec answers 404, some servers 400) falls back to a fresh handshake.
+        Raises PermissionError on 401/403. A rejected session (the spec answers
+        404, some servers 400) gets one fresh handshake and one more try, but
+        only a request the server provably did not run is sent again: a
+        tools/call whose response was lost could repeat a mutation, so it
+        raises CallOutcomeUnknown instead.
         """
-        client = _get_http_client()
         key = _http_session_key(endpoint, bearer, config)
-
-        async def _post(payload, session_id=None, proto=None):
-            hdrs = {
-                "Authorization": f"Bearer {bearer}",
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
-            }
-            if session_id:
-                hdrs["mcp-session-id"] = session_id
-            if proto:
-                hdrs["MCP-Protocol-Version"] = proto
-            return await client.post(
-                endpoint, content=json.dumps(payload), headers=hdrs, timeout=TIMEOUT_HTTP_TOOL
-            )
-
         request = {
             "jsonrpc": "2.0",
             "id": next(_http_request_ids),
             "method": method,
             "params": params,
         }
-
-        # Only a request the server provably did not run may be sent again: a
-        # tools/call that got lost after sending could repeat a mutation.
         replay_safe = method != "tools/call"
-        cached = _http_sessions.pop(key, None)
-        if cached:
+        stale: _HTTPSession | None = None
+
+        for attempt in range(2):
+            sess, fresh = await self._session(key, endpoint, bearer, stale)
+            can_retry = attempt == 0 and not fresh
             try:
-                r = await _post(request, *cached)
+                r = await _http_post(endpoint, bearer, sess, request)
             except (httpx.ConnectError, httpx.ConnectTimeout):
-                r = None  # never reached the server
+                if not can_retry:
+                    raise
+                stale = sess  # never reached the server: safe to send again
+                _drop_http_session(key, sess)
+                continue
             except httpx.HTTPError as e:
                 if not replay_safe:
-                    _http_sessions[key] = cached
                     raise CallOutcomeUnknown(
                         f"connection lost after sending ({type(e).__name__})"
                     ) from e
-                r = None
-            if r is not None and r.status_code in (401, 403):
-                raise PermissionError(f"HTTP {r.status_code}")
-            if r is not None and r.is_success:
-                msg = _parse_rpc_body(r.text)
-                if msg is not None:
-                    _http_sessions[key] = cached
-                    return msg
-                if not replay_safe:
-                    _http_sessions[key] = cached
-                    raise CallOutcomeUnknown(
-                        "the server accepted the call but its response was unreadable"
-                    )
-            elif r is not None and r.status_code not in (400, 404) and not replay_safe:
-                # 400/404 mean the session was rejected before the call ran.
-                raise CallOutcomeUnknown(f"HTTP {r.status_code} from the server")
+                if not can_retry:
+                    raise
+                stale = sess
+                _drop_http_session(key, sess)
+                continue
 
-        r = await _post(_initialize_request())
-        if r.status_code in (401, 403):
-            raise PermissionError(f"HTTP {r.status_code}")
-        r.raise_for_status()
-
-        session_id = r.headers.get("mcp-session-id")
-        init_msg = _parse_rpc_body(r.text)
-        if init_msg and "error" in init_msg:
-            raise RuntimeError(f"Initialize failed: {init_msg['error']}")
-        proto = _negotiated_version(init_msg)
-
-        await _post(_initialized_notification(), session_id, proto)
-
-        r2 = await _post(request, session_id, proto)
-        r2.raise_for_status()
-        msg = _parse_rpc_body(r2.text)
-        # Stateless servers send no session id; they get a fresh handshake each time.
-        if session_id and msg is not None:
-            _http_sessions[key] = (session_id, proto)
-        return msg
+            if r.status in (401, 403):
+                _drop_http_session(key, sess)
+                raise PermissionError(f"HTTP {r.status}")
+            if r.ok:
+                if r.message is not None or replay_safe:
+                    return r.message
+                raise CallOutcomeUnknown(
+                    "the server accepted the call but sent no readable response"
+                )
+            if r.status in (400, 404):
+                # The session was rejected before the call ran.
+                _drop_http_session(key, sess)
+                if can_retry:
+                    stale = sess
+                    continue
+                raise RuntimeError(f"HTTP {r.status} from the server")
+            if not replay_safe:
+                raise CallOutcomeUnknown(f"HTTP {r.status} from the server")
+            if not can_retry:
+                raise RuntimeError(f"HTTP {r.status} from the server")
+            stale = sess
+            _drop_http_session(key, sess)
+        return None
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
         result = await self._connect_endpoint(config)

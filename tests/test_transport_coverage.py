@@ -8,6 +8,7 @@ guide), stdio error paths, persistent-transport reconnect branches
 prompts/list + prompts/get, pool atexit cleanup, and _ping on a dead entry.
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -36,7 +37,7 @@ from kitsune_mcp.transport import (
     _smithery_conn_id,
 )
 
-from .conftest import make_mock_process, make_stdout_with_responses
+from .conftest import _script, make_mock_process, make_stdout_with_responses
 
 
 @pytest.fixture(autouse=True)
@@ -250,8 +251,10 @@ ENDPOINT = "https://api.smithery.ai/connect/ns/kitsune-org-server/mcp"
 
 
 def _sse(payload: dict, session_id: str | None = None) -> httpx.Response:
-    headers = {"mcp-session-id": session_id} if session_id else {}
-    return httpx.Response(200, text=f"data: {json.dumps(payload)}\n", headers=headers)
+    headers = {"content-type": "text/event-stream"}
+    if session_id:
+        headers["mcp-session-id"] = session_id
+    return httpx.Response(200, text=f"data: {json.dumps(payload)}\n\n", headers=headers)
 
 
 def _patched_transport():
@@ -275,14 +278,17 @@ class TestHTTPExecuteErrorPaths:
         init_ok = {"jsonrpc": "2.0", "id": 1, "result": {}}
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(init_ok, "sid"),
-                    httpx.Response(202),
-                    httpx.Response(200, text=""),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(init_ok, "sid"),
+                        httpx.Response(202),
+                        httpx.Response(200, text=""),
+                    ]
+                )
             )
             result = await t.execute("tool", {}, {})
-        assert "Empty response" in result
+        # A tools/call the server accepted may have run; it is not retried.
+        assert "outcome unknown" in result
 
     async def test_error_in_tool_response_is_reported(self):
         t, patcher = _patched_transport()
@@ -290,7 +296,7 @@ class TestHTTPExecuteErrorPaths:
         tool_err = {"jsonrpc": "2.0", "id": 2, "error": {"code": -2, "message": "boom"}}
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tool_err)]
+                side_effect=_script([_sse(init_ok, "sid"), httpx.Response(202), _sse(tool_err)])
             )
             result = await t.execute("tool", {}, {})
         assert "Error from org/server/tool" in result
@@ -345,7 +351,7 @@ class TestHTTPListTools:
         tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}, {"name": "b"}]}}
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tools)]
+                side_effect=_script([_sse(init_ok, "sid"), httpx.Response(202), _sse(tools)])
             )
             result = await t.list_tools()
         assert [x["name"] for x in result] == ["a", "b"]
@@ -356,7 +362,7 @@ class TestHTTPListTools:
         err = {"jsonrpc": "2.0", "id": 2, "error": {"message": "nope"}}
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(err)]
+                side_effect=_script([_sse(init_ok, "sid"), httpx.Response(202), _sse(err)])
             )
             assert await t.list_tools() == []
 
@@ -378,12 +384,14 @@ class TestHTTPListTools:
             respx.mock,
         ):
             respx.post(url).mock(
-                side_effect=[
-                    httpx.Response(401),  # first init → PermissionError
-                    _sse(init_ok, "sid"),  # retry init
-                    httpx.Response(202),  # initialized notify
-                    _sse(tools),  # tools/list
-                ]
+                side_effect=_script(
+                    [
+                        httpx.Response(401),  # first init → PermissionError
+                        _sse(init_ok, "sid"),  # retry init
+                        httpx.Response(202),  # initialized notify
+                        _sse(tools),  # tools/list
+                    ]
+                )
             )
             result = await t.list_tools()
         assert [x["name"] for x in result] == ["fresh"]
@@ -435,12 +443,14 @@ class TestHTTPSessionReuse:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok("a"),
-                    _tool_ok("b"),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok("a"),
+                        _tool_ok("b"),
+                    ]
+                )
             )
             assert "a" in await t.execute("tool", {}, {})
             assert "b" in await t.execute("tool", {}, {})
@@ -459,7 +469,9 @@ class TestHTTPSessionReuse:
         tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}]}}
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[_sse(INIT_OK, "sid-1"), httpx.Response(202), _sse(tools), _tool_ok()]
+                side_effect=_script(
+                    [_sse(INIT_OK, "sid-1"), httpx.Response(202), _sse(tools), _tool_ok()]
+                )
             )
             await t.list_tools()
             await t.execute("a", {}, {})
@@ -469,7 +481,9 @@ class TestHTTPSessionReuse:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[_sse(INIT_OK, "sid-1"), httpx.Response(202), _tool_ok(), _tool_ok()]
+                side_effect=_script(
+                    [_sse(INIT_OK, "sid-1"), httpx.Response(202), _tool_ok(), _tool_ok()]
+                )
             )
             await t.execute("tool", {}, {})
             await t.execute("tool", {}, {})
@@ -484,14 +498,16 @@ class TestHTTPSessionReuse:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok(),
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok(),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                    ]
+                )
             )
             await t.execute("tool", {}, {"apiKey": "old"})
             await t.execute("tool", {}, {"apiKey": "new"})
@@ -503,14 +519,16 @@ class TestHTTPSessionReuse:
         tokens = AsyncMock(side_effect=[(ENDPOINT, "tok-1"), (ENDPOINT, "tok-2")])
         with patch.object(t, "_connect_endpoint", tokens), respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok(),
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok(),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             await t.execute("tool", {}, {})
@@ -521,34 +539,40 @@ class TestHTTPSessionReuse:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok("first"),
-                    httpx.Response(status),  # cached session rejected
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok("second"),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok("first"),
+                        httpx.Response(status),  # cached session rejected
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok("second"),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             assert "second" in await t.execute("tool", {}, {})
         assert route.calls[-1].request.headers["mcp-session-id"] == "sid-2"
-        assert list(tp._http_sessions.values()) == [("sid-2", "2025-06-18")]
+        assert [(x.session_id, x.proto) for x in tp._http_sessions.values()] == [
+            ("sid-2", "2025-06-18")
+        ]
 
     async def test_network_error_on_cached_session_falls_back(self):
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok("first"),
-                    httpx.ConnectError("reset"),
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok("second"),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok("first"),
+                        httpx.ConnectError("reset"),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok("second"),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             assert "second" in await t.execute("tool", {}, {})
@@ -563,35 +587,180 @@ class TestHTTPSessionReuse:
             patch.object(tp, "SmitheryRegistry", MagicMock(return_value=registry)),
         ):
             respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok(),
-                    httpx.Response(401),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                        httpx.Response(401),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             result = await t.execute("tool", {}, {})
         assert "Auth failed" in result
         assert tp._http_sessions == {}
 
-    async def test_stateless_server_is_not_cached(self):
+    async def test_stateless_server_keeps_its_handshake(self):
+        """A server that issues no session id still needs only one initialize."""
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK),
-                    httpx.Response(202),
-                    _tool_ok(),
-                    _sse(INIT_OK),
-                    httpx.Response(202),
-                    _tool_ok(),
-                ]
+                side_effect=_script(
+                    [_sse(INIT_OK), httpx.Response(202), _tool_ok("a"), _tool_ok("b")]
+                )
             )
+            assert "a" in await t.execute("tool", {}, {})
+            assert "b" in await t.execute("tool", {}, {})
+        assert _methods(route).count("initialize") == 1
+        assert "mcp-session-id" not in route.calls[-1].request.headers
+        assert route.calls[-1].request.headers["MCP-Protocol-Version"] == "2025-06-18"
+
+    async def test_concurrent_calls_share_one_handshake(self):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=_script(
+                    [_sse(INIT_OK, "sid-1"), httpx.Response(202)]
+                    + [_tool_ok(str(i)) for i in range(5)]
+                )
+            )
+            results = await asyncio.gather(*(t.execute("tool", {}, {}) for _ in range(5)))
+        assert all("may have run" not in r for r in results)
+        assert _methods(route).count("initialize") == 1
+        assert {c.request.headers.get("mcp-session-id") for c in route.calls[2:]} == {"sid-1"}
+
+    async def test_expired_session_is_closed_and_replaced(self, monkeypatch):
+        t, patcher = _patched_transport()
+        with patcher, respx.mock:
+            route = respx.post(ENDPOINT).mock(
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok(),
+                    ]
+                )
+            )
+            deleted = respx.delete(ENDPOINT).mock(return_value=httpx.Response(200))
             await t.execute("tool", {}, {})
+            monkeypatch.setattr(tp, "HTTP_SESSION_MAX_AGE", -1.0)
             await t.execute("tool", {}, {})
-        assert _methods(route).count("initialize") == 2
-        assert tp._http_sessions == {}
+        assert deleted.calls[0].request.headers["mcp-session-id"] == "sid-1"
+        assert route.calls[-1].request.headers["mcp-session-id"] == "sid-2"
+
+
+class TestStreamableHTTPResponses:
+    """Responses arrive as JSON or SSE; only the one matching our id counts (Codex P1)."""
+
+    async def test_sse_skips_notifications_and_picks_matching_id(self):
+        t, patcher = _patched_transport()
+
+        def tool_stream(request: httpx.Request) -> httpx.Response:
+            rid = json.loads(request.content)["id"]
+            events = [
+                {"jsonrpc": "2.0", "method": "notifications/progress", "params": {"progress": 1}},
+                {"jsonrpc": "2.0", "id": rid + 1000, "result": {"content": []}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "result": {"content": [{"type": "text", "text": "mine"}]},
+                },
+            ]
+            body = "".join(f"event: message\ndata: {json.dumps(e)}\n\n" for e in events)
+            return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+        responses = iter([_sse(INIT_OK, "sid-1"), httpx.Response(202)])
+        with patcher, respx.mock:
+            respx.post(ENDPOINT).mock(
+                side_effect=lambda req: next(responses, None) or tool_stream(req)
+            )
+            result = await t.execute("tool", {}, {})
+        assert "mine" in result
+
+    async def test_server_request_on_stream_is_answered(self):
+        t, patcher = _patched_transport()
+        answers: list[dict] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            msg = json.loads(request.content)
+            if msg.get("method") == "initialize":
+                return _sse(INIT_OK, "sid-1")
+            if "method" not in msg:  # our reply to the server's request
+                answers.append(msg)
+                return httpx.Response(202)
+            if msg["method"] == "notifications/initialized":
+                return httpx.Response(202)
+            events = [
+                {"jsonrpc": "2.0", "id": "srv-1", "method": "sampling/createMessage", "params": {}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "result": {"content": [{"type": "text", "text": "done"}]},
+                },
+            ]
+            body = "".join(f"data: {json.dumps(e)}\n\n" for e in events)
+            return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+        with patcher, respx.mock:
+            respx.post(ENDPOINT).mock(side_effect=handler)
+            assert "done" in await t.execute("tool", {}, {})
+        assert answers == [
+            {
+                "jsonrpc": "2.0",
+                "id": "srv-1",
+                "error": {
+                    "code": -32601,
+                    "message": "Method not supported: sampling/createMessage",
+                },
+            }
+        ]
+
+    async def test_stream_without_our_response_is_outcome_unknown(self):
+        t, patcher = _patched_transport()
+        note = {"jsonrpc": "2.0", "method": "notifications/message", "params": {}}
+        with patcher, respx.mock:
+            respx.post(ENDPOINT).mock(
+                side_effect=_script([_sse(INIT_OK, "sid-1"), httpx.Response(202), _sse(note)])
+            )
+            result = await t.execute("tool", {}, {})
+        assert "may have run" in result
+
+    async def test_application_json_response(self):
+        t, patcher = _patched_transport()
+        body = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "j"}]}}
+        with patcher, respx.mock:
+            respx.post(ENDPOINT).mock(
+                side_effect=_script(
+                    [
+                        httpx.Response(200, json=INIT_OK, headers={"mcp-session-id": "s"}),
+                        httpx.Response(202),
+                        httpx.Response(200, json=body),
+                    ]
+                )
+            )
+            assert [x["name"] for x in await t.list_tools()] == ["j"]
+
+
+class TestSSEParser:
+    def test_multiline_data_and_single_space_strip(self):
+        p = tp._SSEParser()
+        assert p.feed_line('data:  {"a":') is None
+        assert p.feed_line("data: 1}") is None
+        assert p.feed_line(": comment") is None
+        assert p.feed_line("") == ' {"a":\n1}'
+
+    def test_batch_payload(self):
+        msgs = tp._json_messages('[{"id": 1, "result": {}}, 3]')
+        assert msgs == [{"id": 1, "result": {}}]
+
+    def test_parse_rpc_body_matches_id(self):
+        text = 'data: {"id": 7, "result": "x"}\n\ndata: {"id": 8, "result": "y"}\n\n'
+        assert tp._parse_rpc_body(text, 8) == {"id": 8, "result": "y"}
+        assert tp._parse_rpc_body(text, 9) is None
 
 
 class TestHTTPNoReplay:
@@ -602,12 +771,14 @@ class TestHTTPNoReplay:
         body = {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "j"}]}}
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    httpx.Response(200, json=body),
-                    httpx.Response(200, json=body),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        httpx.Response(200, json=body),
+                        httpx.Response(200, json=body),
+                    ]
+                )
             )
             assert "j" in await t.execute("tool", {}, {})
             assert "j" in await t.execute("tool", {}, {})
@@ -618,15 +789,17 @@ class TestHTTPNoReplay:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok("first"),
-                    httpx.Response(200, text="not json at all"),
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok("replayed"),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok("first"),
+                        httpx.Response(200, text="not json at all"),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok("replayed"),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             result = await t.execute("tool", {}, {})
@@ -641,15 +814,17 @@ class TestHTTPNoReplay:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok("first"),
-                    failure,
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok("replayed"),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok("first"),
+                        failure,
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok("replayed"),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             result = await t.execute("tool", {}, {})
@@ -660,15 +835,17 @@ class TestHTTPNoReplay:
         t, patcher = _patched_transport()
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _tool_ok("first"),
-                    httpx.Response(500),
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _tool_ok("replayed"),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _tool_ok("first"),
+                        httpx.Response(500),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _tool_ok("replayed"),
+                    ]
+                )
             )
             await t.execute("tool", {}, {})
             result = await t.execute("tool", {}, {})
@@ -680,15 +857,17 @@ class TestHTTPNoReplay:
         tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}]}}
         with patcher, respx.mock:
             respx.post(ENDPOINT).mock(
-                side_effect=[
-                    _sse(INIT_OK, "sid-1"),
-                    httpx.Response(202),
-                    _sse(tools),
-                    httpx.ReadTimeout("slow"),
-                    _sse(INIT_OK, "sid-2"),
-                    httpx.Response(202),
-                    _sse(tools),
-                ]
+                side_effect=_script(
+                    [
+                        _sse(INIT_OK, "sid-1"),
+                        httpx.Response(202),
+                        _sse(tools),
+                        httpx.ReadTimeout("slow"),
+                        _sse(INIT_OK, "sid-2"),
+                        httpx.Response(202),
+                        _sse(tools),
+                    ]
+                )
             )
             await t.list_tools()
             assert [x["name"] for x in await t.list_tools()] == ["a"]
@@ -1057,7 +1236,7 @@ class TestProtocolVersionNegotiation:
         }
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tool_ok)]
+                side_effect=_script([_sse(init_ok, "sid"), httpx.Response(202), _sse(tool_ok)])
             )
             result = await t.execute("tool", {}, {})
         assert "hi" in result
@@ -1072,7 +1251,7 @@ class TestProtocolVersionNegotiation:
         tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}]}}
         with patcher, respx.mock:
             route = respx.post(ENDPOINT).mock(
-                side_effect=[_sse(init_ok, "sid"), httpx.Response(202), _sse(tools)]
+                side_effect=_script([_sse(init_ok, "sid"), httpx.Response(202), _sse(tools)])
             )
             result = await t.list_tools()
         assert result == [{"name": "a"}]
