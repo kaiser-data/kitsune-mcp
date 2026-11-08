@@ -110,7 +110,7 @@ async def test_websocket_transport_increments_tokens_sent():
     call_resp = json.dumps(
         {
             "jsonrpc": "2.0",
-            "id": 1,
+            "id": 2,
             "result": {"content": [{"type": "text", "text": "ws result"}]},
         }
     )
@@ -119,7 +119,8 @@ async def test_websocket_transport_increments_tokens_sent():
     mock_ws.__aenter__ = AsyncMock(return_value=mock_ws)
     mock_ws.__aexit__ = AsyncMock(return_value=False)
     mock_ws.send = AsyncMock()
-    mock_ws.recv = AsyncMock(return_value=call_resp)
+    init_resp = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}})
+    mock_ws.recv = AsyncMock(side_effect=[init_resp, call_resp])
 
     with patch("websockets.connect", return_value=mock_ws):
         t = WebSocketTransport("ws://localhost:9999")

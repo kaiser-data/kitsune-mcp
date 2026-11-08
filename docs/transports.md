@@ -1,6 +1,6 @@
 # Transports Guide
 
-Kitsune MCP supports three transport types. Here's when to use each.
+Kitsune MCP supports several transport types. Here's when to use each.
 
 ## Decision Tree
 
@@ -14,15 +14,29 @@ Does the server need to stay alive between calls?
 
 ## HTTPSSETransport
 
-**When:** Smithery-hosted remote servers (`remote: true` in registry).
+**When:** remote servers: Smithery-hosted (`remote: true` in the registry) or a
+direct `https://` URL.
 
 **How it works:**
-1. Sends MCP initialize request over HTTPS
-2. Receives session ID from server
-3. Sends tool call with session ID
-4. Parses SSE (Server-Sent Events) response
 
-**Config:** Requires `SMITHERY_API_KEY`. Config passed as base64 in URL params.
+1. Sends `initialize` over HTTPS and keeps the session the server returns
+   (`mcp-session-id`, negotiated protocol version). Later calls reuse it;
+   concurrent calls share one handshake.
+2. Reads each reply as the server sends it: plain JSON, or an SSE stream read
+   event by event. The reply is matched to the request by its JSON-RPC id, so
+   progress and log notifications on the stream are skipped. Requests the
+   server sends back (such as `ping`) are answered.
+3. If the server rejects the `initialize` POST with 400, 404 or 405, it is
+   treated as an old **HTTP+SSE** server (spec 2024-11-05): Kitsune opens its
+   GET event stream and posts to the endpoint the stream names, which must be
+   on the same origin.
+4. Sessions expire after 30 minutes and are closed with `DELETE`.
+
+A `tools/call` whose reply is lost is never sent again: Kitsune reports
+"outcome unknown", because the call may already have run.
+
+**Config:** Smithery needs `SMITHERY_API_KEY`; config is passed as base64 in URL
+params. Direct URLs use OAuth 2.1 when the server asks for it.
 
 **Example:**
 ```python
@@ -32,6 +46,18 @@ shapeshift("exa/exa")  # auto-selects HTTPSSETransport
 ```
 
 **Timeout:** 30s per call. Server may be cold-starting — retry once if timeout.
+
+## WebSocketTransport
+
+**When:** `ws://` or `wss://` server URLs. Install the extra first:
+`pip install "kitsune-mcp[ws]"`.
+
+WebSocket is **not** one of the MCP specification's standard transports. It is
+a custom transport some servers offer: one JSON-RPC message per text frame.
+Kitsune opens a connection per operation, checks the `initialize` reply (it
+must carry a `protocolVersion`), and matches replies by request id, answering
+server requests and skipping notifications. `tools/list` follows pagination
+cursors, so `shapeshift()` can discover the server's tools.
 
 ## StdioTransport
 

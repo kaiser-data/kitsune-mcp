@@ -1267,19 +1267,83 @@ class TestProtocolVersionNegotiation:
 # ---------------------------------------------------------------------------
 
 
-class TestWebSocketNonJson:
-    async def test_non_json_reply_returned_as_string(self):
-        ws = AsyncMock()
-        init_reply = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {}})
-        ws.recv = AsyncMock(side_effect=[init_reply, "plain text, not json"])
-        ws.send = AsyncMock()
-        cm = MagicMock()
-        cm.__aenter__ = AsyncMock(return_value=ws)
-        cm.__aexit__ = AsyncMock(return_value=False)
-        ws_module = MagicMock()
-        ws_module.connect = MagicMock(return_value=cm)
+def _ws_module(frames: list):
+    """websockets module mock whose connection returns `frames` from recv() in order."""
+    ws = AsyncMock()
+    ws.recv = AsyncMock(side_effect=frames)
+    ws.send = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=ws)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    module = MagicMock()
+    module.connect = MagicMock(return_value=cm)
+    return module, ws
 
+
+WS_INIT = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}})
+
+
+def _ws_result(rid: int, text: str) -> str:
+    return json.dumps(
+        {"jsonrpc": "2.0", "id": rid, "result": {"content": [{"type": "text", "text": text}]}}
+    )
+
+
+class TestWebSocketDispatch:
+    """Frames are matched to requests by id (Codex P1: WebSocket correlation)."""
+
+    async def _run(self, frames, method="execute"):
+        module, ws = _ws_module(frames)
         t = WebSocketTransport("ws://localhost:1")
-        with patch.dict(sys.modules, {"websockets": ws_module}):
-            result = await t.execute("tool", {}, {})
-        assert result == "plain text, not json"
+        with patch.dict(sys.modules, {"websockets": module}):
+            if method == "execute":
+                return await t.execute("tool", {}, {}), ws
+            return await t.list_tools(), ws
+
+    async def test_non_json_frame_is_skipped(self):
+        result, _ = await self._run([WS_INIT, "plain text, not json", _ws_result(2, "real")])
+        assert result == "real"
+
+    async def test_notifications_and_other_ids_are_skipped(self):
+        progress = json.dumps({"jsonrpc": "2.0", "method": "notifications/progress", "params": {}})
+        result, _ = await self._run(
+            [WS_INIT, progress, _ws_result(99, "not mine"), _ws_result(2, "mine")]
+        )
+        assert result == "mine"
+
+    async def test_server_request_is_answered(self):
+        ping = json.dumps({"jsonrpc": "2.0", "id": "s1", "method": "ping"})
+        result, ws = await self._run([WS_INIT, ping, _ws_result(2, "ok")])
+        assert result == "ok"
+        sent = [json.loads(c.args[0]) for c in ws.send.call_args_list]
+        assert {"jsonrpc": "2.0", "id": "s1", "result": {}} in sent
+
+    async def test_initialize_error_stops_before_the_call(self):
+        err = json.dumps({"jsonrpc": "2.0", "id": 1, "error": {"code": -1, "message": "nope"}})
+        result, ws = await self._run([err])
+        assert "initialize failed: nope" in result
+        sent = [json.loads(c.args[0]).get("method") for c in ws.send.call_args_list]
+        assert sent == ["initialize"]
+
+    async def test_initialize_without_protocol_version_is_rejected(self):
+        bad = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {}})
+        result, _ = await self._run([bad])
+        assert "no protocolVersion" in result
+
+    async def test_connection_lost_after_call_is_outcome_unknown(self):
+        result, _ = await self._run([WS_INIT, ConnectionError("closed")])
+        assert "may have run" in result
+
+    async def test_list_tools_follows_cursor(self):
+        page1 = json.dumps(
+            {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "a"}], "nextCursor": "c"}}
+        )
+        page2 = json.dumps({"jsonrpc": "2.0", "id": 3, "result": {"tools": [{"name": "b"}]}})
+        tools, ws = await self._run([WS_INIT, page1, page2], method="list_tools")
+        assert [x["name"] for x in tools] == ["a", "b"]
+        last = json.loads(ws.send.call_args_list[-1].args[0])
+        assert last["params"] == {"cursor": "c"}
+
+    async def test_list_tools_failure_returns_empty(self):
+        tools, _ = await self._run([ConnectionError("down")], method="list_tools")
+        assert tools == []
