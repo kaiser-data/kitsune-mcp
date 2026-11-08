@@ -791,36 +791,143 @@ class McpRegistryIO(_PaginatedListRegistry):
 
     _URL = MCP_REGISTRY_IO_URL
     _CACHE: TTLCache[list[ServerInfo]] = TTLCache(MCP_REGISTRY_IO_TTL)
+    # The cached list covers only the first _MAX_PAGES pages (alphabetical by
+    # name), so search also asks the registry, whose `search` parameter
+    # matches a substring of the server name.
+    _SEARCH_CACHE: TTLDict[str, list[ServerInfo]] = TTLDict(MCP_REGISTRY_IO_TTL)
+    _SEARCH_TERMS = 3  # words of a query sent to the registry
+
+    async def _remote_search(self, term: str) -> list[ServerInfo]:
+        cached = self._SEARCH_CACHE.get(term)
+        if cached is not None:
+            return cached
+        params: dict[str, str | int] = {
+            "search": term,
+            "version": "latest",
+            "limit": self._page_size,
+        }
+        try:
+            r = await _get_http_client().get(self._URL, params=params, timeout=TIMEOUT_FETCH_URL)
+            r.raise_for_status()
+            entries = r.json().get(self._entries_key) or []
+        except Exception:
+            return []
+        servers = [srv for e in entries if (srv := self._to_server_info(e)) is not None]
+        self._SEARCH_CACHE.set(term, servers)
+        return servers
+
+    async def search(self, query: str, limit: int) -> list[ServerInfo]:
+        words = [w for w in re.split(r"\W+", query.lower()) if len(w) >= 3]
+        batches = await asyncio.gather(
+            *(self._remote_search(w) for w in words[: self._SEARCH_TERMS]),
+            self._all_servers(),
+        )
+        merged: dict[str, ServerInfo] = {}
+        for batch in batches:
+            for srv in batch:
+                merged.setdefault(srv.id, srv)
+        return _simple_search(list(merged.values()), query, limit)
+
+    async def get_server(self, id: str) -> ServerInfo | None:
+        for srv in await self._remote_search(id):
+            if srv.id == id:
+                return srv
+        return await super().get_server(id)
+
+    def _initial_params(self) -> dict:
+        # One entry per server: without this the registry lists every version.
+        return {"limit": self._page_size, "version": "latest"}
+
+    def _next_params(self, cursor: str) -> dict:
+        return {"limit": self._page_size, "version": "latest", "cursor": cursor}
+
+    # server.json field names (registry API v0.1). The snake_case names are the
+    # pre-2025-09 schema, still read so older cached or mirrored data works.
+    @staticmethod
+    def _pkg_type(pkg: dict) -> str:
+        return pkg.get("registryType") or pkg.get("registry_name") or ""
+
+    @staticmethod
+    def _pkg_id(pkg: dict) -> str:
+        return pkg.get("identifier") or pkg.get("name") or ""
+
+    @staticmethod
+    def _pkg_env(pkg: dict) -> list:
+        return pkg.get("environmentVariables") or pkg.get("environment_variables") or []
+
+    @staticmethod
+    def _fixed_args(pkg: dict) -> list[str]:
+        """packageArguments that carry a fixed value, in order.
+
+        Arguments the user must fill in (no value, or a {template}) are left out.
+        """
+        out: list[str] = []
+        for arg in pkg.get("packageArguments") or []:
+            value = arg.get("value")
+            if not isinstance(value, str) or "{" in value:
+                continue
+            if arg.get("type") == "named":
+                name = arg.get("name") or ""
+                if not name:
+                    continue
+                out += [name, value]
+            else:
+                out.append(value)
+        return out
+
+    @classmethod
+    def _stdio_package(cls, server: dict) -> dict | None:
+        """First npm or PyPI package that runs over stdio."""
+        for pkg in server.get("packages") or []:
+            if cls._pkg_type(pkg) not in ("npm", "pypi", "pip") or not cls._pkg_id(pkg):
+                continue
+            transport = (pkg.get("transport") or {}).get("type", "stdio")
+            if transport == "stdio":
+                return pkg
+        return None
 
     @classmethod
     def _install_cmd(cls, server: dict) -> list[str]:
-        """Derive install command from the first package entry."""
-        for pkg in server.get("packages") or []:
-            reg = pkg.get("registry_name", "")
-            name = pkg.get("name", "")
-            if not name:
-                continue
-            if reg == "npm":
-                return ["npx", "-y", name]
-            if reg in ("pypi", "pip"):
-                return ["uvx", name]
-        return []
+        """Launch command for the first stdio npm/PyPI package, pinned to its version.
+
+        The spec forms (`pkg@1.2.3`, `pkg==1.2.3`) are the ones pins.py records.
+        """
+        pkg = cls._stdio_package(server)
+        if pkg is None:
+            return []
+        ident, version = cls._pkg_id(pkg), pkg.get("version") or ""
+        if cls._pkg_type(pkg) == "npm":
+            spec = f"{ident}@{version}" if version else ident
+            return ["npx", "-y", spec, *cls._fixed_args(pkg)]
+        spec = f"{ident}=={version}" if version else ident
+        return ["uvx", spec, *cls._fixed_args(pkg)]
 
     @classmethod
     def _credentials(cls, server: dict) -> dict:
         creds: dict = {}
         for pkg in server.get("packages") or []:
-            for ev in pkg.get("environment_variables") or []:
+            for ev in cls._pkg_env(pkg):
                 name = ev.get("name", "")
                 if name:
                     creds[name] = ev.get("description", "")
         return creds
 
-    @classmethod
-    def _transport(cls, server: dict) -> str:
-        if server.get("remotes"):
-            return "http"
-        return "stdio"
+    @staticmethod
+    def _remote_url(server: dict) -> str:
+        """First remote whose URL is usable as is (no {variables} to fill in)."""
+        for remote in server.get("remotes") or []:
+            url = remote.get("url") or ""
+            if (
+                url
+                and "{" not in url
+                and remote.get("type", "streamable-http")
+                in (
+                    "streamable-http",
+                    "sse",
+                )
+            ):
+                return url
+        return ""
 
     @classmethod
     def _to_server_info(cls, entry: dict) -> ServerInfo | None:
@@ -828,14 +935,20 @@ class McpRegistryIO(_PaginatedListRegistry):
         name = srv.get("name", "")
         if not name:
             return None
+        official = (entry.get("_meta") or {}).get("io.modelcontextprotocol.registry/official") or {}
+        if official.get("status") == "deleted":
+            return None
+        install_cmd, url = cls._install_cmd(srv), cls._remote_url(srv)
+        if not install_cmd and not url:
+            return None  # nothing Kitsune can launch or connect to
         return ServerInfo(
             id=name,
             name=name.split("/")[-1],
             description=(srv.get("description") or "").strip()[:MAX_EXPLORE_DESC],
             source="mcpregistry",
-            transport=cls._transport(srv),
-            url=(srv.get("remotes") or [{}])[0].get("url", "") if srv.get("remotes") else "",
-            install_cmd=cls._install_cmd(srv),
+            transport="http" if url else "stdio",
+            url=url,
+            install_cmd=install_cmd,
             credentials=cls._credentials(srv),
             tools=[],
             token_cost=0,

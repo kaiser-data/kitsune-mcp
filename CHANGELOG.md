@@ -9,6 +9,8 @@ All notable changes to this project are documented here.
 ### Fixed
 - **Two CodeQL findings.** HTML-to-text extraction now uses the standard library's HTML parser. Before, a regex missed end tags like `</script >` and `</SCRIPT>`, so script contents could show up in fetched page text. The Glama adapter now checks the parsed host of a repository URL instead of searching the URL text for `github.com`, which also matched URLs like `https://evil.example/github.com/…`.
 - **`initialize` reports Kitsune's version.** `serverInfo.version` was the mcp SDK's version (`1.30.0`) instead of Kitsune's.
+- **MCP Registry entries parse again.** The adapter read the old field names (`registry_name`, `name`, `environment_variables`), so current entries got no install command and no credentials. It now reads `registryType`, `identifier` and `environmentVariables` from the `/v0.1` API, with the old names as a fallback. Each entry's version goes into the command (`npx -y pkg@1.2.3`, `uvx pkg==1.2.3`), so Kitsune's pinning records it, and fixed `packageArguments` are kept. Only the latest version of each server is listed; before, every published version appeared. Deleted entries are skipped, and so are entries Kitsune can't run (Docker or mcpb packages only, or a remote URL with `{variables}` to fill in).
+- **MCP Registry search covers the whole registry.** Search used to look only at the first 500 entries (alphabetical, mostly `ai.*`). It now also queries the registry for each word of the query, and lookups by exact name ask the registry directly.
 
 ---
 
