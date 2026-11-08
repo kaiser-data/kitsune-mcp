@@ -322,3 +322,13 @@ def _script(items: list):
         return httpx.Response(item.status_code, text="\n".join(lines), headers=item.headers)
 
     return respond
+
+
+@pytest.fixture(autouse=True)
+def _clear_registry_search_cache():
+    """McpRegistryIO caches per-term searches; tests must not see each other's."""
+    from kitsune_mcp.registry import McpRegistryIO
+
+    McpRegistryIO._SEARCH_CACHE.clear()
+    yield
+    McpRegistryIO._SEARCH_CACHE.clear()
