@@ -11,6 +11,10 @@ All notable changes to this project are documented here.
 - **Streamable HTTP responses are read the way the spec allows.** SSE streams are read as they arrive, and the response is matched to the request by its JSON-RPC id. Before, Kitsune took the first event on the stream, so a progress or log notification sent ahead of the result was mistaken for it. Server-to-client requests on the stream now get an answer (`ping` succeeds, everything else is "method not supported"), so the server never hangs waiting for one. Plain `application/json` replies and batch payloads also work.
 - **HTTP sessions are shared under concurrency (closes #66).** Concurrent calls to the same server now share one session and one `initialize`, where before each made its own handshake. Stateless servers, which issue no session id, keep their handshake too. Sessions last at most 30 minutes, at most 64 are cached, and Kitsune closes a session it drops with `DELETE`.
 
+### Added
+- **Fallback for old HTTP+SSE servers.** Kitsune now also connects to servers that still speak the 2024-11-05 HTTP+SSE transport. When such a server rejects the `initialize` POST with 400, 404 or 405, Kitsune opens its GET event stream as the spec says, and responses on that stream are matched by request id. The `endpoint` event must name a URL on the server's own origin, so the bearer token is never sent to another host.
+- **Fixture-server tests.** A new test file runs the HTTP transport against real mcp SDK servers on localhost: Streamable HTTP with SSE responses, Streamable HTTP with JSON responses, stateless Streamable HTTP, and legacy HTTP+SSE. The test tool sends progress and log notifications before its result.
+
 ---
 
 ## [0.22.8] — 2026-11-07
