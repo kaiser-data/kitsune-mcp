@@ -1,6 +1,6 @@
 <!-- mcp-name: io.github.kaiser-data/kitsune-mcp -->
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/kitsune-logo.png" alt="Kitsune MCP" width="160" />
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/assets/kitsune-logo-reveal.gif" alt="The Kitsune MCP logo builds itself: a fox head appears, seven tool tails fan out one by one, and the fox's eyes light up" width="280" />
   <h1>🦊 Kitsune MCP</h1>
   <p><strong>Let your agent test the MCP server it's building.</strong><br/>
   Edit a tool, <code>reload("dev")</code>, call it again. No client restart.</p>
