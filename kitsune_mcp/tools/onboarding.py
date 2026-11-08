@@ -1544,6 +1544,14 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
         base_url = srv.url
         try:
             token = await oauth.ensure_token(base_url)
+        except oauth.NoAuthMetadata:
+            return "\n".join(
+                [
+                    f"✓ '{name}' publishes no OAuth metadata, so no login is needed"
+                    " (or it expects an API key header, which Kitsune cannot send yet).",
+                    f'Next: shapeshift("{name}")',
+                ]
+            )
         except Exception as e:
             return "\n".join(
                 [

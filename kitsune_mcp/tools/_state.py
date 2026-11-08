@@ -152,9 +152,9 @@ def _get_transport(server_id: str, srv) -> "BaseTransport":
     if server_id.startswith(("ws://", "wss://")):
         return WebSocketTransport(server_id)
     if server_id.startswith(("http://", "https://")):
-        # Direct URL escape hatch: treat as a hosted HTTP MCP with OAuth 2.1.
-        # The transport probes `.well-known/oauth-authorization-server` at
-        # connect time and attaches a Bearer token via kitsune_mcp.oauth.
+        # Direct URL escape hatch: a hosted HTTP MCP server. Requests go out
+        # without a token until the server answers 401; then kitsune_mcp.oauth
+        # follows its challenge to log in, and later requests carry the token.
         return HTTPSSETransport(server_id, deployment_url=server_id, direct=True)
     if srv is not None and getattr(srv, "transport", None) == "websocket":
         return WebSocketTransport(srv.url)

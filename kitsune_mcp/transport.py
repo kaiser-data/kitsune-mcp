@@ -556,6 +556,19 @@ def _parse_rpc_body(text: str, request_id: int | None = None) -> dict | None:
     return next((m for m in messages if _is_response(m, request_id)), None)
 
 
+class AuthRequired(PermissionError):
+    """The server answered 401/403. `challenge` is its WWW-Authenticate header, if any."""
+
+    def __init__(self, status: int, challenge: str | None = None) -> None:
+        super().__init__(f"HTTP {status}")
+        self.status = status
+        self.challenge = challenge
+
+
+def _auth_error(r: "_HTTPReply") -> AuthRequired:
+    return AuthRequired(r.status, r.headers.get("www-authenticate"))
+
+
 class CallOutcomeUnknown(RuntimeError):
     """A tools/call reached the server but no result came back; it may have run."""
 
@@ -612,10 +625,11 @@ def _http_session_key(endpoint: str, bearer: str, config: dict) -> tuple[str, st
 
 def _http_headers(bearer: str, sess: _HTTPSession | None) -> dict[str, str]:
     hdrs = {
-        "Authorization": f"Bearer {bearer}",
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
     }
+    if bearer:  # no token yet: the request goes out anonymously
+        hdrs["Authorization"] = f"Bearer {bearer}"
     if sess is not None:
         if sess.session_id:
             hdrs["mcp-session-id"] = sess.session_id
@@ -719,7 +733,10 @@ class _LegacySSEStream:
         self._task: asyncio.Task[None] | None = None
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.bearer}", "Content-Type": "application/json"}
+        hdrs = {"Content-Type": "application/json"}
+        if self.bearer:
+            hdrs["Authorization"] = f"Bearer {self.bearer}"
+        return hdrs
 
     async def open(self, timeout: float) -> None:
         self._ready = asyncio.get_running_loop().create_future()
@@ -748,11 +765,11 @@ class _LegacySSEStream:
             async with _get_http_client().stream(
                 "GET",
                 self.url,
-                headers={"Authorization": f"Bearer {self.bearer}", "Accept": "text/event-stream"},
+                headers={**self._headers(), "Accept": "text/event-stream"},
                 timeout=httpx.Timeout(TIMEOUT_HTTP_TOOL, read=None),
             ) as r:
                 if r.status_code in (401, 403):
-                    raise PermissionError(f"HTTP {r.status_code}")
+                    raise AuthRequired(r.status_code, r.headers.get("www-authenticate"))
                 ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
                 if not r.is_success or ctype != "text/event-stream":
                     raise RuntimeError(f"legacy SSE stream: HTTP {r.status_code} ({ctype})")
@@ -870,7 +887,8 @@ class HTTPSSETransport(BaseTransport):
     - Smithery-mediated (default): uses api.smithery.ai/connect with per-user
       namespaced connections and a service token.
     - Direct OAuth (`direct=True`): hits the server URL directly and attaches
-      an OAuth 2.1 bearer token obtained via `kitsune_mcp.oauth.ensure_token`.
+      no token at first; a 401/403 runs OAuth 2.1 discovery and login
+      (`kitsune_mcp.oauth.authenticate`), and later calls send the token.
     """
 
     def __init__(
@@ -893,10 +911,12 @@ class HTTPSSETransport(BaseTransport):
     async def _connect_endpoint(self, config: dict) -> tuple[str, str] | None:
         """Return (endpoint_url, bearer_token) or None on failure."""
         if self.direct:
+            # A stored login if there is one, else no token: public servers need
+            # none, and one that does answers 401, which starts the login.
             try:
-                token = await oauth.ensure_token(self.deployment_url)
+                token = await oauth.stored_token(self.deployment_url)
             except Exception:
-                return None
+                token = ""
             return self.deployment_url, token
 
         namespace = await _smithery_namespace()
@@ -948,7 +968,7 @@ class HTTPSSETransport(BaseTransport):
     @staticmethod
     def _check_init(r: _HTTPReply) -> dict | None:
         if r.status in (401, 403):
-            raise PermissionError(f"HTTP {r.status}")
+            raise _auth_error(r)
         if not r.ok:
             raise RuntimeError(f"Initialize failed: HTTP {r.status}")
         if r.message and "error" in r.message:
@@ -965,7 +985,7 @@ class HTTPSSETransport(BaseTransport):
         )
         note = await _http_post(endpoint, bearer, sess, _initialized_notification())
         if note.status in (401, 403):
-            raise PermissionError(f"HTTP {note.status}")
+            raise _auth_error(note)
         return sess
 
     async def _legacy_session(self, endpoint: str, bearer: str, post_status: int) -> _HTTPSession:
@@ -1042,7 +1062,7 @@ class HTTPSSETransport(BaseTransport):
 
             if r.status in (401, 403):
                 _drop_http_session(key, sess)
-                raise PermissionError(f"HTTP {r.status}")
+                raise _auth_error(r)
             if r.ok:
                 if r.message is not None or replay_safe:
                     return r.message
@@ -1086,15 +1106,19 @@ class HTTPSSETransport(BaseTransport):
             return (
                 f"Timeout connecting to {self.qualified_name}. Server may be sleeping — try again."
             )
-        except PermissionError:
-            # Direct OAuth: drop stale token, re-run ensure_token (may re-auth), retry once.
+        except PermissionError as e:
+            # Direct: the server refused the request before running it, so it is
+            # safe to log in (or refresh) and send it once more.
             if self.direct:
                 try:
-                    oauth.delete_tokens(oauth._origin(self.deployment_url))
-                    new_token = await oauth.ensure_token(self.deployment_url)
+                    new_token = await self._reauthenticate(e, token)
                     response = await asyncio.wait_for(_run(new_token), timeout=TIMEOUT_HTTP_TOOL)
-                except Exception as e:
-                    return f"OAuth failed for {self.qualified_name}: {e}"
+                except CallOutcomeUnknown as e2:
+                    return _outcome_unknown_message(tool, self.qualified_name, str(e2))
+                except oauth.NoAuthMetadata as e2:
+                    return f"{self.qualified_name} needs authorization: {e2}"
+                except Exception as e2:
+                    return f"OAuth failed for {self.qualified_name}: {e2}"
             else:
                 srv = await SmitheryRegistry().get_server(self.qualified_name)
                 if srv and srv.credentials:
@@ -1123,13 +1147,14 @@ class HTTPSSETransport(BaseTransport):
 
         return _clean_truncate(raw)
 
+    async def _reauthenticate(self, err: PermissionError, rejected: str) -> str:
+        """New token after a 401/403, using the server's challenge for discovery."""
+        challenge = err.challenge if isinstance(err, AuthRequired) else None
+        return await oauth.authenticate(self.deployment_url, challenge, rejected=rejected or None)
+
     def _connect_failure_message(self) -> str:
         if self.direct:
-            return (
-                f"Cannot reach {self.qualified_name}. "
-                "Server does not advertise OAuth 2.1 metadata at "
-                "/.well-known/oauth-authorization-server."
-            )
+            return f"Cannot reach {self.qualified_name}."
         return (
             f"Cannot reach {self.qualified_name} via Smithery Connect. "
             "Check SMITHERY_API_KEY at smithery.ai/account/api-keys"
@@ -1152,12 +1177,11 @@ class HTTPSSETransport(BaseTransport):
 
         try:
             return await asyncio.wait_for(_run(token), timeout=TIMEOUT_HTTP_TOOL)
-        except PermissionError:
+        except PermissionError as e:
             if not self.direct:
                 return []
             try:
-                oauth.delete_tokens(oauth._origin(self.deployment_url))
-                new_token = await oauth.ensure_token(self.deployment_url)
+                new_token = await self._reauthenticate(e, token)
                 return await asyncio.wait_for(_run(new_token), timeout=TIMEOUT_HTTP_TOOL)
             except Exception:
                 return []

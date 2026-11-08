@@ -27,7 +27,7 @@ Reach into 130k community servers only works if unknown code can be **contained*
 
 **3. SSRF.** `fetch()` and registry HTTP are HTTPS-only; private/loopback/non-global hosts blocked; **every redirect hop re-validated** (`KITSUNE_ALLOW_LOCAL_FETCH=1` to opt out).
 
-**4. Credential exposure.** `~/.kitsune/.env` and `oauth/` at mode `0600`; OAuth 2.1 + PKCE S256 + DCR (RFC 7591); missing-cred warnings before calls; `auth(id, "logout")` clears tokens (RFC 7009 where available).
+**4. Credential exposure.** `~/.kitsune/.env` and `oauth/` at mode `0600`; OAuth 2.1 + PKCE S256 + DCR (RFC 7591) + resource indicators (RFC 8707); discovery starts from the server's 401 challenge (RFC 9728), the authorization server's metadata must name the issuer it was fetched for, and endpoints must use HTTPS; each login is stored per server URL, so servers on one host never share a token; missing-cred warnings before calls; `auth(id, "logout")` clears tokens (RFC 7009 where available).
 
 **5. Docker sandbox for untrusted local servers — on by default.** Community `npm`/`pypi`/`github` mounts (and the `auto()`/`call()`/`run()` exec paths) cage automatically when Docker is on `PATH`; no host FS, `--cap-drop ALL`, read-only rootfs, RAM/PID caps. Cred env vars forwarded by **name** only (`docker -e KEY`) — never in argv, `ps`, or the pool key. First sandboxed mount pulls `node:22-slim` / `uv:python3.13-bookworm-slim`. Best-effort: no Docker → runs uncaged with a nudge (an explicit `sandbox=True` hard-fails instead). Opt out per-call with `sandbox=False` or session-wide with `KITSUNE_SANDBOX=off`. Filesystem-style servers need host paths and don't fit the sandbox.
 

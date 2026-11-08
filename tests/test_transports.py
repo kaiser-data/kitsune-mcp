@@ -415,24 +415,60 @@ class TestValidateInstallCmd:
 
 
 class TestHTTPSSETransportDirectOAuth:
-    """HTTPSSETransport in direct=True mode uses oauth.ensure_token, bypassing Smithery."""
+    """direct=True: no token until the server asks; its 401 challenge drives the login."""
 
-    async def test_connect_endpoint_returns_url_and_oauth_token(self):
+    async def test_connect_endpoint_sends_stored_token(self):
         from kitsune_mcp import oauth
 
         url = "https://mcp.notion.com/mcp"
         transport = HTTPSSETransport(url, direct=True)
-        with patch.object(oauth, "ensure_token", AsyncMock(return_value="tok-oauth-1")):
+        with patch.object(oauth, "stored_token", AsyncMock(return_value="tok-oauth-1")):
             endpoint, token = await transport._connect_endpoint({})
         assert endpoint == url
         assert token == "tok-oauth-1"
 
-    async def test_connect_failure_message_mentions_well_known(self):
-        transport = HTTPSSETransport("https://bad.example/mcp", direct=True)
-        msg = transport._connect_failure_message()
-        assert ".well-known" in msg
+    async def test_connect_endpoint_without_login_is_anonymous(self):
+        from kitsune_mcp import oauth
 
-    async def test_401_triggers_delete_retry_with_new_token(self):
+        transport = HTTPSSETransport("https://public.example/mcp", direct=True)
+        with patch.object(oauth, "stored_token", AsyncMock(return_value="")):
+            assert await transport._connect_endpoint({}) == ("https://public.example/mcp", "")
+
+    async def test_connect_endpoint_store_error_falls_back_to_anonymous(self):
+        from kitsune_mcp import oauth
+
+        transport = HTTPSSETransport("https://x.example/mcp", direct=True)
+        with patch.object(oauth, "stored_token", AsyncMock(side_effect=OSError("disk"))):
+            assert await transport._connect_endpoint({}) == ("https://x.example/mcp", "")
+
+    async def test_public_server_gets_no_authorization_header(self):
+        import httpx
+        import respx
+
+        from kitsune_mcp import oauth
+
+        url = "https://public.example/mcp"
+        transport = HTTPSSETransport(url, direct=True)
+        init = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
+        result = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"content": [{"type": "text", "text": "hi"}]},
+        }
+        with patch.object(oauth, "stored_token", AsyncMock(return_value="")), respx.mock:
+            route = respx.post(url).mock(
+                side_effect=_script(
+                    [
+                        httpx.Response(200, json=init, headers={"mcp-session-id": "s"}),
+                        httpx.Response(202),
+                        httpx.Response(200, json=result),
+                    ]
+                )
+            )
+            assert await transport.execute("t", {}, {}) == "hi"
+        assert all("authorization" not in c.request.headers for c in route.calls)
+
+    async def test_401_challenge_logs_in_and_retries(self):
         import httpx
         import respx
 
@@ -440,9 +476,10 @@ class TestHTTPSSETransportDirectOAuth:
 
         url = "https://mcp.example/mcp"
         transport = HTTPSSETransport(url, direct=True)
-        # First call returns token-1; after delete, second call returns token-2.
-        ensure_tokens = AsyncMock(side_effect=["tok-1", "tok-2"])
-        delete_spy = MagicMock()
+        challenge = (
+            'Bearer realm="OAuth", resource_metadata='
+            '"https://mcp.example/.well-known/oauth-protected-resource/mcp", scope="read"'
+        )
         payload = {
             "jsonrpc": "2.0",
             "id": 2,
@@ -451,49 +488,53 @@ class TestHTTPSSETransportDirectOAuth:
         init_payload = {
             "jsonrpc": "2.0",
             "id": 1,
-            "result": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "serverInfo": {"name": "x", "version": "1"},
-            },
+            "result": {"protocolVersion": "2025-06-18", "capabilities": {}},
         }
+        auth = AsyncMock(return_value="tok-2")
         with (
-            patch.object(oauth, "ensure_token", ensure_tokens),
-            patch.object(oauth, "delete_tokens", delete_spy),
-            patch.object(oauth, "_origin", return_value="mcp.example"),
+            patch.object(oauth, "stored_token", AsyncMock(return_value="")),
+            patch.object(oauth, "authenticate", auth),
+            respx.mock,
         ):
-            with respx.mock:
-                respx.post(url).mock(
-                    side_effect=_script(
-                        [
-                            httpx.Response(401, text=""),  # initialize → 401
-                            httpx.Response(
-                                200,
-                                text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
-                                headers={"mcp-session-id": "s"},
-                            ),
-                            httpx.Response(200, text=""),  # notifications/initialized
-                            httpx.Response(
-                                200, text=f"data: {json.dumps(payload)}\n"
-                            ),  # tools/call OK
-                        ]
-                    )
+            route = respx.post(url).mock(
+                side_effect=_script(
+                    [
+                        httpx.Response(401, headers={"WWW-Authenticate": challenge}),
+                        httpx.Response(
+                            200,
+                            text=f"data: {json.dumps(init_payload)}\n",
+                            headers={"mcp-session-id": "s"},
+                        ),
+                        httpx.Response(202),
+                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n"),
+                    ]
                 )
-                result = await transport.execute("my_tool", {}, {})
+            )
+            result = await transport.execute("my_tool", {}, {})
         assert "ok" in result
-        delete_spy.assert_called_once_with("mcp.example")
-        # ensure_token called twice: once in _connect_endpoint, once on 401 retry.
-        assert ensure_tokens.await_count == 2
+        # The anonymous request was refused, so there was no token to reject.
+        auth.assert_awaited_once_with(url, challenge, rejected=None)
+        assert "authorization" not in route.calls[0].request.headers
+        assert route.calls[1].request.headers["Authorization"] == "Bearer tok-2"
 
-    async def test_connect_endpoint_returns_none_when_ensure_token_raises(self):
+    async def test_401_without_oauth_metadata_explains(self):
+        import httpx
+        import respx
+
         from kitsune_mcp import oauth
 
-        transport = HTTPSSETransport("https://no-oauth.example/mcp", direct=True)
-        with patch.object(
-            oauth, "ensure_token", AsyncMock(side_effect=RuntimeError("no well-known"))
+        url = "https://keyed.example/mcp"
+        transport = HTTPSSETransport(url, direct=True)
+        with (
+            patch.object(oauth, "stored_token", AsyncMock(return_value="")),
+            patch.object(
+                oauth, "authenticate", AsyncMock(side_effect=oauth.NoAuthMetadata("no metadata"))
+            ),
+            respx.mock,
         ):
-            result = await transport._connect_endpoint({})
-        assert result is None
+            respx.post(url).mock(return_value=httpx.Response(401))
+            result = await transport.execute("t", {}, {})
+        assert "needs authorization" in result
 
 
 class TestGetTransportURLEscapeHatch:

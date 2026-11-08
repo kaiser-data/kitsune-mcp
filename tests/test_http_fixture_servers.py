@@ -256,3 +256,17 @@ async def test_websocket_server_round_trip():
         assert [x["name"] for x in await t.list_tools()] == ["add"]
         results = await asyncio.gather(*(t.execute("add", {"a": i, "b": 2}, {}) for i in range(3)))
     assert results == ["sum=2", "sum=3", "sum=4"]
+
+
+@pytest.mark.parametrize("server", ["sse", "legacy"], indirect=True)
+async def test_public_server_needs_no_login(server, tmp_path, monkeypatch):
+    """direct=True, nothing patched: no stored login, so requests go out without a token."""
+    from kitsune_mcp import oauth
+
+    monkeypatch.setattr(oauth, "_KITSUNE_DIR", tmp_path / "oauth")
+    t = HTTPSSETransport(server, direct=True)
+    try:
+        assert await t.execute("add", {"a": 20, "b": 22}, {}) == "sum=42"
+    finally:
+        await tp.close_http_sessions()
+    assert not (tmp_path / "oauth").exists()  # no login was attempted or stored

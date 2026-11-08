@@ -377,16 +377,17 @@ class TestHTTPListTools:
         t = HTTPSSETransport(url, direct=True)
         init_ok = {"jsonrpc": "2.0", "id": 1, "result": {}}
         tools = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "fresh"}]}}
+        challenge = 'Bearer resource_metadata="https://direct.example/.well-known/x"'
+        auth = AsyncMock(return_value="fresh-tok")
         with (
             patch.object(t, "_connect_endpoint", AsyncMock(return_value=(url, "stale"))),
-            patch.object(tp.oauth, "delete_tokens", MagicMock()) as deleter,
-            patch.object(tp.oauth, "ensure_token", AsyncMock(return_value="fresh-tok")),
+            patch.object(tp.oauth, "authenticate", auth),
             respx.mock,
         ):
-            respx.post(url).mock(
+            route = respx.post(url).mock(
                 side_effect=_script(
                     [
-                        httpx.Response(401),  # first init → PermissionError
+                        httpx.Response(401, headers={"WWW-Authenticate": challenge}),
                         _sse(init_ok, "sid"),  # retry init
                         httpx.Response(202),  # initialized notify
                         _sse(tools),  # tools/list
@@ -395,15 +396,15 @@ class TestHTTPListTools:
             )
             result = await t.list_tools()
         assert [x["name"] for x in result] == ["fresh"]
-        deleter.assert_called_once()
+        auth.assert_awaited_once_with(url, challenge, rejected="stale")
+        assert route.calls[1].request.headers["Authorization"] == "Bearer fresh-tok"
 
     async def test_401_direct_mode_failed_retry_returns_empty(self):
         url = "https://direct.example/mcp"
         t = HTTPSSETransport(url, direct=True)
         with (
             patch.object(t, "_connect_endpoint", AsyncMock(return_value=(url, "stale"))),
-            patch.object(tp.oauth, "delete_tokens", MagicMock()),
-            patch.object(tp.oauth, "ensure_token", AsyncMock(side_effect=RuntimeError("no auth"))),
+            patch.object(tp.oauth, "authenticate", AsyncMock(side_effect=RuntimeError("no auth"))),
             respx.mock,
         ):
             respx.post(url).mock(return_value=httpx.Response(401))
@@ -415,10 +416,11 @@ class TestHTTPListTools:
             respx.post(ENDPOINT).mock(side_effect=httpx.ConnectError("down"))
             assert await t.list_tools() == []
 
-    async def test_direct_failure_message_mentions_oauth(self):
+    async def test_direct_connect_never_fails_before_the_request(self):
+        """No stored login is not an error: the request goes out without a token."""
         t = HTTPSSETransport("https://direct.example/mcp", direct=True)
-        msg = t._connect_failure_message()
-        assert "OAuth 2.1" in msg
+        with patch.object(tp.oauth, "stored_token", AsyncMock(return_value="")):
+            assert await t._connect_endpoint({}) == ("https://direct.example/mcp", "")
 
 
 # ---------------------------------------------------------------------------
