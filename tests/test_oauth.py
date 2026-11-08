@@ -26,6 +26,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from kitsune_mcp import oauth
 
+
+@pytest.fixture(autouse=True)
+def _no_resource_metadata(monkeypatch):
+    """These tests cover servers without RFC 9728 metadata; keep discovery off the network."""
+
+    async def none(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(oauth, "_protected_resource_metadata", none)
+
+
 # ---------------------------------------------------------------------------
 # PKCE + state
 # ---------------------------------------------------------------------------
@@ -402,13 +413,15 @@ class TestEnsureToken:
             ),
         )
 
-        async def fake_refresh(_m, _c, _b):
+        async def fake_refresh(*_a, **_kw):
             return oauth.TokenBundle(access_token="new-access", expires_at=time.time() + 3600)
 
         with patch.object(oauth, "refresh", side_effect=fake_refresh):
             token = asyncio.run(oauth.ensure_token("https://y/mcp"))
         assert token == "new-access"
-        assert oauth.load_tokens(origin).access_token == "new-access"
+        # The old hostname-keyed login moved to this URL's key.
+        assert oauth.load_tokens(oauth._store_key("https://y/mcp")).access_token == "new-access"
+        assert oauth.load_tokens(origin) is None
         oauth._meta_cache.pop("https://y/mcp", None)
 
     def test_ensure_token_reauthorizes_on_invalid_grant(self, tmp_path, monkeypatch):
@@ -445,7 +458,7 @@ class TestEnsureToken:
         async def bad_refresh(*_a, **_kw):
             raise PermissionError("invalid_grant")
 
-        async def fake_authorize(_m, _c, force_login=False):
+        async def fake_authorize(_m, _c, force_login=False, **_kw):
             return oauth.TokenBundle(access_token="fresh", expires_at=time.time() + 3600)
 
         with (
@@ -559,10 +572,12 @@ class TestLogout:
 
         assert deleted is True
         assert revoked is True
+        key = oauth._store_key("https://lo/mcp")
         assert oauth.load_tokens(origin) is None
-        assert origin in oauth._force_login_origins
+        assert oauth.load_tokens(key) is None
+        assert key in oauth._force_login_origins
         oauth._meta_cache.pop("https://lo/mcp", None)
-        oauth._force_login_origins.discard(origin)
+        oauth._force_login_origins.discard(key)
 
     def test_ensure_token_consumes_force_login_flag(self, tmp_path, monkeypatch):
         import time
@@ -579,11 +594,12 @@ class TestLogout:
             ),
         )
         # No bundle on disk → ensure_token falls through to authorize()
-        oauth._force_login_origins.add(origin)
+        key = oauth._store_key("https://fl/mcp")
+        oauth._force_login_origins.add(key)
 
         seen = {}
 
-        async def fake_authorize(_m, _c, force_login=False):
+        async def fake_authorize(_m, _c, force_login=False, **_kw):
             seen["force_login"] = force_login
             return oauth.TokenBundle(access_token="new", expires_at=time.time() + 3600)
 
@@ -593,7 +609,7 @@ class TestLogout:
         assert tok == "new"
         assert seen["force_login"] is True
         # Flag must be cleared after consumption
-        assert origin not in oauth._force_login_origins
+        assert key not in oauth._force_login_origins
         oauth._meta_cache.pop("https://fl/mcp", None)
 
     def test_logout_then_reauth_is_fresh_flow_not_silent_refresh(self, tmp_path, monkeypatch):
@@ -639,14 +655,16 @@ class TestLogout:
             asyncio.run(oauth.logout("https://e2e/mcp"))
 
         # After logout the token file is gone (no second cache survives)…
+        key = oauth._store_key("https://e2e/mcp")
         assert oauth.load_tokens(origin) is None
+        assert oauth.load_tokens(key) is None
 
         async def fake_refresh(*_a, **_k):
             raise AssertionError("refresh() must not run after an explicit logout")
 
         seen = {}
 
-        async def fake_authorize(_m, _c, force_login=False):
+        async def fake_authorize(_m, _c, force_login=False, **_kw):
             seen["force_login"] = force_login
             return oauth.TokenBundle(
                 access_token="NEW-token",
@@ -662,9 +680,9 @@ class TestLogout:
 
         assert tok == "NEW-token"  # not the stale fe5fb9ad prefix
         assert seen.get("force_login") is True  # browser re-prompt armed
-        assert origin not in oauth._force_login_origins  # flag consumed
+        assert key not in oauth._force_login_origins  # flag consumed
         oauth._meta_cache.pop("https://e2e/mcp", None)
-        oauth._force_login_origins.discard(origin)
+        oauth._force_login_origins.discard(key)
 
 
 # ---------------------------------------------------------------------------

@@ -36,7 +36,11 @@ A `tools/call` whose reply is lost is never sent again: Kitsune reports
 "outcome unknown", because the call may already have run.
 
 **Config:** Smithery needs `SMITHERY_API_KEY`; config is passed as base64 in URL
-params. Direct URLs use OAuth 2.1 when the server asks for it.
+params. Direct URLs start without a token, so public servers just work. A
+server that wants a login answers 401; Kitsune follows its `WWW-Authenticate`
+challenge to the protected-resource metadata and the authorization server
+(which may live on another origin), logs in once in the browser, and sends the
+token from then on.
 
 **Example:**
 ```python
