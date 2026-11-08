@@ -10,6 +10,7 @@ import os as _os
 import re
 import shutil
 import subprocess
+from html.parser import HTMLParser
 from urllib.parse import urlparse
 
 import httpx
@@ -131,19 +132,42 @@ def _clean_truncate(text: str, max_tokens: int = MAX_RESPONSE_TOKENS) -> str:
     return cleaned[:max_chars] + f"\n[...truncated at ~{max_tokens} tokens]"
 
 
+class _TextExtractor(HTMLParser):
+    """Visible text of an HTML document: script and style contents dropped, entities decoded.
+
+    html.parser follows the HTML rules for where a script ends (`</script >`,
+    `</SCRIPT foo>`…), which a regex does not (CodeQL py/bad-tag-filter).
+    """
+
+    _SKIP = frozenset({"script", "style"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skipping = 0
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag in self._SKIP:
+            self._skipping += 1
+        else:
+            self.parts.append(" ")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP:
+            self._skipping = max(0, self._skipping - 1)
+        else:
+            self.parts.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skipping:
+            self.parts.append(data)
+
+
 def _strip_html(text: str) -> str:
-    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = (
-        text.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", '"')
-        .replace("&#39;", "'")
-        .replace("&nbsp;", " ")
-    )
-    return _clean_response(text)
+    parser = _TextExtractor()
+    parser.feed(text)
+    parser.close()
+    return _clean_response("".join(parser.parts).replace("\xa0", " "))
 
 
 def _extract_content(result: dict) -> str:
