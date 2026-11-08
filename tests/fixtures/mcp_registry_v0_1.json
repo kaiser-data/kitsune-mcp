@@ -1,0 +1,258 @@
+{
+ "servers": [
+  {
+   "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "io.github.kaiser-data/kitsune-mcp",
+    "description": "Hot-reload for MCP servers + mount any community server mid-session, Docker optional. No restarts.",
+    "repository": {
+     "url": "https://github.com/kaiser-data/kitsune-mcp",
+     "source": "github"
+    },
+    "version": "0.22.8",
+    "websiteUrl": "https://kaiser-data.github.io/kitsune-mcp/",
+    "packages": [
+     {
+      "registryType": "npm",
+      "identifier": "kitsune-mcp",
+      "version": "0.22.8",
+      "transport": {
+       "type": "stdio"
+      },
+      "environmentVariables": [
+       {
+        "description": "Optional. Adds Smithery to registry search; the other registries need no key. Get one at smithery.ai/account/api-keys",
+        "format": "string",
+        "isSecret": true,
+        "name": "SMITHERY_API_KEY"
+       }
+      ]
+     },
+     {
+      "registryType": "pypi",
+      "identifier": "kitsune-mcp",
+      "version": "0.22.8",
+      "transport": {
+       "type": "stdio"
+      },
+      "environmentVariables": [
+       {
+        "description": "Optional. Adds Smithery to registry search; the other registries need no key. Get one at smithery.ai/account/api-keys",
+        "format": "string",
+        "isSecret": true,
+        "name": "SMITHERY_API_KEY"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+     "status": "active",
+     "statusChangedAt": "2026-11-07T10:48:14.087512Z",
+     "publishedAt": "2026-11-07T10:48:14.087512Z",
+     "updatedAt": "2026-11-07T10:48:14.087512Z",
+     "isLatest": true
+    }
+   }
+  },
+  {
+   "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+    "name": "ai.agentrapay/agentra",
+    "description": "Identity oracle and trust layer for autonomous AI agents. Bidirectional KYA and trust scoring.",
+    "repository": {},
+    "version": "1.0.0",
+    "remotes": [
+     {
+      "type": "sse",
+      "url": "https://api.agentrapay.ai/mcp"
+     }
+    ]
+   },
+   "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+     "status": "active",
+     "statusChangedAt": "2026-03-22T18:16:07.628131Z",
+     "publishedAt": "2026-03-22T18:16:07.628131Z",
+     "updatedAt": "2026-03-22T18:16:07.628131Z",
+     "isLatest": true
+    }
+   }
+  },
+  {
+   "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+    "name": "ai.aliengiraffe/spotdb",
+    "description": "Ephemeral data sandbox for AI workflows with guardrails and security",
+    "repository": {
+     "url": "https://github.com/aliengiraffe/spotdb",
+     "source": "github"
+    },
+    "version": "0.1.0",
+    "packages": [
+     {
+      "registryType": "oci",
+      "identifier": "docker.io/aliengiraffe/spotdb:0.1.0",
+      "transport": {
+       "type": "stdio"
+      },
+      "environmentVariables": [
+       {
+        "description": "Optional API key for request authentication",
+        "format": "string",
+        "isSecret": true,
+        "name": "X-API-Key"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+     "status": "active",
+     "statusChangedAt": "2025-10-09T17:05:17.793149Z",
+     "publishedAt": "2025-10-09T17:05:17.793149Z",
+     "updatedAt": "2025-10-09T17:05:17.793149Z",
+     "isLatest": true
+    }
+   }
+  },
+  {
+   "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "ai.aquex/stage1",
+    "description": "Stage1 Inspector \u2014 local website capture, evidence views and design comparison",
+    "version": "0.7.0",
+    "websiteUrl": "https://aquex.ai/products/stage1",
+    "packages": [
+     {
+      "registryType": "npm",
+      "identifier": "@aquex/stage1",
+      "version": "0.7.0",
+      "runtimeHint": "npx",
+      "transport": {
+       "type": "stdio"
+      },
+      "runtimeArguments": [
+       {
+        "type": "positional",
+        "value": "-y"
+       },
+       {
+        "type": "positional",
+        "value": "--package"
+       }
+      ],
+      "packageArguments": [
+       {
+        "type": "positional",
+        "value": "stage1-mcp"
+       },
+       {
+        "description": "Absolute writable output root",
+        "isRequired": true,
+        "format": "filepath",
+        "type": "named",
+        "name": "--out"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+     "status": "active",
+     "statusChangedAt": "2026-11-02T16:20:41.404162Z",
+     "publishedAt": "2026-11-02T16:20:41.404162Z",
+     "updatedAt": "2026-11-02T16:20:41.404162Z",
+     "isLatest": true
+    }
+   }
+  },
+  {
+   "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "ai.arsentev/contextburn",
+    "description": "Run efficiency for coding agents: share of paid tokens that became output, not context re-reading.",
+    "title": "contextburn",
+    "repository": {
+     "url": "https://github.com/arsentev-ai/contextburn",
+     "source": "github"
+    },
+    "version": "0.2.1",
+    "websiteUrl": "https://arsentev.ai",
+    "packages": [
+     {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "contextburn",
+      "version": "0.2.1",
+      "runtimeHint": "uvx",
+      "transport": {
+       "type": "stdio"
+      },
+      "packageArguments": [
+       {
+        "type": "positional",
+        "value": "mcp"
+       }
+      ]
+     }
+    ]
+   },
+   "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+     "status": "active",
+     "statusChangedAt": "2026-09-11T18:05:08.42567Z",
+     "publishedAt": "2026-09-11T18:05:08.42567Z",
+     "updatedAt": "2026-09-11T18:05:08.42567Z",
+     "isLatest": true
+    }
+   }
+  },
+  {
+   "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "ai.autorfp/mcp",
+    "description": "Search AutoRFP.ai projects, requirements, content library, and tags for Q&A and analytics.",
+    "title": "AutoRFP.ai",
+    "repository": {
+     "url": "https://github.com/AutoRFP/mcp",
+     "source": "github"
+    },
+    "version": "1.0.0",
+    "websiteUrl": "https://autorfp.ai",
+    "remotes": [
+     {
+      "type": "streamable-http",
+      "url": "https://{api_host}/mcp",
+      "variables": {
+       "api_host": {
+        "description": "AutoRFP.ai API host for your data-residency region.",
+        "isRequired": true,
+        "choices": [
+         "api.autorfp.ai",
+         "api.eu.autorfp.ai",
+         "api.us.autorfp.ai"
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+     "status": "active",
+     "statusChangedAt": "2026-05-18T01:09:10.259215Z",
+     "publishedAt": "2026-05-18T01:09:10.259215Z",
+     "updatedAt": "2026-05-18T01:09:10.259215Z",
+     "isLatest": true
+    }
+   }
+  }
+ ],
+ "metadata": {
+  "count": 6
+ }
+}
