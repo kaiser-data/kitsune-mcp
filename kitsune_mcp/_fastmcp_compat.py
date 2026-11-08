@@ -55,3 +55,34 @@ def set_server_version(mcp: Any, version: str) -> None:
     server = getattr(mcp, "_mcp_server", None)
     if server is not None and hasattr(server, "version"):
         server.version = version
+
+
+def add_tool_object(mcp: Any, tool: Any) -> bool:
+    """Register a pre-built Tool (FastMCP only builds them from functions).
+
+    Returns False if a tool with that name exists, matching add_tool(), which
+    keeps the existing one.
+    """
+    tm = getattr(mcp, "_tool_manager", None)
+    if tm is None or not hasattr(tm, "_tools"):
+        raise RuntimeError(
+            "FastMCP internals changed: _tool_manager._tools missing. "
+            "Update kitsune_mcp/_fastmcp_compat.py."
+        )
+    if tool.name in tm._tools:
+        return False
+    tm._tools[tool.name] = tool
+    forget_tool_definitions(mcp, [tool.name])
+    return True
+
+
+def forget_tool_definitions(mcp: Any, names: list[str]) -> None:
+    """Drop the low-level server's cached copies of these tools.
+
+    It validates call arguments against a cached inputSchema; after a reload
+    changes a tool's parameters, the stale copy would reject the new ones.
+    """
+    cache = getattr(getattr(mcp, "_mcp_server", None), "_tool_cache", None)
+    if isinstance(cache, dict):
+        for name in names:
+            cache.pop(name, None)

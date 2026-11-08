@@ -109,7 +109,39 @@ def _stdin(proc: asyncio.subprocess.Process) -> asyncio.StreamWriter:
 
 class BaseTransport(ABC):
     @abstractmethod
-    async def execute(self, tool: str, args: dict, config: dict) -> str: ...
+    async def execute(self, tool: str, args: dict, config: dict) -> str:
+        """Call a tool and return its result as text (for the hub's own call() tool)."""
+
+    async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
+        """Call a tool and return the server's tools/call result as sent.
+
+        A str is a failure on Kitsune's side or a JSON-RPC error (no result
+        exists). Transports that don't override this fall back to the text
+        from execute().
+        """
+        return {"content": [{"type": "text", "text": await self.execute(tool, args, config)}]}
+
+    async def execute_raw(self, tool: str, args: dict, config: dict) -> dict:
+        """CallToolResult dict for a mounted proxy tool: content, structuredContent,
+        isError and _meta exactly as the server sent them; failures become isError."""
+        out = await self.call_tool(tool, args, config)
+        if isinstance(out, str):
+            return {"content": [{"type": "text", "text": out}], "isError": True}
+        return out
+
+
+def _record_call(tool: str, args: dict, result: dict) -> None:
+    """Session statistics for one successful tools/call."""
+    session["stats"]["total_calls"] += 1
+    session["stats"]["tokens_sent"] += _estimate_tokens({"tool": tool, "args": args})
+    session["stats"]["tokens_received"] += _estimate_tokens(_extract_content(result))
+
+
+def _as_text(out: dict | str) -> str:
+    """Text form of a call_tool() outcome, as execute() has always returned it."""
+    if isinstance(out, str):
+        return out
+    return _clean_truncate(_extract_content(out))
 
 
 # ---------------------------------------------------------------------------
@@ -1085,6 +1117,9 @@ class HTTPSSETransport(BaseTransport):
         return None
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
+        return _as_text(await self.call_tool(tool, args, config))
+
+    async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
         result = await self._connect_endpoint(config)
         if result is None:
             return self._connect_failure_message()
@@ -1136,16 +1171,9 @@ class HTTPSSETransport(BaseTransport):
             err_obj = response["error"]
             return f"Error from {self.qualified_name}/{tool}: {err_obj.get('message', json.dumps(err_obj))}"
 
-        result_data = response.get("result", {})
-        raw = _extract_content(result_data)
-
-        tokens_out = _estimate_tokens({"tool": tool, "args": args})
-        tokens_in = _estimate_tokens(raw)
-        session["stats"]["total_calls"] += 1
-        session["stats"]["tokens_sent"] += tokens_out
-        session["stats"]["tokens_received"] += tokens_in
-
-        return _clean_truncate(raw)
+        result_data = response.get("result") or {}
+        _record_call(tool, args, result_data)
+        return result_data
 
     async def _reauthenticate(self, err: PermissionError, rejected: str) -> str:
         """New token after a 401/403, using the server's challenge for discovery."""
@@ -1426,6 +1454,9 @@ class PersistentStdioTransport(BaseTransport):
         return result.get("messages", [])
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
+        return _as_text(await self.call_tool(tool, args, config))
+
+    async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
         try:
             entry = await self._get_or_start()
         except RuntimeError as e:
@@ -1486,15 +1517,9 @@ class PersistentStdioTransport(BaseTransport):
 
                 entry.call_count += 1
                 entry.last_used_at = time.monotonic()
-                result = tool_resp.get("result", {})
-                raw = _extract_content(result)
-
-                tokens_out = _estimate_tokens({"tool": tool, "args": args})
-                tokens_in = _estimate_tokens(raw)
-                session["stats"]["total_calls"] += 1
-                session["stats"]["tokens_sent"] += tokens_out
-                session["stats"]["tokens_received"] += tokens_in
-                return _clean_truncate(raw)
+                result = tool_resp.get("result") or {}
+                _record_call(tool, args, result)
+                return result
 
         return f"Failed to call '{tool}' after reconnect"  # unreachable but satisfies type checker
 
@@ -1559,6 +1584,9 @@ class WebSocketTransport(BaseTransport):
             yield request
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
+        return _as_text(await self.call_tool(tool, args, config))
+
+    async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
         try:
             import websockets  # noqa: F401
         except ImportError:
@@ -1582,15 +1610,9 @@ class WebSocketTransport(BaseTransport):
             err = msg["error"]
             return f"Error {err.get('code', '')}: {err.get('message', str(err))}"
 
-        result = msg.get("result", {})
-        raw_text = _extract_content(result)
-
-        tokens_out = _estimate_tokens({"tool": tool, "args": args})
-        tokens_in = _estimate_tokens(raw_text)
-        session["stats"]["total_calls"] += 1
-        session["stats"]["tokens_sent"] += tokens_out
-        session["stats"]["tokens_received"] += tokens_in
-        return _clean_truncate(raw_text)
+        result = msg.get("result") or {}
+        _record_call(tool, args, result)
+        return result
 
     async def list_tools(self, config: dict | None = None) -> list[dict]:
         """tools/list over WebSocket, following pagination cursors. [] on any failure."""
@@ -1737,3 +1759,7 @@ class DockerTransport(BaseTransport):
     async def execute(self, tool: str, args: dict, config: dict) -> str:
         cmd = self._build_cmd(config)
         return await PersistentStdioTransport(cmd).execute(tool, args, config)
+
+    async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
+        cmd = self._build_cmd(config)
+        return await PersistentStdioTransport(cmd).call_tool(tool, args, config)

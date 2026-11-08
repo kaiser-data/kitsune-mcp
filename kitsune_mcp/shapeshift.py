@@ -2,15 +2,35 @@ import inspect as _inspect
 import os
 import re
 from collections.abc import Callable
+from typing import Any
 
 from mcp.server.fastmcp.prompts.base import Prompt as _Prompt
 from mcp.server.fastmcp.resources.types import FunctionResource as _FunctionResource
+from mcp.server.fastmcp.tools.base import Tool as _Tool
+from mcp.server.fastmcp.utilities.func_metadata import func_metadata as _func_metadata
+from mcp.types import CallToolResult, TextContent
+from pydantic import PrivateAttr, ValidationError
 
-from kitsune_mcp._fastmcp_compat import remove_prompt, remove_resource
+from kitsune_mcp._fastmcp_compat import (
+    add_tool_object,
+    forget_tool_definitions,
+    remove_prompt,
+    remove_resource,
+)
 from kitsune_mcp.app import mcp
 from kitsune_mcp.guard import guard_call
 from kitsune_mcp.session import session
-from kitsune_mcp.transport import BaseTransport
+from kitsune_mcp.transport import (
+    BaseTransport,
+    DockerTransport,
+    PersistentStdioTransport,
+)
+from kitsune_mcp.utils import _extract_content
+
+try:  # ships with the mcp SDK, whose server validates tool input with it
+    import jsonschema as _jsonschema
+except ImportError:  # pragma: no cover
+    _jsonschema = None
 
 # Common param name synonyms. Applied only when the key is absent from the
 # tool schema — never overwrites a key the schema actually declares.
@@ -45,6 +65,141 @@ def _json_type_to_py(json_type: str) -> type:
         "object": dict,
     }
     return mapping.get(json_type, str)
+
+
+def _prepare_args(transport: BaseTransport, schema_props: set, args: dict) -> dict:
+    """Adjust arguments before forwarding; values themselves are never changed except paths.
+
+    - Paths: on macOS, /tmp is a symlink to /private/tmp. Many local stdio
+      servers realpath() their allowed directories but not request paths, so
+      the comparison fails. Resolve path-like string arguments, but only for a
+      local, uncaged process: it shares this machine's filesystem. A Docker or
+      remote server has its own, and rewriting there would be wrong.
+    - Aliases: remap a common synonym ("from" → "source") when the schema lacks
+      the given key but has its canonical name, and the caller did not send it.
+    """
+    out = dict(args)
+    local = isinstance(transport, PersistentStdioTransport) and not isinstance(
+        transport, DockerTransport
+    )
+    if local:
+        for k, v in list(out.items()):
+            if isinstance(v, str) and "path" in k.lower():
+                resolved = os.path.realpath(v)
+                if resolved != v and os.path.exists(resolved):
+                    out[k] = resolved
+    if any(k in _PARAM_ALIASES and k not in schema_props for k in out):
+        remapped = {}
+        for k, v in out.items():
+            if k not in schema_props and k in _PARAM_ALIASES:
+                canonical = _PARAM_ALIASES[k]
+                if canonical in schema_props and canonical not in out:
+                    remapped[canonical] = v
+                    continue
+            remapped[k] = v
+        out = remapped
+    return out
+
+
+def _input_schema(tool_schema: dict) -> dict:
+    """The downstream inputSchema as advertised, if it is a usable object schema.
+
+    The low-level server validates every call against the schema a tool
+    advertises, so a schema jsonschema cannot use would make the tool
+    uncallable. Such a tool gets a permissive object schema; the downstream
+    server still validates its own arguments.
+    """
+    schema = tool_schema.get("inputSchema")
+    if not isinstance(schema, dict) or schema.get("type", "object") != "object":
+        return {"type": "object"}
+    if _jsonschema is not None:
+        try:
+            _jsonschema.validators.validator_for(schema).check_schema(schema)
+        except _jsonschema.SchemaError:
+            return {"type": "object"}
+    return schema
+
+
+async def _no_args() -> None:
+    return None
+
+
+class ProxyTool(_Tool):
+    """A downstream tool mounted as is.
+
+    Its inputSchema, outputSchema, title, annotations and _meta are advertised
+    unchanged; arguments are forwarded as the client sent them (explicit nulls
+    included); the result goes back as the server's CallToolResult, keeping
+    isError, structuredContent, images, resource links and _meta.
+    Downstream annotations are hints for the client, not permissions: Kitsune's
+    guard policy still decides what may run.
+    """
+
+    _output_schema: dict | None = PrivateAttr(default=None)
+
+    @property
+    def output_schema(self) -> dict | None:
+        return self._output_schema
+
+    async def run(self, arguments: dict, context: Any = None, convert_result: bool = False) -> Any:
+        return await self.fn(arguments)
+
+
+def _make_proxy_tool(
+    server_id: str,
+    tool_schema: dict,
+    transport: BaseTransport,
+    config: dict,
+    proxy_name: str | None = None,
+) -> ProxyTool:
+    original_name = tool_schema["name"]
+    schema = _input_schema(tool_schema)
+    schema_props = set((schema.get("properties") or {}).keys())
+
+    async def forward(arguments: dict) -> CallToolResult:
+        args = _prepare_args(transport, schema_props, dict(arguments or {}))
+        blocked = await guard_call(server_id, original_name, args)
+        if blocked:
+            return CallToolResult(content=[TextContent(type="text", text=blocked)], isError=True)
+        raw = await transport.execute_raw(original_name, args, config)
+        try:
+            return CallToolResult.model_validate(raw)
+        except ValidationError:
+            # Not a valid CallToolResult: relay its text rather than fail the call.
+            return CallToolResult(
+                content=[TextContent(type="text", text=_extract_content(raw))],
+                isError=bool(raw.get("isError")) if isinstance(raw, dict) else True,
+            )
+
+    fields = _Tool.model_fields
+    kwargs: dict[str, Any] = {
+        "fn": forward,
+        "name": proxy_name or original_name,
+        "description": (tool_schema.get("description") or "")[:120],
+        "parameters": schema,
+        "fn_metadata": _func_metadata(_no_args),
+        "is_async": True,
+        "context_kwarg": None,
+    }
+    optional = {
+        "title": tool_schema.get("title"),
+        "annotations": tool_schema.get("annotations"),
+        "meta": tool_schema.get("_meta"),
+        "icons": tool_schema.get("icons"),
+    }
+    for key, value in optional.items():
+        if key in fields and value is not None:
+            kwargs[key] = value
+    try:
+        tool = ProxyTool(**kwargs)
+    except ValidationError:
+        # Malformed optional metadata (annotations, icons…) must not cost the tool.
+        for key in optional:
+            kwargs.pop(key, None)
+        tool = ProxyTool(**kwargs)
+    out_schema = tool_schema.get("outputSchema")
+    tool._output_schema = out_schema if isinstance(out_schema, dict) else None
+    return tool
 
 
 def _make_proxy(
@@ -86,31 +241,7 @@ def _make_proxy(
         # rare. Drop None-valued kwargs so the inner server applies its own
         # defaults instead of seeing a poison value.
         cleaned = {k: v for k, v in kwargs.items() if v is not None}
-        # Resolve symlinks on path-typed arguments before forwarding. Many stdio
-        # servers call realpath() on their allowed-dir list at startup but do NOT
-        # resolve incoming request paths — causing /tmp → /private/tmp mismatches
-        # on macOS. Normalising here makes the comparison succeed on both sides.
-        for k, v in list(cleaned.items()):
-            if isinstance(v, str) and "path" in k.lower():
-                resolved = os.path.realpath(v)
-                if resolved != v and os.path.exists(resolved):
-                    cleaned[k] = resolved
-        # Alias normalization — remap common synonyms when the original key is not
-        # in the schema but its alias is. Helps servers with non-intuitive param names
-        # (e.g. source_timezone vs from_timezone in mcp-server-time).
-        _schema_props = set(props.keys())
-        if any(k in _PARAM_ALIASES and k not in _schema_props for k in cleaned):
-            remapped = {}
-            for k, v in cleaned.items():
-                if k not in _schema_props and k in _PARAM_ALIASES:
-                    canonical = _PARAM_ALIASES[k]
-                    # Only remap when canonical is in the schema AND not already
-                    # supplied by the caller (avoids clobbering an explicit value).
-                    if canonical in _schema_props and canonical not in cleaned:
-                        remapped[canonical] = v
-                        continue
-                remapped[k] = v
-            cleaned = remapped
+        cleaned = _prepare_args(transport, set(props.keys()), cleaned)
         blocked = await guard_call(server_id, original_name, cleaned)
         if blocked:
             return blocked
@@ -134,6 +265,7 @@ def _do_shed() -> list[str]:
             removed.append(tname)
         except Exception:
             pass
+    forget_tool_definitions(mcp, removed)
     session["shapeshift_tools"] = []
 
     for uri in session.get("shapeshift_resources", []):
@@ -283,10 +415,14 @@ def _register_proxy_tools(
         if only is not None and raw_name not in only:
             continue
         proxy_name = _proxy_name_for(server_id, raw_name, base_tool_names)
-        proxy = _make_proxy(server_id, tool_schema, transport, config, proxy_name)
         try:
-            mcp.add_tool(proxy)
-            registered.append(proxy_name)
+            added = add_tool_object(
+                mcp, _make_proxy_tool(server_id, tool_schema, transport, config, proxy_name)
+            )
+            if added:
+                registered.append(proxy_name)
+            else:
+                failed.append((raw_name, f"a tool named '{proxy_name}' is already registered"))
         except Exception as e:
             failed.append((raw_name, str(e)[:120]))
     return registered, failed
