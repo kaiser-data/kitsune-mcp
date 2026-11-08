@@ -287,3 +287,13 @@ def _clear_http_sessions():
     _http_sessions.clear()
     yield
     _http_sessions.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_registry_search_cache():
+    """McpRegistryIO caches per-term searches; tests must not see each other's."""
+    from kitsune_mcp.registry import McpRegistryIO
+
+    McpRegistryIO._SEARCH_CACHE.clear()
+    yield
+    McpRegistryIO._SEARCH_CACHE.clear()
