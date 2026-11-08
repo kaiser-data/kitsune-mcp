@@ -515,7 +515,7 @@ wheels = [
 
 [[package]]
 name = "kitsune-mcp"
-version = "0.22.8"
+version = "0.23.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
