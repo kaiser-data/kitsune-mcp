@@ -282,8 +282,43 @@ def _clear_process_pool():
 @pytest.fixture(autouse=True)
 def _clear_http_sessions():
     """Cached MCP session ids must not leak between tests that reuse an endpoint."""
-    from kitsune_mcp.transport import _http_sessions
+    from kitsune_mcp.transport import _http_session_locks, _http_sessions
 
     _http_sessions.clear()
+    _http_session_locks.clear()
     yield
     _http_sessions.clear()
+    _http_session_locks.clear()
+
+
+def _script(items: list):
+    """respx side_effect that answers each request in turn, echoing its JSON-RPC id.
+
+    Fixtures write responses with a placeholder id; a real server echoes the
+    request's id, and the transport matches responses by it.
+    """
+    queue = list(items)
+
+    def respond(request: httpx.Request):
+        item = queue.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        req = json.loads(request.content or b"{}")
+        if "id" not in req or not item.content:
+            return item
+        text = item.content.decode()
+        lines = []
+        for line in text.split("\n"):
+            body = line[5:].strip() if line.startswith("data:") else line
+            try:
+                msg = json.loads(body)
+            except json.JSONDecodeError:
+                lines.append(line)
+                continue
+            if isinstance(msg, dict) and "id" in msg and "method" not in msg:
+                msg["id"] = req["id"]
+            dumped = json.dumps(msg)
+            lines.append(f"data: {dumped}" if line.startswith("data:") else dumped)
+        return httpx.Response(item.status_code, text="\n".join(lines), headers=item.headers)
+
+    return respond

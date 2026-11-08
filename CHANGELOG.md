@@ -8,6 +8,8 @@ All notable changes to this project are documented here.
 
 ### Fixed
 - **`initialize` reports Kitsune's version.** `serverInfo.version` was the mcp SDK's version (`1.30.0`) instead of Kitsune's.
+- **Streamable HTTP responses are read the way the spec allows.** SSE streams are read as they arrive, and the response is matched to the request by its JSON-RPC id. Before, Kitsune took the first event on the stream, so a progress or log notification sent ahead of the result was mistaken for it. Server-to-client requests on the stream now get an answer (`ping` succeeds, everything else is "method not supported"), so the server never hangs waiting for one. Plain `application/json` replies and batch payloads also work.
+- **HTTP sessions are shared under concurrency (closes #66).** Concurrent calls to the same server now share one session and one `initialize`, where before each made its own handshake. Stateless servers, which issue no session id, keep their handshake too. Sessions last at most 30 minutes, at most 64 are cached, and Kitsune closes a session it drops with `DELETE`.
 
 ---
 

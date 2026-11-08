@@ -16,6 +16,8 @@ from server import (
     _validate_install_cmd,
 )
 
+from .conftest import _script
+
 # ---------------------------------------------------------------------------
 # StdioTransport tests
 # ---------------------------------------------------------------------------
@@ -462,16 +464,20 @@ class TestHTTPSSETransportDirectOAuth:
         ):
             with respx.mock:
                 respx.post(url).mock(
-                    side_effect=[
-                        httpx.Response(401, text=""),  # initialize → 401
-                        httpx.Response(
-                            200,
-                            text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
-                            headers={"mcp-session-id": "s"},
-                        ),
-                        httpx.Response(200, text=""),  # notifications/initialized
-                        httpx.Response(200, text=f"data: {json.dumps(payload)}\n"),  # tools/call OK
-                    ]
+                    side_effect=_script(
+                        [
+                            httpx.Response(401, text=""),  # initialize → 401
+                            httpx.Response(
+                                200,
+                                text=f"data: {json.dumps(init_payload)}\n",  # retry initialize OK
+                                headers={"mcp-session-id": "s"},
+                            ),
+                            httpx.Response(200, text=""),  # notifications/initialized
+                            httpx.Response(
+                                200, text=f"data: {json.dumps(payload)}\n"
+                            ),  # tools/call OK
+                        ]
+                    )
                 )
                 result = await transport.execute("my_tool", {}, {})
         assert "ok" in result
