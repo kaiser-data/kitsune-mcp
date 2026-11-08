@@ -4,6 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
+from urllib.parse import urlparse
 
 from kitsune_mcp.constants import (
     GLAMA_REGISTRY_TTL,
@@ -871,11 +872,15 @@ class GlamaRegistry(_PaginatedListRegistry):
         repo_url = (entry.get("repository") or {}).get("url", "")
         # Derive install_cmd from GitHub repo URL when available
         install_cmd: list[str] = []
-        if repo_url and "github.com" in repo_url:
-            # Use github: shorthand; actual npm vs pip detected lazily by GitHubRegistry
-            parts = repo_url.rstrip("/").split("github.com/")[-1].split("/")
+        parsed = urlparse(repo_url) if repo_url else None
+        if parsed and parsed.hostname in ("github.com", "www.github.com"):
+            # Use github: shorthand; actual npm vs pip detected lazily by GitHubRegistry.
+            # Checked on the parsed host: "github.com" in the URL text would also
+            # match https://evil.example/github.com/... (CodeQL py/incomplete-url-substring-sanitization).
+            parts = [p for p in parsed.path.split("/") if p]
             if len(parts) >= 2:
-                install_cmd = ["npx", f"github:{parts[0]}/{parts[1]}"]
+                repo = parts[1].removesuffix(".git")
+                install_cmd = ["npx", f"github:{parts[0]}/{repo}"]
         # Credentials from environmentVariablesJsonSchema
         env_schema = entry.get("environmentVariablesJsonSchema") or {}
         props = env_schema.get("properties") or {}

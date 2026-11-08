@@ -1136,3 +1136,25 @@ class TestRelevanceScoreCredentialBonus:
         assert _relevance_score(exact_cred, "filesystem") > _relevance_score(
             weak_free, "filesystem"
         )
+
+
+class TestGlamaGithubHost:
+    """CodeQL py/incomplete-url-substring-sanitization: check the host, not the URL text."""
+
+    @staticmethod
+    def _cmd(url: str) -> list:
+        from kitsune_mcp.registry import GlamaRegistry
+
+        srv = GlamaRegistry._to_server_info({"name": "x", "repository": {"url": url}})
+        return srv.install_cmd if srv else []
+
+    def test_github_repo(self):
+        assert self._cmd("https://github.com/owner/repo") == ["npx", "github:owner/repo"]
+        assert self._cmd("https://www.github.com/owner/repo.git/") == [
+            "npx",
+            "github:owner/repo",
+        ]
+
+    def test_github_in_path_of_another_host_is_ignored(self):
+        assert self._cmd("https://evil.example/github.com/owner/repo") == []
+        assert self._cmd("https://github.com.evil.example/owner/repo") == []

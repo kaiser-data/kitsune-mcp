@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **Two CodeQL findings.** HTML-to-text extraction now uses the standard library's HTML parser. Before, a regex missed end tags like `</script >` and `</SCRIPT>`, so script contents could show up in fetched page text. The Glama adapter now checks the parsed host of a repository URL instead of searching the URL text for `github.com`, which also matched URLs like `https://evil.example/github.com/…`.
 - **`initialize` reports Kitsune's version.** `serverInfo.version` was the mcp SDK's version (`1.30.0`) instead of Kitsune's.
 
 ---
