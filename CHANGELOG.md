@@ -13,7 +13,8 @@ All notable changes to this project are documented here.
 
 ### Added
 - **Fallback for old HTTP+SSE servers.** Kitsune now also connects to servers that still speak the 2024-11-05 HTTP+SSE transport. When such a server rejects the `initialize` POST with 400, 404 or 405, Kitsune opens its GET event stream as the spec says, and responses on that stream are matched by request id. The `endpoint` event must name a URL on the server's own origin, so the bearer token is never sent to another host.
-- **Fixture-server tests.** A new test file runs the HTTP transport against real mcp SDK servers on localhost: Streamable HTTP with SSE responses, Streamable HTTP with JSON responses, stateless Streamable HTTP, and legacy HTTP+SSE. The test tool sends progress and log notifications before its result.
+- **WebSocket replies are matched by request id.** Before, Kitsune ignored the `initialize` reply and took the next frame as the tool result, so a notification could be returned as the answer. It now checks `initialize` (the reply must carry a `protocolVersion`), skips notifications and frames that aren't JSON, and answers server requests. A connection lost after the call was sent reports "outcome unknown". `WebSocketTransport.list_tools()` is new and follows pagination cursors, so `shapeshift()` can discover tools on `ws://` servers. The docs now say WebSocket is a custom transport, not a spec one.
+- **Fixture-server tests.** A new test file runs the HTTP transport against real mcp SDK servers on localhost: Streamable HTTP with SSE responses, Streamable HTTP with JSON responses, stateless Streamable HTTP, legacy HTTP+SSE, and a WebSocket server. The test tool sends progress and log notifications before its result.
 
 ---
 

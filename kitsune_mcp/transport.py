@@ -623,6 +623,20 @@ def _http_headers(bearer: str, sess: _HTTPSession | None) -> dict[str, str]:
     return hdrs
 
 
+def _server_request_reply(msg: dict) -> dict[str, Any]:
+    """Our answer to a server-to-client request: ping succeeds, the rest are unsupported.
+
+    Kitsune offers no client capabilities (sampling, roots, elicitation).
+    """
+    if msg.get("method") == "ping":
+        return {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
+    return {
+        "jsonrpc": "2.0",
+        "id": msg["id"],
+        "error": {"code": -32601, "message": f"Method not supported: {msg.get('method')}"},
+    }
+
+
 async def _answer_server_request(
     endpoint: str, bearer: str, sess: _HTTPSession | None, msg: dict
 ) -> None:
@@ -632,14 +646,7 @@ async def _answer_server_request(
     anything but ping gets "method not found"; leaving it unanswered could make
     the server wait forever before it sends our result.
     """
-    if msg.get("method") == "ping":
-        reply: dict[str, Any] = {"jsonrpc": "2.0", "id": msg["id"], "result": {}}
-    else:
-        reply = {
-            "jsonrpc": "2.0",
-            "id": msg["id"],
-            "error": {"code": -32601, "message": f"Method not supported: {msg.get('method')}"},
-        }
+    reply = _server_request_reply(msg)
     with contextlib.suppress(httpx.HTTPError):
         await _get_http_client().post(
             endpoint,
@@ -1468,70 +1475,84 @@ class PersistentStdioTransport(BaseTransport):
         return f"Failed to call '{tool}' after reconnect"  # unreachable but satisfies type checker
 
 
-class WebSocketTransport(BaseTransport):
-    """One-shot MCP tool call over WebSocket (ws:// or wss://).
+async def _ws_exchange(ws: Any, payload: dict, timeout: float) -> dict:
+    """Send one JSON-RPC request over a WebSocket and return the response to it.
 
-    Requires the 'websockets' package: pip install websockets
+    Frames are read until the one whose id matches arrives. Notifications and
+    responses to other ids are skipped; server-to-client requests are answered
+    so the server never waits on us.
+    """
+    await ws.send(json.dumps(payload))
+    request_id = payload["id"]
+
+    async def _wait() -> dict:
+        while True:
+            raw = await ws.recv()
+            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+            for msg in _json_messages(text):
+                if _is_response(msg, request_id):
+                    return msg
+                if "method" in msg and "id" in msg:
+                    await ws.send(json.dumps(_server_request_reply(msg)))
+
+    return await asyncio.wait_for(_wait(), timeout)
+
+
+class _WSInitError(RuntimeError):
+    """The server rejected or garbled initialize; nothing else was sent."""
+
+
+class WebSocketTransport(BaseTransport):
+    """MCP over WebSocket (ws:// or wss://), one connection per operation.
+
+    WebSocket is not one of the MCP specification's standard transports; it is
+    a custom transport that some servers offer. Each message is one JSON-RPC
+    object per text frame. Requires the 'websockets' package (`kitsune-mcp[ws]`).
     """
 
     def __init__(self, url: str):
         self.url = url
 
+    @contextlib.asynccontextmanager
+    async def _connect(self):
+        """Open a connection and run the initialize handshake; yield a request function."""
+        import websockets
+
+        async with websockets.connect(self.url, open_timeout=TIMEOUT_STDIO_INIT) as ws:
+            ids = itertools.count(1)
+            init = await _ws_exchange(ws, _initialize_request(next(ids)), TIMEOUT_STDIO_INIT)
+            if "error" in init:
+                err = init["error"]
+                raise _WSInitError(f"initialize failed: {err.get('message', err)}")
+            if "protocolVersion" not in (init.get("result") or {}):
+                raise _WSInitError("initialize reply has no protocolVersion")
+            await ws.send(json.dumps(_initialized_notification()))
+
+            async def request(method: str, params: dict, timeout: float) -> dict:
+                payload = {"jsonrpc": "2.0", "id": next(ids), "method": method, "params": params}
+                return await _ws_exchange(ws, payload, timeout)
+
+            yield request
+
     async def execute(self, tool: str, args: dict, config: dict) -> str:
         try:
-            import websockets
+            import websockets  # noqa: F401
         except ImportError:
             return "WebSocket transport requires 'websockets': pip install 'kitsune-mcp[ws]'"
 
+        sent = False
         try:
-            async with websockets.connect(self.url, open_timeout=TIMEOUT_STDIO_INIT) as ws:
-                # Initialize handshake
-                await ws.send(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "initialize",
-                            "params": {
-                                "protocolVersion": MCP_PROTOCOL_VERSION,
-                                "clientInfo": MCP_CLIENT_INFO,
-                                "capabilities": {},
-                            },
-                        }
-                    )
+            async with self._connect() as request:
+                sent = True
+                msg = await request(
+                    "tools/call", {"name": tool, "arguments": args}, TIMEOUT_HTTP_TOOL
                 )
-                await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_STDIO_INIT)
-
-                # Initialized notification
-                await ws.send(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "method": "notifications/initialized",
-                            "params": {},
-                        }
-                    )
-                )
-
-                # Tool call
-                await ws.send(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 2,
-                            "method": "tools/call",
-                            "params": {"name": tool, "arguments": args},
-                        }
-                    )
-                )
-                raw = await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_HTTP_TOOL)
         except Exception as e:
+            if sent:
+                # The call went out; its effect is unknown, so don't suggest a blind retry.
+                reason = "no reply in time" if isinstance(e, TimeoutError) else f"{e}"
+                return _outcome_unknown_message(tool, self.url, reason)
             return f"WebSocket error ({self.url}): {e}"
-
-        try:
-            msg = json.loads(raw)
-        except Exception:
-            return str(raw)
 
         if "error" in msg:
             err = msg["error"]
@@ -1546,6 +1567,24 @@ class WebSocketTransport(BaseTransport):
         session["stats"]["tokens_sent"] += tokens_out
         session["stats"]["tokens_received"] += tokens_in
         return _clean_truncate(raw_text)
+
+    async def list_tools(self, config: dict | None = None) -> list[dict]:
+        """tools/list over WebSocket, following pagination cursors. [] on any failure."""
+        try:
+            async with self._connect() as request:
+                tools: list[dict] = []
+                params: dict = {}
+                for _ in range(50):  # bound a server that never stops paginating
+                    msg = await request("tools/list", params, TIMEOUT_HTTP_TOOL)
+                    result = msg.get("result") or {}
+                    tools.extend(result.get("tools", []))
+                    cursor = result.get("nextCursor")
+                    if not cursor:
+                        break
+                    params = {"cursor": cursor}
+                return tools
+        except Exception:
+            return []
 
 
 def _hardened_docker_flags(config: dict, tmpfs_exec: bool = False) -> list[str]:

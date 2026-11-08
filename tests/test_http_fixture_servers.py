@@ -209,3 +209,50 @@ class _AsyncStream(httpx.AsyncByteStream):
     async def __aiter__(self):
         async for chunk in self._gen:
             yield chunk
+
+
+# ---------------------------------------------------------------------------
+# WebSocket fixture server
+# ---------------------------------------------------------------------------
+
+
+async def _ws_mcp_handler(ws):
+    """Minimal MCP-over-WebSocket server that interleaves traffic before each result."""
+    import json
+
+    async for raw in ws:
+        msg = json.loads(raw)
+        method = msg.get("method")
+        if method == "initialize":
+            await ws.send(
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": msg["id"], "result": {"protocolVersion": "2025-06-18"}}
+                )
+            )
+        elif method == "tools/list":
+            tools = [{"name": "add", "inputSchema": {"type": "object"}}]
+            await ws.send(
+                json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {"tools": tools}})
+            )
+        elif method == "tools/call":
+            await ws.send(json.dumps({"jsonrpc": "2.0", "method": "notifications/progress"}))
+            await ws.send(json.dumps({"jsonrpc": "2.0", "id": "srv-ping", "method": "ping"}))
+            pong = json.loads(await ws.recv())
+            assert pong == {"jsonrpc": "2.0", "id": "srv-ping", "result": {}}
+            a, b = msg["params"]["arguments"]["a"], msg["params"]["arguments"]["b"]
+            content = [{"type": "text", "text": f"sum={a + b}"}]
+            await ws.send(
+                json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {"content": content}})
+            )
+
+
+async def test_websocket_server_round_trip():
+    websockets = pytest.importorskip("websockets")
+    from kitsune_mcp.transport import WebSocketTransport
+
+    async with websockets.serve(_ws_mcp_handler, "127.0.0.1", 0) as srv:
+        port = next(iter(srv.sockets)).getsockname()[1]
+        t = WebSocketTransport(f"ws://127.0.0.1:{port}")
+        assert [x["name"] for x in await t.list_tools()] == ["add"]
+        results = await asyncio.gather(*(t.execute("add", {"a": i, "b": 2}, {}) for i in range(3)))
+    assert results == ["sum=2", "sum=3", "sum=4"]
