@@ -64,7 +64,7 @@ ws = [
 ]
 dev = [
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest-asyncio>=1.5.0",
     "pytest-timeout>=2.3.0",
     # Pin the formatter/linter to a minor range. `ruff format --check` is a CI
     # gate and ruff's formatting output changes between minor releases, so an
