@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["mcp~=1.27"]
+# dependencies = ["mcp>=2,<3"]
 # ///
 """Demo MCP server for the Kitsune hot-reload GIF.
 
@@ -8,14 +8,14 @@ comes back at a sweltering 59°C. The agent is meant to spot it, fix the
 conversion, reload("dev") and call the tool again. See README.md here.
 
 No network, no API key: readings are fixed so every take of the demo matches.
-Needs the mcp 1.x SDK (mcp 2.x renamed FastMCP). The inline script metadata
-above pins it, so `uv run weather_server.py` just works.
+Needs the mcp 2.x SDK (2.x renamed FastMCP to MCPServer).
+Run with `uv run weather_server.py`.
 Reset the bug before another take with: git checkout -- weather_server.py
 """
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-mcp = FastMCP("demo-weather")
+mcp = MCPServer("demo-weather")
 
 # Readings as the (pretend) upstream API returns them: Fahrenheit.
 _READINGS_F = {

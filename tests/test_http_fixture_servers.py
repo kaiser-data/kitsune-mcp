@@ -1,6 +1,6 @@
 """HTTPSSETransport against real mcp SDK servers (v0.23 exit gate).
 
-Each test starts a FastMCP server with uvicorn on a free localhost port, in
+Each test starts an MCPServer instance with uvicorn on a free localhost port, in
 one of the transports a remote MCP server can speak: Streamable HTTP with SSE
 responses, Streamable HTTP with JSON responses, stateless Streamable HTTP, and
 the deprecated 2024-11-05 HTTP+SSE transport. The tool sends progress and log
@@ -22,7 +22,7 @@ import kitsune_mcp.transport as tp
 from kitsune_mcp.transport import HTTPSSETransport
 
 uvicorn = pytest.importorskip("uvicorn")
-fastmcp = pytest.importorskip("mcp.server.fastmcp")
+mcpserver = pytest.importorskip("mcp.server.mcpserver")
 
 
 @pytest.fixture(autouse=True)
@@ -43,21 +43,24 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _app(kind: str, port: int):
-    mcp = fastmcp.FastMCP(
+def _app(kind: str):
+    mcp = mcpserver.MCPServer(
         "fixture",
-        port=port,
-        json_response=kind == "json",
-        stateless_http=kind == "stateless",
     )
 
     @mcp.tool()
-    async def add(a: int, b: int, ctx: fastmcp.Context) -> str:
+    async def add(a: int, b: int, ctx: mcpserver.Context) -> str:
         await ctx.report_progress(1, 2)
         await ctx.info("adding")
         return f"sum={a + b}"
 
-    return mcp.sse_app() if kind == "legacy" else mcp.streamable_http_app()
+    return (
+        mcp.sse_app()
+        if kind == "legacy"
+        else mcp.streamable_http_app(
+            json_response=kind == "json", stateless_http=kind == "stateless"
+        )
+    )
 
 
 @pytest.fixture
@@ -65,7 +68,7 @@ def server(request):
     """Run a fixture server in a thread; yield its MCP URL."""
     kind = request.param
     port = _free_port()
-    srv = uvicorn.Server(uvicorn.Config(_app(kind, port), port=port, log_level="error"))
+    srv = uvicorn.Server(uvicorn.Config(_app(kind), port=port, log_level="error"))
     thread = threading.Thread(target=srv.run, daemon=True)
     thread.start()
     deadline = time.monotonic() + 10

@@ -11,7 +11,7 @@ import shutil
 import time
 
 import httpx
-from mcp.server.fastmcp import Context
+from mcp.server.mcpserver import Context
 
 from kitsune_mcp.app import _registry_lock, mcp
 from kitsune_mcp.constants import (

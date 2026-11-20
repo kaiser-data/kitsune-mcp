@@ -190,4 +190,4 @@ Issues and PRs welcome: [github.com/kaiser-data/kitsune-mcp](https://github.com/
 
 ---
 
-*MIT License · Python 3.12+ · Built on [FastMCP](https://github.com/jlowin/fastmcp)*
+*MIT License · Python 3.12+ · Built on [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)*

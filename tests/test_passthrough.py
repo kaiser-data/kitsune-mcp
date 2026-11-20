@@ -9,9 +9,14 @@ import base64
 import socket
 import threading
 import time
+from contextlib import asynccontextmanager
 from typing import Literal
 
+import anyio
 import pytest
+from mcp import ClientSession
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.shared.memory import create_client_server_memory_streams
 from pydantic import BaseModel
 
 import kitsune_mcp.transport as tp
@@ -20,9 +25,8 @@ from kitsune_mcp.app import mcp as kitsune
 from kitsune_mcp.shapeshift import _make_proxy_tool, _register_proxy_tools
 from kitsune_mcp.transport import HTTPSSETransport
 
-fastmcp = pytest.importorskip("mcp.server.fastmcp")
+mcpserver = pytest.importorskip("mcp.server.mcpserver")
 uvicorn = pytest.importorskip("uvicorn")
-from mcp.shared.memory import create_connected_server_and_client_session  # noqa: E402
 
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
@@ -44,8 +48,8 @@ class Echoed(BaseModel):
     was_null: bool
 
 
-def _downstream(port: int):
-    m = fastmcp.FastMCP("downstream", port=port)
+def _downstream():
+    m = mcpserver.MCPServer("downstream")
 
     @m.tool(description="Search documents.")
     def find_docs(
@@ -63,17 +67,31 @@ def _downstream(port: int):
 
     @m.tool()
     def fail() -> str:
-        raise ValueError("downstream exploded")
+        raise ToolError("downstream exploded")
 
     @m.tool()
-    def picture() -> fastmcp.Image:
-        return fastmcp.Image(data=PNG, format="png")
+    def picture() -> mcpserver.Image:
+        return mcpserver.Image(data=PNG, format="png")
 
     @m.tool()
     def code() -> str:
         return "def f():\n\n\n    return  1   \n"
 
     return m
+
+
+@asynccontextmanager
+async def _open_client():
+    server = kitsune._lowlevel_server
+    async with create_client_server_memory_streams() as (client_streams, server_streams):
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(server.run, *server_streams, server.create_initialization_options())
+            try:
+                async with ClientSession(*client_streams) as client:
+                    await client.initialize()
+                    yield client
+            finally:
+                tasks.cancel_scope.cancel()
 
 
 @pytest.fixture
@@ -90,7 +108,7 @@ async def mounted(tmp_path, monkeypatch):
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     srv = uvicorn.Server(
-        uvicorn.Config(_downstream(port).streamable_http_app(), port=port, log_level="error")
+        uvicorn.Config(_downstream().streamable_http_app(), port=port, log_level="error")
     )
     thread = threading.Thread(target=srv.run, daemon=True)
     thread.start()
@@ -103,7 +121,7 @@ async def mounted(tmp_path, monkeypatch):
     assert failed == [] and set(names) == {"find_docs", "echo", "fail", "picture", "code"}
     try:
         yield (
-            lambda: create_connected_server_and_client_session(kitsune._mcp_server),
+            _open_client,
             {t["name"]: t for t in tools},
         )
     finally:
@@ -122,13 +140,13 @@ async def test_schemas_are_advertised_unchanged(mounted):
     async with open_client() as client:
         listed = {t.name: t for t in (await client.list_tools()).tools}
         found = listed["find_docs"]
-        assert found.inputSchema == downstream["find_docs"]["inputSchema"]
+        assert found.input_schema == downstream["find_docs"]["inputSchema"]
         # The parts the old type-mapping lost:
-        props = found.inputSchema["properties"]
+        props = found.input_schema["properties"]
         assert props["mode"]["enum"] == ["fast", "deep"]
         assert {"type": "null"} in props["limit"]["anyOf"]
-        assert "$defs" in found.inputSchema and "Filters" in found.inputSchema["$defs"]
-        assert found.outputSchema == downstream["find_docs"]["outputSchema"]
+        assert "$defs" in found.input_schema and "Filters" in found.input_schema["$defs"]
+        assert found.output_schema == downstream["find_docs"]["outputSchema"]
 
 
 async def test_nested_enum_and_nullable_arguments_reach_the_server(mounted):
@@ -138,24 +156,24 @@ async def test_nested_enum_and_nullable_arguments_reach_the_server(mounted):
             "find_docs",
             {"query": "q", "mode": "deep", "limit": None, "filters": {"language": "de"}},
         )
-        assert not r.isError
-        assert r.structuredContent == {"title": "q/deep/None/de", "score": 0.5}
+        assert not r.is_error
+        assert r.structured_content == {"title": "q/deep/None/de", "score": 0.5}
 
 
 async def test_explicit_null_is_forwarded_not_dropped(mounted):
     open_client, _ = mounted
     async with open_client() as client:
         r = await client.call_tool("echo", {"value": None})
-        assert r.structuredContent == {"value": None, "was_null": True}
+        assert r.structured_content == {"value": None, "was_null": True}
         r = await client.call_tool("echo", {})
-        assert r.structuredContent == {"value": "default", "was_null": False}
+        assert r.structured_content == {"value": "default", "was_null": False}
 
 
 async def test_invalid_arguments_are_rejected_against_the_real_schema(mounted):
     open_client, _ = mounted
     async with open_client() as client:
         r = await client.call_tool("find_docs", {"query": "q", "mode": "sideways"})
-        assert r.isError
+        assert r.is_error
         assert "sideways" in r.content[0].text
 
 
@@ -163,7 +181,7 @@ async def test_downstream_error_keeps_is_error(mounted):
     open_client, _ = mounted
     async with open_client() as client:
         r = await client.call_tool("fail", {})
-        assert r.isError is True
+        assert r.is_error is True
         assert "downstream exploded" in r.content[0].text
 
 
@@ -210,7 +228,7 @@ async def test_kitsune_failure_becomes_is_error():
     t = _Recorder("⚠️  outcome unknown")
     tool = _make_proxy_tool("s", {"name": "t", "inputSchema": {"type": "object"}}, t, {})
     r = await tool.run({})
-    assert r.isError and "outcome unknown" in r.content[0].text
+    assert r.is_error and "outcome unknown" in r.content[0].text
 
 
 async def test_paths_are_not_rewritten_for_remote_servers(tmp_path):
@@ -237,7 +255,7 @@ async def test_annotations_and_title_are_relayed():
     }
     tool = _make_proxy_tool("s", schema, _Recorder({"content": []}), {})
     assert tool.title == "Nice Title"
-    assert tool.annotations.readOnlyHint is True
+    assert tool.annotations.read_only_hint is True
 
 
 async def test_name_collision_is_reported_not_hidden():

@@ -31,6 +31,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 
+from kitsune_mcp.app import get_context
 from kitsune_mcp.paths import kitsune_home
 
 POLICY_VERSION = 1
@@ -433,8 +434,6 @@ async def _ask_human(server_id: str, tool: str, args: dict, verdict: Verdict) ->
     from mcp import types
     from pydantic import BaseModel, Field
 
-    from kitsune_mcp.app import mcp
-
     class Approve(BaseModel):
         approve: bool = Field(description="Run this tool call?")
 
@@ -447,7 +446,7 @@ async def _ask_human(server_id: str, tool: str, args: dict, verdict: Verdict) ->
         f"Arguments: {preview}"
     )
     try:
-        ctx = mcp.get_context()
+        ctx = get_context()
         session = getattr(ctx, "session", None)
         wanted = types.ClientCapabilities(elicitation=types.ElicitationCapability())
         if session is not None and not session.check_client_capability(wanted):

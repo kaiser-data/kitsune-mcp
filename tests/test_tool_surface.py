@@ -13,7 +13,7 @@ import os
 
 def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
     """Import server.py with KITSUNE_TOOLS set to the given value and return
-    the set of tool names currently registered with the FastMCP app."""
+    the set of tool names currently registered with the MCPServer app."""
     import sys
 
     # Patch env before importing
@@ -33,7 +33,7 @@ def _get_registered_tools(kitsune_tools_env: str) -> set[str]:
         import server  # noqa: F401 — side effects register/prune tools
         from kitsune_mcp.app import mcp
 
-        # FastMCP exposes registered tools via ._tool_manager or similar; use the
+        # MCPServer exposes registered tools via ._tool_manager or similar; use the
         # public list_tools() sync path if available, else inspect internals.
         try:
             tools = mcp.list_tools()

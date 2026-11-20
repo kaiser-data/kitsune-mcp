@@ -699,3 +699,57 @@ class TestMorphRegistersAll:
 
         # shapeshift should still succeed
         assert "exc_tool" in result or "Shapeshifted" in result
+
+
+async def test_generated_signatures_are_advertised(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from kitsune_mcp.app import mcp
+    from kitsune_mcp.session import _restore_crafted_tools, session
+    from kitsune_mcp.shapeshift import _register_proxy_prompts
+
+    tool_name = "crafted_signature_probe"
+    prompt_name = "proxy_signature_probe"
+    monkeypatch.setitem(
+        session,
+        "crafted_tools",
+        {
+            tool_name: {
+                "url": "https://example.com/search",
+                "params": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+            }
+        },
+    )
+    _restore_crafted_tools()
+    registered = []
+    try:
+        registered = _register_proxy_prompts(
+            AsyncMock(),
+            [
+                {
+                    "name": prompt_name,
+                    "arguments": [
+                        {"name": "topic", "required": True},
+                        {"name": "style", "required": False},
+                    ],
+                }
+            ],
+        )
+        assert registered == [prompt_name]
+        tool = next(tool for tool in await mcp.list_tools() if tool.name == tool_name)
+        assert set(tool.input_schema["required"]) == {"query", "limit"}
+        properties = tool.input_schema["properties"]
+        assert {name: schema["type"] for name, schema in properties.items()} == {
+            "query": "string",
+            "limit": "integer",
+        }
+
+        prompt = next(prompt for prompt in await mcp.list_prompts() if prompt.name == prompt_name)
+        assert [(arg.name, arg.required) for arg in prompt.arguments] == [
+            ("topic", True),
+            ("style", False),
+        ]
+    finally:
+        for name in registered:
+            mcp.remove_prompt(name)
+        mcp.remove_tool(tool_name)

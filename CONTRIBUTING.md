@@ -37,7 +37,7 @@ async def my_tool(param: str, optional: int = 5) -> str:
 ```
 
 Rules:
-- Return `str` always — FastMCP serializes everything
+- Return `str` always — MCPServer serializes everything
 - Use `_truncate()` on any response that could be large
 - Use `_clean_response()` on raw external content
 - Update `session["stats"]` for call counts
@@ -87,7 +87,7 @@ If you found a server that works well with Kitsune, open a "New Server" issue:
 server.py              # entry point: loads .env, registers tools, prunes to the profile
 server_forge.py        # kitsune-forge entry point (all tools)
 kitsune_mcp/
-  app.py               # the shared FastMCP instance
+  app.py               # the shared MCPServer instance
   tools/               # the MCP tools (discovery, exec, shapeshift, onboarding)
     _state.py          # tool-name sets for the lean and full profiles
   transport.py         # stdio, HTTP/SSE, WebSocket, persistent and Docker transports

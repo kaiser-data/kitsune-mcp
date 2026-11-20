@@ -1,20 +1,19 @@
+import contextlib
 import inspect as _inspect
 import os
 import re
 from collections.abc import Callable
 from typing import Any
 
-from mcp.server.fastmcp.prompts.base import Prompt as _Prompt
-from mcp.server.fastmcp.resources.types import FunctionResource as _FunctionResource
-from mcp.server.fastmcp.tools.base import Tool as _Tool
-from mcp.server.fastmcp.utilities.func_metadata import func_metadata as _func_metadata
+from mcp.server.mcpserver.prompts.base import Prompt as _Prompt
+from mcp.server.mcpserver.resources.types import FunctionResource as _FunctionResource
+from mcp.server.mcpserver.tools.base import Tool as _Tool
+from mcp.server.mcpserver.utilities.func_metadata import func_metadata as _func_metadata
 from mcp.types import CallToolResult, TextContent
 from pydantic import PrivateAttr, ValidationError
 
 from kitsune_mcp._fastmcp_compat import (
     add_tool_object,
-    forget_tool_definitions,
-    remove_prompt,
     remove_resource,
 )
 from kitsune_mcp.app import mcp
@@ -160,7 +159,7 @@ def _make_proxy_tool(
         args = _prepare_args(transport, schema_props, dict(arguments or {}))
         blocked = await guard_call(server_id, original_name, args)
         if blocked:
-            return CallToolResult(content=[TextContent(type="text", text=blocked)], isError=True)
+            return CallToolResult(content=[TextContent(type="text", text=blocked)], is_error=True)
         raw = await transport.execute_raw(original_name, args, config)
         try:
             return CallToolResult.model_validate(raw)
@@ -168,7 +167,7 @@ def _make_proxy_tool(
             # Not a valid CallToolResult: relay its text rather than fail the call.
             return CallToolResult(
                 content=[TextContent(type="text", text=_extract_content(raw))],
-                isError=bool(raw.get("isError")) if isinstance(raw, dict) else True,
+                is_error=bool(raw.get("isError")) if isinstance(raw, dict) else True,
             )
 
     fields = _Tool.model_fields
@@ -211,7 +210,7 @@ def _make_proxy(
 ) -> Callable:
     """Create a proxy callable that forwards calls to a remote/local MCP tool.
 
-    proxy_name: the name the tool will be registered as in FastMCP.
+    proxy_name: the name the tool will be registered as in MCPServer.
                 Defaults to tool_schema["name"]. The transport always uses
                 the original schema name when calling the remote server.
     """
@@ -234,7 +233,7 @@ def _make_proxy(
         )
 
     async def proxy_fn(**kwargs) -> str:
-        # Optional params get default=None in our signature so FastMCP/pydantic
+        # Optional params get default=None in our signature so MCPServer/pydantic
         # accept calls that omit them. But forwarding `None` to the inner
         # MCP server fails its schema validation: JSON Schema rejects null for
         # typed params unless explicitly declared as ["type", "null"], which is
@@ -265,7 +264,6 @@ def _do_shed() -> list[str]:
             removed.append(tname)
         except Exception:
             pass
-    forget_tool_definitions(mcp, removed)
     session["shapeshift_tools"] = []
 
     for uri in session.get("shapeshift_resources", []):
@@ -273,7 +271,8 @@ def _do_shed() -> list[str]:
     session["shapeshift_resources"] = []
 
     for pname in session.get("shapeshift_prompts", []):
-        remove_prompt(mcp, pname)
+        with contextlib.suppress(ValueError):
+            mcp.remove_prompt(pname)
     session["shapeshift_prompts"] = []
 
     session["current_form"] = None
@@ -341,7 +340,7 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
     """Proxy prompts from a transport.
 
     Returns list of registered prompt names.
-    Builds a proper __signature__ so FastMCP sees the correct argument list.
+    Builds a proper __signature__ so MCPServer sees the correct argument list.
     """
     registered = []
     for prompt_schema in prompts:
@@ -352,7 +351,7 @@ def _register_proxy_prompts(transport: "BaseTransport", prompts: list[dict]) -> 
         args_schema = prompt_schema.get("arguments", [])
         _proxy = _make_prompt_proxy(transport, name)
 
-        # Build named parameter signature so FastMCP / Pydantic see correct arguments.
+        # Build named parameter signature so MCPServer / Pydantic see correct arguments.
         # MUST set both __signature__ (for inspect) and __annotations__ (for Pydantic's
         # get_type_hints()) — Prompt.from_function calls validate_call which reads both.
         params = []

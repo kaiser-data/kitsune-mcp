@@ -42,7 +42,7 @@ _TYPICAL_TOKENS_PER_TOOL = len(json.dumps(_TYPICAL_TOOL_SCHEMA)) // 4
 
 
 def _tool_dict(tool) -> dict:
-    """Convert a FastMCP internal Tool to a JSON-serialisable dict."""
+    """Convert an MCPServer internal Tool to a JSON-serialisable dict."""
     return {
         "name": tool.name,
         "description": tool.description or "",

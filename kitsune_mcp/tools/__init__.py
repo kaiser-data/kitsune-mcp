@@ -11,7 +11,7 @@ For mock.patch in tests, prefer `kitsune_mcp.tools._state.X` so the patch
 catches every call site uniformly.
 """
 
-# Submodule imports trigger @mcp.tool() registration on the shared FastMCP instance.
+# Submodule imports trigger @mcp.tool() registration on the shared MCPServer instance.
 from kitsune_mcp.tools import _state  # noqa: F401  (re-exported)
 
 # Backward-compat re-exports of names that tests / server.py imported from

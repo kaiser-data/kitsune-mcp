@@ -407,7 +407,7 @@ def _serve(app, port):
 
 async def test_sdk_server_challenge_drives_login(monkeypatch):
     """SDK resource server (401 + RFC 9728) → separate authorization server → retry with token."""
-    fastmcp = pytest.importorskip("mcp.server.fastmcp")
+    mcpserver = pytest.importorskip("mcp.server.mcpserver")
     from mcp.server.auth.provider import AccessToken
     from mcp.server.auth.settings import AuthSettings
     from starlette.applications import Starlette
@@ -426,9 +426,8 @@ async def test_sdk_server_challenge_drives_login(monkeypatch):
                 return AccessToken(token=token, client_id="cid", scopes=["read"], resource=rs_url)
             return None
 
-    mcp = fastmcp.FastMCP(
+    mcp = mcpserver.MCPServer(
         "guarded",
-        port=rs_port,
         token_verifier=Verifier(),
         auth=AuthSettings(issuer_url=as_url, resource_server_url=rs_url, required_scopes=["read"]),
     )

@@ -92,7 +92,7 @@ def _load_state() -> None:
 
 
 def _restore_crafted_tools() -> None:
-    """Re-register crafted tools with FastMCP after a server restart.
+    """Re-register crafted tools after a server restart.
 
     Called from server.py after all imports so mcp is fully initialized.
     """

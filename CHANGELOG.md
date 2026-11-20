@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+Kitsune now runs on the mcp Python SDK 2.x (#79). mcp 2.x renamed the bundled `FastMCP` server to `MCPServer` and removed `mcp.server.fastmcp`, so a fresh install used to need the `mcp<2` pin. Breaking for anyone who pins mcp 1.x next to Kitsune: 1.x is no longer supported.
+
+### Changed
+- **mcp 2.x.** Requires `mcp>=2,<3` and `pydantic>=2.12,<2.15` (was `mcp>=1.0.0,<2` and `pydantic>=2.10,<2.15`). The server, the shapeshift registrations and the crafted tools use `MCPServer`, and prompts are unregistered through its public `remove_prompt`.
+- **Hot-reload demo.** `examples/demo-hot-reload/weather_server.py` now pins mcp 2.x.
+
+---
+
 ## [0.24.0] — 2026-11-18
 
 Smithery is gone. Smithery, now part of Arcade.dev, shut down its API, hosted servers and API keys on 2026-10-31, so Kitsune drops its Smithery integration (#127). Search and hosted servers keep working through the official registry, MCP Registry, Glama, npm, PyPI, GitHub and direct `https://` URLs. Breaking: the `skill()` tool and the `SMITHERY_API_KEY` setting are removed.

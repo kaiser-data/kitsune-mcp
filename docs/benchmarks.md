@@ -12,7 +12,7 @@ No network access required. All measurements use actual registered tool schemas 
 
 | Section | What |
 |---------|------|
-| **Profile sizes** | Token cost of the lean (9-tool) and forge (22-tool) profiles as registered by FastMCP |
+| **Profile sizes** | Token cost of the lean (9-tool) and forge (22-tool) profiles as registered by MCPServer |
 | **Savings vs always-on** | Kitsune's total cost vs loading N servers permanently |
 | **Per-tool breakdown** | Token cost of each individual tool schema |
 

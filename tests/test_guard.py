@@ -339,7 +339,7 @@ async def test_ask_human_without_request_context_declines():
 )
 async def test_ask_human_elicitation(action, data, expected):
     ctx = SimpleNamespace(elicit=AsyncMock(return_value=SimpleNamespace(action=action, data=data)))
-    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+    with patch("kitsune_mcp.guard.get_context", return_value=ctx):
         got = await guard._ask_human("srv", "tool", {"a": 1}, guard.Verdict("ask", "rule", "r"))
     assert got is expected
 
@@ -350,7 +350,7 @@ async def test_ask_human_skips_clients_without_elicitation():
         elicit=AsyncMock(),
         session=SimpleNamespace(check_client_capability=lambda caps: False),
     )
-    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+    with patch("kitsune_mcp.guard.get_context", return_value=ctx):
         got = await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r"))
     assert got is False
     ctx.elicit.assert_not_awaited()
@@ -365,7 +365,7 @@ async def test_ask_human_asks_clients_that_advertise_elicitation():
         ),
         session=SimpleNamespace(check_client_capability=lambda caps: seen.append(caps) or True),
     )
-    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+    with patch("kitsune_mcp.guard.get_context", return_value=ctx):
         assert await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r")) is True
     assert seen and seen[0].elicitation is not None
 
@@ -379,7 +379,7 @@ async def test_ask_human_unanswered_prompt_is_a_no(monkeypatch):
 
     monkeypatch.setattr(guard, "ASK_TIMEOUT", 0.05)
     ctx = SimpleNamespace(elicit=never)
-    with patch("kitsune_mcp.app.mcp.get_context", return_value=ctx):
+    with patch("kitsune_mcp.guard.get_context", return_value=ctx):
         assert await guard._ask_human("srv", "tool", {}, guard.Verdict("ask", "rule", "r")) is False
 
 
