@@ -4,9 +4,9 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased]
+## [0.25.0] — 2026-11-21
 
-Kitsune now runs on the mcp Python SDK 2.x (#79). mcp 2.x renamed the bundled `FastMCP` server to `MCPServer` and removed `mcp.server.fastmcp`, so a fresh install used to need the `mcp<2` pin. Breaking for anyone who pins mcp 1.x next to Kitsune: 1.x is no longer supported.
+Kitsune now runs on the mcp Python SDK 2.x (#79, #131 — thanks [@Steeve-Crypto](https://github.com/Steeve-Crypto)). mcp 2.x renamed the bundled `FastMCP` server to `MCPServer` and removed `mcp.server.fastmcp`, so a fresh install used to need the `mcp<2` pin. Breaking for anyone who pins mcp 1.x next to Kitsune: 1.x is no longer supported.
 
 ### Changed
 - **mcp 2.x.** Requires `mcp>=2,<3` and `pydantic>=2.12,<2.15` (was `mcp>=1.0.0,<2` and `pydantic>=2.10,<2.15`). The server, the shapeshift registrations and the crafted tools use `MCPServer`, and prompts are unregistered through its public `remove_prompt`.
