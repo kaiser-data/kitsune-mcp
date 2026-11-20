@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kitsune-mcp"
-version = "0.24.0"
+version = "0.25.0"
 description = "Hot-reload for MCP servers: edit your tool, reload(), call it again in the same session. Plus mount community servers from 6 registries mid-session, optionally caged in Docker. No client restarts."
 readme = "README.md"
 license = { text = "MIT" }
