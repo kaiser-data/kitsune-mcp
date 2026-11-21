@@ -164,6 +164,44 @@ class TestInferArgsNLAware:
         result = self._fn()(schema, "what time is it right now")
         assert result == {}, f"unknown location must return {{}}, got {result}"
 
+    def test_optional_timezone_extracted_from_nl_question(self):
+        # mcp-server-time (2025+) made `timezone` optional with the server's
+        # local zone as default. Sending {} silently answered "what time is it
+        # in Tokyo" with Europe/Berlin — a wrong answer, not an error.
+        schema = {
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "timezone": {"type": "string", "default": "Europe/Berlin"},
+                },
+            }
+        }
+        result = self._fn()(schema, "what time is it in Tokyo")
+        assert result == {"timezone": "Asia/Tokyo"}, f"expected Asia/Tokyo, got {result}"
+
+    def test_optional_timezone_left_to_server_default_when_unknown(self):
+        schema = {
+            "inputSchema": {
+                "type": "object",
+                "properties": {"timezone": {"type": "string", "default": "Europe/Berlin"}},
+            }
+        }
+        assert self._fn()(schema, "what time is it right now") == {}
+
+    def test_time_param_not_filled_with_nl_sentence(self):
+        # convert_time(time="HH:MM", ...) must not receive the whole question.
+        schema = {
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "time": {"type": "string"},
+                    "source_timezone": {"type": "string", "default": "UTC"},
+                },
+                "required": ["time"],
+            }
+        }
+        assert self._fn()(schema, "what time is it in Tokyo") == {}
+
     def test_query_always_filled(self):
         schema = {
             "inputSchema": {
