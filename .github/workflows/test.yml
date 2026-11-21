@@ -43,8 +43,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      # Push/PR: install exactly what uv.lock pins (versions + hashes).
+      # `--locked` also fails when uv.lock is stale vs pyproject.toml — Dependabot
+      # pip PRs bump only pyproject (#133/#135 drifted until #137).
+      # Weekly canary: `--upgrade` resolves the newest upstream releases within
+      # pyproject's ranges — deliberately unpinned, that is the canary's job.
       - name: Install dependencies
-        run: pip install -e ".[dev]" pytest-cov
+        run: |
+          uv sync --extra dev --python "${{ matrix.python-version }}" \
+            ${{ github.event_name == 'schedule' && '--upgrade' || '--locked' }}
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Lint with ruff
         # Whole repo, not just the shipped package: examples/ and
@@ -56,13 +66,6 @@ jobs:
 
       - name: Type-check with mypy
         run: mypy
-
-      # Dependabot pip PRs bump pyproject.toml but not uv.lock (#133/#135 left
-      # it stale until #137). Fail the PR instead of drifting silently.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-
-      - name: Check uv.lock is in sync with pyproject.toml
-        run: uv lock --check
 
       # The suite hangs on Linux runners in a way that is unkillable (suspected
       # uninterruptible D-state): SIGKILL, pytest-timeout, job cancellation and even
@@ -185,8 +188,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - name: Install dependencies (pinned by uv.lock)
+        run: |
+          uv sync --extra dev --python 3.12 --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Pre-pull sandbox base images (read from constants — no drift)
         run: |

@@ -11,7 +11,7 @@ All notable changes to this project are documented here.
 - **`time` and `date` params no longer receive the whole question.** `convert_time(time=…)` used to get `"what time is it in Tokyo"` as its `HH:MM` value. They are now treated as structured params, like `timezone`.
 
 ### CI
-- The test workflow runs `uv lock --check`, so a Dependabot bump that leaves `uv.lock` stale fails the PR instead of drifting.
+- **Installs are pinned to `uv.lock`.** The test and docker-e2e jobs install with `uv sync --locked` (exact versions and hashes) instead of unpinned `pip install`, and the release build uses `uv build` instead of `pip install build`. `--locked` also fails a PR whose `uv.lock` is stale, which is what Dependabot pip bumps caused in #133/#135. The weekly canary still resolves the newest upstream releases (`--upgrade`). `pytest-cov` is now part of the `dev` extra.
 
 ---
 
