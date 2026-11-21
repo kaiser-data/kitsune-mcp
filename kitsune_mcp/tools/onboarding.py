@@ -369,6 +369,8 @@ _STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset(
         "target_timezone",
         "from_timezone",
         "to_timezone",
+        "time",
+        "date",
         "language",
         "lang",
         "locale",
@@ -398,6 +400,10 @@ _STRUCTURED_PARAM_NAMES: frozenset[str] = frozenset(
         "encoding",
     }
 )
+
+# Timezone params that stand alone (not one side of a source/target pair), so
+# a single zone extracted from the task can fill them unambiguously.
+_SINGLE_TIMEZONE_PARAMS: frozenset[str] = frozenset({"timezone", "time_zone", "tz"})
 
 # Path-like params that must receive a filesystem path value. If the task
 # doesn't look like a path, these params are never filled — a bare task like
@@ -950,6 +956,16 @@ def _infer_args_from_task(tool_schema: dict, task: str) -> dict:
         ]
         if optional_search:
             return {optional_search[0]: task}
+        # An optional timezone defaults to the *server's* zone, so omitting it
+        # answers "time in Tokyo" with local time — silently wrong. Fill it
+        # when the task names a recognizable place or zone.
+        optional_tz = [
+            p for p in props if p in _SINGLE_TIMEZONE_PARAMS and props[p].get("type") == "string"
+        ]
+        if optional_tz:
+            tz = _extract_timezone_from_nl(task)
+            if tz:
+                return {optional_tz[0]: tz}
         return {}
 
     pname = string_required[0]
@@ -1038,6 +1054,8 @@ _PARAM_EXAMPLES: dict[str, str] = {
     "target_timezone": "America/New_York",
     "from_timezone": "UTC",
     "to_timezone": "America/New_York",
+    "time": "09:00",
+    "date": "2026-01-31",
     "language": "en",
     "lang": "en",
     "locale": "en-US",

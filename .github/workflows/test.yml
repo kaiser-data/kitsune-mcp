@@ -57,6 +57,13 @@ jobs:
       - name: Type-check with mypy
         run: mypy
 
+      # Dependabot pip PRs bump pyproject.toml but not uv.lock (#133/#135 left
+      # it stale until #137). Fail the PR instead of drifting silently.
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - name: Check uv.lock is in sync with pyproject.toml
+        run: uv lock --check
+
       # The suite hangs on Linux runners in a way that is unkillable (suspected
       # uninterruptible D-state): SIGKILL, pytest-timeout, job cancellation and even
       # STEP-level timeouts could not surface evidence — when the runner's teardown

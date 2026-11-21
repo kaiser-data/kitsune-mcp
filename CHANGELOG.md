@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **`auto()` answered "what time is it in Tokyo" with local time.** `mcp-server-time` now declares `timezone` optional, with the server's own zone as the default, so Kitsune sent `{}` and returned Europe/Berlin time without any error. An optional `timezone`/`time_zone`/`tz` param is now filled when the task names a recognizable place or zone, and otherwise left to the server default.
+- **`time` and `date` params no longer receive the whole question.** `convert_time(time=…)` used to get `"what time is it in Tokyo"` as its `HH:MM` value. They are now treated as structured params, like `timezone`.
+
+### CI
+- The test workflow runs `uv lock --check`, so a Dependabot bump that leaves `uv.lock` stale fails the PR instead of drifting.
+
+---
+
 ## [0.25.0] — 2026-11-21
 
 Kitsune now runs on the mcp Python SDK 2.x (#79, #131 — thanks [@Steeve-Crypto](https://github.com/Steeve-Crypto)). mcp 2.x renamed the bundled `FastMCP` server to `MCPServer` and removed `mcp.server.fastmcp`, so a fresh install used to need the `mcp<2` pin. Breaking for anyone who pins mcp 1.x next to Kitsune: 1.x is no longer supported.
