@@ -5,6 +5,7 @@ Findings from the 2026-11-22 external review (Codex): #6, #7, #8, #9.
 
 import httpx
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from kitsune_mcp import oauth, utils
 
@@ -142,8 +143,8 @@ async def test_fetch_blocks_internal_hostname_before_any_fetcher(monkeypatch):
     monkeypatch.setattr(utils, "_resolve_host", _private)
     monkeypatch.setattr(exec_tools, "_try_axonmcp", _axon)
 
-    result = await exec_tools.fetch("https://wiki.corp.example/page")
-    assert result.startswith("Blocked")
+    with pytest.raises(ToolError, match="^Blocked"):
+        await exec_tools.fetch("https://wiki.corp.example/page")
 
 
 async def test_first_url_is_checked_not_only_redirects(respx_mock):

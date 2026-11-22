@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **A blocked or failed `fetch()` is reported as an error.** `Blocked: …` and `Failed to fetch …` came back as ordinary content (`isError: false`), so a client could not tell a refused URL from page text. Both now come back as tool errors (`isError: true`) with the same message. Successful fetches are unchanged.
+
+---
+
 ## [0.25.4] — 2026-11-22
 
 The last findings from both external reviews: DNS rebinding is closed for guarded requests, leftover servers of exited launchers are stopped, OAuth follows RFC 8414 / RFC 9207 best practice, and crafted tools, `.env` values and guard argument checks are fixed. Behaviour changes: OAuth registration and revocation endpoints must use HTTPS; `auth()` writes `.env` values single-quoted and refuses values containing `${`; `shiftback()` (or mounting another server) deletes crafted tools for good. Kitsune now depends on `httpcore` directly (already installed with httpx).

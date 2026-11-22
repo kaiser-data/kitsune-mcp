@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 # ---------------------------------------------------------------------------
 # SSRF via redirect
@@ -77,8 +78,8 @@ class TestSSRFRedirectGuard:
         with patch("kitsune_mcp.tools.exec._try_axonmcp", new=AsyncMock(return_value=None)):
             from kitsune_mcp.tools.exec import fetch
 
-            result = await fetch("https://example.com/")
-        assert "Blocked" in result or "Failed" in result
+            with pytest.raises(ToolError, match="Blocked|Failed"):
+                await fetch("https://example.com/")
 
     @pytest.mark.asyncio
     async def test_post_to_get_downgrade_on_301(self, respx_mock, monkeypatch):

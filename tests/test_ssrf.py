@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 # --- _is_safe_url unit tests ---
 
@@ -51,8 +52,8 @@ async def test_fetch_blocks_loopback(monkeypatch):
     monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
     from kitsune_mcp.tools.exec import fetch
 
-    result = await fetch("http://127.0.0.1/")
-    assert "Blocked" in result
+    with pytest.raises(ToolError, match="Blocked"):  # isError=true for the client
+        await fetch("http://127.0.0.1/")
 
 
 @pytest.mark.asyncio
@@ -60,8 +61,8 @@ async def test_fetch_blocks_metadata_endpoint(monkeypatch):
     monkeypatch.delenv("KITSUNE_ALLOW_LOCAL_FETCH", raising=False)
     from kitsune_mcp.tools.exec import fetch
 
-    result = await fetch("https://169.254.169.254/latest/meta-data/")
-    assert "Blocked" in result
+    with pytest.raises(ToolError, match="Blocked"):
+        await fetch("https://169.254.169.254/latest/meta-data/")
 
 
 @pytest.mark.asyncio
