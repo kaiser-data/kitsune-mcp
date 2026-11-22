@@ -143,3 +143,14 @@ async def test_fetch_blocks_internal_hostname_before_any_fetcher(monkeypatch):
 
     result = await exec_tools.fetch("https://wiki.corp.example/page")
     assert result.startswith("Blocked")
+
+
+async def test_first_url_is_checked_not_only_redirects(respx_mock):
+    # Crafted tools restored from state.json call _ssrf_safe_request directly,
+    # without craft()'s up-front _is_safe_url check.
+    route = respx_mock.get("http://169.254.169.254/latest/meta-data/").mock(
+        return_value=httpx.Response(200)
+    )
+    with pytest.raises(ValueError, match="private"):
+        await utils._ssrf_safe_request("GET", "http://169.254.169.254/latest/meta-data/")
+    assert not route.called

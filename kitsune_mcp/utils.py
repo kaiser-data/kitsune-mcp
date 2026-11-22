@@ -135,7 +135,7 @@ async def _ssrf_safe_request(
 
     allow_local = bool(os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"))
     for _ in range(10):
-        if not allow_local and await _resolves_private(url):
+        if not allow_local and (not _is_safe_url(url) or await _resolves_private(url)):
             raise ValueError(
                 f"Blocked: '{url}' resolves to a private/loopback address. "
                 "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
