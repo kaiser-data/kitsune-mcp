@@ -822,7 +822,7 @@ async def connect(
 
     transport = _state.PersistentStdioTransport(install_cmd, inherit_stderr=inherit_stderr)
     try:
-        entry = await asyncio.wait_for(transport._start_process(), timeout=timeout)
+        entry = await asyncio.wait_for(transport._get_or_start(), timeout=timeout)
     except TimeoutError:
         return f"Timeout starting '{command}' after {timeout}s."
     except RuntimeError as e:

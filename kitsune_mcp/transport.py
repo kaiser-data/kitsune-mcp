@@ -253,6 +253,15 @@ class _PoolEntry:
 
 
 _process_pool: dict[str, _PoolEntry] = {}  # keyed by json(install_cmd, sort_keys=True)
+# One start at a time per pool key, so concurrent first calls share one process
+# instead of each spawning one and orphaning all but the last.
+_start_locks: dict[str, asyncio.Lock] = {}
+
+
+def _drop_pool_entry(key: str, entry: "_PoolEntry") -> None:
+    """Remove *entry* from the pool, unless a newer process already took its key."""
+    if _process_pool.get(key) is entry:
+        _process_pool.pop(key, None)
 
 
 def _kill_all_pool_processes() -> None:
@@ -291,22 +300,30 @@ def _evict_stale_pool_entries(force: bool = False) -> list[str]:
     if not force and (now - _last_evict_at) < EVICT_DEBOUNCE_SECONDS:
         return []
     _last_evict_at = now
+    # A held lock means a call is in flight on that process: never kill it, not
+    # for idleness and not for the cap. The cap may be exceeded until it ends.
     to_remove = [
         k
         for k, e in _process_pool.items()
-        if not e.is_alive() or (now - e.last_used_at) > POOL_MAX_IDLE_SECONDS
+        if not e.is_alive()
+        or (not e.lock.locked() and (now - e.last_used_at) > POOL_MAX_IDLE_SECONDS)
     ]
     for k in to_remove:
         entry = _process_pool.get(k)
         if entry is not None:
             _kill_process_tree(entry.proc)
         _process_pool.pop(k, None)
-    # Hard cap: if still over limit, evict oldest by last_used_at
-    if len(_process_pool) > POOL_MAX_PROCESSES:
-        oldest = sorted(_process_pool.items(), key=lambda kv: kv[1].last_used_at)
-        for k, e in oldest[: len(_process_pool) - POOL_MAX_PROCESSES]:
+    # Hard cap: if still over limit, evict the oldest idle entries by last_used_at
+    excess = len(_process_pool) - POOL_MAX_PROCESSES
+    if excess > 0:
+        idle = sorted(
+            ((k, e) for k, e in _process_pool.items() if not e.lock.locked()),
+            key=lambda kv: kv[1].last_used_at,
+        )
+        for k, e in idle[:excess]:
             _kill_process_tree(e.proc)
             _process_pool.pop(k, None)
+            to_remove.append(k)
     return to_remove
 
 
@@ -1222,22 +1239,28 @@ class PersistentStdioTransport(BaseTransport):
             name=session["connections"].get(self._pool_key, {}).get("name", ""),
         )
 
-        # MCP initialize handshake
-        _stdin(proc).write(self._frame(_initialize_request()))
-        await _stdin(proc).drain()
+        # MCP initialize handshake. Any way out other than success (no reply,
+        # error reply, broken pipe, a caller's wait_for timeout cancelling us)
+        # kills the child, or it would run on with nothing tracking it.
+        try:
+            _stdin(proc).write(self._frame(_initialize_request()))
+            await _stdin(proc).drain()
 
-        init_resp = await StdioTransport._read_response(
-            proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
-        )
-        if init_resp is None:
-            _kill_process_tree(proc)
-            raise RuntimeError(f"No initialize response from {self.install_cmd[0]}")
-        if "error" in init_resp:
-            _kill_process_tree(proc)
-            raise RuntimeError(f"Initialize error: {init_resp['error']}")
+            init_resp = await StdioTransport._read_response(
+                proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
+            )
+            if init_resp is None:
+                raise RuntimeError(f"No initialize response from {self.install_cmd[0]}")
+            if "error" in init_resp:
+                raise RuntimeError(f"Initialize error: {init_resp['error']}")
 
-        _stdin(proc).write(self._frame(_initialized_notification()))
-        await _stdin(proc).drain()
+            _stdin(proc).write(self._frame(_initialized_notification()))
+            await _stdin(proc).drain()
+        except BaseException as e:
+            _kill_process_tree(proc)
+            if isinstance(e, (BrokenPipeError, ConnectionResetError)):
+                raise RuntimeError(f"{self.install_cmd[0]} exited during the MCP handshake") from e
+            raise
 
         entry.dotenv_revision = _creds._dotenv_revision
         _process_pool[self._pool_key] = entry
@@ -1250,15 +1273,18 @@ class PersistentStdioTransport(BaseTransport):
         change — so new credentials are always picked up on the next call.
         """
         _evict_stale_pool_entries()
-        entry = _process_pool.get(self._pool_key)
-        if entry is not None and entry.is_alive():
-            if entry.dotenv_revision != _creds._dotenv_revision:
+        lock = _start_locks.setdefault(self._pool_key, asyncio.Lock())
+        async with lock:
+            entry = _process_pool.get(self._pool_key)
+            if entry is not None and entry.is_alive():
+                if entry.dotenv_revision == _creds._dotenv_revision or entry.lock.locked():
+                    # Current, or busy: a call in flight is never killed for a
+                    # .env change. The respawn happens on a later, idle call.
+                    return entry
                 # .env changed since this process was spawned — kill and respawn
                 _kill_process_tree(entry.proc)
                 _process_pool.pop(self._pool_key, None)
-            else:
-                return entry
-        return await self._start_process()
+            return await self._start_process()
 
     async def _send_request(self, method: str, params: dict, timeout: float) -> dict:
         """Send a JSON-RPC request on the persistent process and return the result dict ({} on error)."""
@@ -1309,18 +1335,18 @@ class PersistentStdioTransport(BaseTransport):
         return _as_text(await self.call_tool(tool, args, config))
 
     async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
-        try:
-            entry = await self._get_or_start()
-        except RuntimeError as e:
-            return str(e)
-
         for attempt in range(2):  # one retry on mid-call process death
+            # Each attempt takes the lock of the process it actually talks to.
+            try:
+                entry = await self._get_or_start()
+            except RuntimeError as e:
+                return str(e) if attempt == 0 else f"Reconnect failed: {e}"
             async with entry.lock:
                 if not entry.is_alive():
-                    try:
-                        entry = await self._start_process()
-                    except RuntimeError as e:
-                        return f"Reconnect failed: {e}"
+                    # Died while we waited for the lock; nothing was sent.
+                    _drop_pool_entry(self._pool_key, entry)
+                    continue
+                entry.last_used_at = time.monotonic()  # in use, so not idle
 
                 msg_id = entry.next_id
                 entry.next_id += 1
@@ -1338,14 +1364,10 @@ class PersistentStdioTransport(BaseTransport):
                     )
                     await _stdin(entry.proc).drain()
                 except (BrokenPipeError, ConnectionResetError, OSError):
+                    # Process died mid-write — evict, and retry once
+                    _kill_process_tree(entry.proc)
+                    _drop_pool_entry(self._pool_key, entry)
                     if attempt == 0:
-                        # Process died mid-write — evict and retry
-                        _kill_process_tree(entry.proc)
-                        _process_pool.pop(self._pool_key, None)
-                        try:
-                            entry = await self._start_process()
-                        except RuntimeError as e:
-                            return f"Reconnect failed: {e}"
                         continue
                     return f"Failed to send to {self.install_cmd[0]} after reconnect"
                 except Exception as e:
@@ -1358,7 +1380,7 @@ class PersistentStdioTransport(BaseTransport):
                     if not entry.is_alive():
                         # Died after the request landed: the tool may have run,
                         # so don't send it again. The next call starts fresh.
-                        _process_pool.pop(self._pool_key, None)
+                        _drop_pool_entry(self._pool_key, entry)
                         return _outcome_unknown_message(
                             tool, self.install_cmd[0], "the server process exited before replying"
                         )
@@ -1373,7 +1395,9 @@ class PersistentStdioTransport(BaseTransport):
                 _record_call(tool, args, result)
                 return result
 
-        return f"Failed to call '{tool}' after reconnect"  # unreachable but satisfies type checker
+        return (
+            f"Failed to call '{tool}': the server process kept exiting before the request was sent"
+        )
 
 
 async def _ws_exchange(ws: Any, payload: dict, timeout: float) -> dict:

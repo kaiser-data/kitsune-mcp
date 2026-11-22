@@ -269,9 +269,10 @@ def _clear_process_pool():
     """
     yield
     try:
-        from kitsune_mcp.transport import _process_pool
+        from kitsune_mcp.transport import _process_pool, _start_locks
 
         _process_pool.clear()
+        _start_locks.clear()  # asyncio.Lock binds to one test's event loop
     except Exception:
         pass
 

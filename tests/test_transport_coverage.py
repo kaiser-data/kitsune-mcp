@@ -825,8 +825,7 @@ class TestPersistentExecuteRetries:
         good = _make_entry()
         good.proc.stdout = make_stdout_with_responses([TOOL_OK])
         with (
-            patch.object(t, "_get_or_start", AsyncMock(return_value=dead)),
-            patch.object(t, "_start_process", AsyncMock(return_value=good)),
+            patch.object(t, "_get_or_start", AsyncMock(side_effect=[dead, good])),
         ):
             result = await t.execute("tool", {}, {})
         assert "ok!" in result
@@ -835,8 +834,7 @@ class TestPersistentExecuteRetries:
         t = PersistentStdioTransport(["mycmd"])
         dead = _make_entry(make_mock_process(returncode=1))
         with (
-            patch.object(t, "_get_or_start", AsyncMock(return_value=dead)),
-            patch.object(t, "_start_process", AsyncMock(side_effect=RuntimeError("gone"))),
+            patch.object(t, "_get_or_start", AsyncMock(side_effect=[dead, RuntimeError("gone")])),
         ):
             result = await t.execute("tool", {}, {})
         assert "Reconnect failed: gone" in result
@@ -848,8 +846,7 @@ class TestPersistentExecuteRetries:
         good = _make_entry()
         good.proc.stdout = make_stdout_with_responses([TOOL_OK])
         with (
-            patch.object(t, "_get_or_start", AsyncMock(return_value=flaky)),
-            patch.object(t, "_start_process", AsyncMock(return_value=good)),
+            patch.object(t, "_get_or_start", AsyncMock(side_effect=[flaky, good])),
             patch.object(tp, "_kill_process_tree", MagicMock()),
         ):
             result = await t.execute("tool", {}, {})
@@ -862,8 +859,7 @@ class TestPersistentExecuteRetries:
         flaky2 = _make_entry()
         flaky2.proc.stdin.write = MagicMock(side_effect=BrokenPipeError)
         with (
-            patch.object(t, "_get_or_start", AsyncMock(return_value=flaky1)),
-            patch.object(t, "_start_process", AsyncMock(return_value=flaky2)),
+            patch.object(t, "_get_or_start", AsyncMock(side_effect=[flaky1, flaky2])),
             patch.object(tp, "_kill_process_tree", MagicMock()),
         ):
             result = await t.execute("tool", {}, {})
@@ -874,8 +870,9 @@ class TestPersistentExecuteRetries:
         flaky = _make_entry()
         flaky.proc.stdin.write = MagicMock(side_effect=ConnectionResetError)
         with (
-            patch.object(t, "_get_or_start", AsyncMock(return_value=flaky)),
-            patch.object(t, "_start_process", AsyncMock(side_effect=RuntimeError("spawn fail"))),
+            patch.object(
+                t, "_get_or_start", AsyncMock(side_effect=[flaky, RuntimeError("spawn fail")])
+            ),
             patch.object(tp, "_kill_process_tree", MagicMock()),
         ):
             result = await t.execute("tool", {}, {})
