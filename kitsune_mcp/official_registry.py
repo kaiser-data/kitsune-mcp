@@ -167,23 +167,31 @@ async def _fetch_live_servers() -> list[ServerInfo]:
     }
     _PIP_DIRS = {"git", "time", "fetch"}
 
-    # Add any directories not covered by the seed list
+    # Add any directories not covered by the seed list. These are labelled by
+    # package ecosystem, not "official": a new src/ directory may be an example
+    # or a name not yet published, and its package name is only a guess, so it
+    # gets the community confirm gate and the default cage until it is seeded.
     for dirname in dirs:
         if dirname in _PIP_DIRS:
             pkg_id = f"mcp-server-{dirname}"
             install_cmd = ["uvx", pkg_id]
+            source = "pypi"
         else:
             pkg_suffix = _NPM_NAME_OVERRIDES.get(dirname, dirname)
             pkg_id = f"@modelcontextprotocol/server-{pkg_suffix}"
             install_cmd = ["npx", "-y", pkg_id]
+            source = "npm"
         if pkg_id in seen_ids:
             continue
         servers.append(
             ServerInfo(
                 id=pkg_id,
                 name=dirname.replace("-", " ").title(),
-                description=f"Official MCP server: {dirname}",
-                source="official",
+                description=(
+                    f"Listed in modelcontextprotocol/servers src/{dirname} "
+                    "(not in Kitsune's curated list; package name inferred)"
+                ),
+                source=source,
                 transport="stdio",
                 url="",
                 install_cmd=install_cmd,
