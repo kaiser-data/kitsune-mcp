@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.25.3] — 2026-11-22
+
+The rest of the first external review (stdio pool lifecycle, honest timeout messages, discovery) and the fixes from a second round of reviews (Codex and Grok), including a regression in 0.25.2: `docker:` env values could steer the host Docker client. Behaviour changes: cross-origin redirects carry only a short list of safe headers and never resend a request body; MCP HTTP servers may redirect only within their own origin; a hostname that does not resolve is refused; `connect(inherit_stderr=False)` discards server output; GitHub-installed or package-less Glama launches need `confirm=True`.
 
 ### Fixed
 - **`bench()` stops when a call may have run.** After an outcome-unknown reply, or a timeout that cancelled a call in flight, it sent the next iteration anyway, which repeats the call on a server that is already failing. It now stops there and says so.
