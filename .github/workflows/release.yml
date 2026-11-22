@@ -13,10 +13,13 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write   # create the release + attach assets
+      id-token: write   # Sigstore keyless signing (GitHub OIDC)
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # nothing here pushes via git
 
       - name: Extract changelog entry
         id: changelog
@@ -27,9 +30,11 @@ jobs:
           if [ -z "$NOTES" ]; then
             NOTES="See [CHANGELOG.md](https://github.com/kaiser-data/kitsune-mcp/blob/main/CHANGELOG.md) for details."
           fi
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
@@ -37,3 +42,37 @@ jobs:
           body: ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: false
+
+      # Signed release assets (OpenSSF Scorecard: Signed-Releases). The release
+      # above is created first, so a Sigstore outage (cf. run 44835869527) only
+      # fails these steps — rerun them with `gh run rerun <id> --failed`.
+      #
+      # SOURCE_DATE_EPOCH = tag commit time makes hatchling's build reproducible,
+      # and publish.yml uses the same value, so these files are byte-identical
+      # to the ones on PyPI (same hatchling release assumed — both run on the
+      # same tag push).
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # No Actions cache in a release path: a poisoned cache entry would
+          # flow into published artifacts (zizmor cache-poisoning).
+          enable-cache: false
+
+      - name: Build package (reproducible)
+        run: SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" uv build
+
+      # Writes dist/<file>.sigstore.json next to each artifact. The action's own
+      # release upload only fires on `release` events; this workflow runs on
+      # tag push, so the next step attaches the files.
+      - name: Sign with Sigstore
+        uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
+        with:
+          inputs: ./dist/*.tar.gz ./dist/*.whl
+
+      - name: Attach artifacts + signatures to the release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          body: ${{ steps.changelog.outputs.notes }}
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
+            dist/*.sigstore.json
