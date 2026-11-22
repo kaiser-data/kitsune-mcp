@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased]
+## [0.25.5] — 2026-11-22
+
+Follow-ups from the live check of 0.25.4. Behaviour changes: a blocked or failed `fetch()` comes back as a tool error (`isError: true`); stdio servers that ask Kitsune something mid-call get an answer (`ping` succeeds, anything else is refused), as HTTP servers already did.
 
 ### Fixed
 - **A blocked or failed `fetch()` is reported as an error.** `Blocked: …` and `Failed to fetch …` came back as ordinary content (`isError: false`), so a client could not tell a refused URL from page text. Both now come back as tool errors (`isError: true`) with the same message. Successful fetches are unchanged.
