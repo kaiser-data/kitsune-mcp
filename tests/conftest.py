@@ -342,3 +342,18 @@ def _reset_guard_policy_memory():
     yield
     guard._policy_seen.clear()
     guard._policy_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    """Hostnames resolve to a public address unless a test says otherwise.
+
+    _ssrf_safe_request resolves every hostname before connecting. Without this
+    the suite would do real DNS lookups (slow, and offline it would fail).
+    """
+    from kitsune_mcp import utils
+
+    async def _resolve(host):
+        return ["93.184.215.14"]
+
+    monkeypatch.setattr(utils, "_resolve_host", _resolve)
