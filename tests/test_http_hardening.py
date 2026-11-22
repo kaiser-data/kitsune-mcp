@@ -26,7 +26,8 @@ async def test_cross_origin_redirect_drops_credentials(respx_mock):
     sent = hop.calls.last.request.headers
     assert "authorization" not in sent
     assert "cookie" not in sent
-    assert sent["x-trace"] == "keep"
+    # Unknown headers may hold secrets too (X-API-Key): only a safe list crosses.
+    assert "x-trace" not in sent
 
 
 async def test_same_origin_redirect_keeps_credentials(respx_mock):
