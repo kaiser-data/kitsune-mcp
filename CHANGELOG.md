@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **DNS rebinding is closed for guarded requests.** The private-address check resolved a hostname, then the connection resolved it again, so a resolver could answer public to the check and private to the connection (cloud metadata, internal services). `fetch()`, crafted tools and public OAuth metadata now connect to an address taken from the same lookup that was checked; every answer must be public. TLS still verifies the hostname. Requests through a configured proxy, and `KITSUNE_ALLOW_LOCAL_FETCH=1`, are not pinned.
 - **Crafted tools keep their headers after a restart.** `craft(..., headers=…)` worked until Kitsune restarted; the saved definition had no headers, so the restored tool called its endpoint without `Authorization` and got 401. Headers are now saved with the tool (`state.json` is written `0600`, like `.env`).
 - **A removed crafted tool stays removed.** `shiftback()` unregistered a crafted tool but kept its definition, so it came back on the next start, untracked (a second `shiftback()` said "Already in base form"). Shedding now forgets crafted tools, and restored ones are tracked again.
 - **Saved keys come back exactly as written.** `auth()` wrote `.env` values unquoted, so `abc #def` reloaded as `abc`, surrounding quotes and spaces were stripped. Values are now single-quoted. A value containing `${` is refused, because dotenv would expand it as a variable.
