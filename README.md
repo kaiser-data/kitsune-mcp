@@ -1,43 +1,62 @@
 <!-- mcp-name: io.github.kaiser-data/kitsune-mcp -->
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/assets/kitsune-logo-reveal.gif" alt="The Kitsune MCP logo builds itself: a fox head appears, seven tool tails fan out one by one, and the fox's eyes light up" width="280" />
+  <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/assets/kitsune-logo-reveal.gif" alt="The Kitsune MCP logo builds itself: a fox head appears, seven tool tails fan out one by one, and the fox's eyes light up" width="240" />
   <h1>🦊 Kitsune MCP</h1>
-  <p><strong>Let your agent test the MCP server it's building.</strong><br/>
-  Edit a tool, <code>reload("dev")</code>, call it again. No client restart.</p>
-  <p>⭐ Saved you a restart? <a href="https://github.com/kaiser-data/kitsune-mcp"><strong>Star it on GitHub</strong></a> so others find it.</p>
-  <p>📖 <a href="https://kaiser-data.github.io/kitsune-mcp/"><strong>Documentation</strong></a> · <a href="https://kaiser-data.github.io/kitsune-mcp/hot-reload/">Hot-reload tutorial</a> · <a href="https://kaiser-data.github.io/kitsune-mcp/tools/">Tools reference</a></p>
+  <h3>Your agent tests the MCP server it's building. No client restart.</h3>
+  <p><strong>Edit a tool, <code>reload("dev")</code>, call it again: same session, through the client's real tools.</strong><br/>
+  <strong>Try anyone's MCP server without trusting it: consent gate, Docker cage, version pins.</strong></p>
+  <p>
+    <a href="https://pypi.org/project/kitsune-mcp/"><img src="https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi" alt="PyPI version"/></a>
+    <a href="https://www.npmjs.com/package/kitsune-mcp"><img src="https://img.shields.io/npm/v/kitsune-mcp?color=cb3837&label=npm&logo=npm" alt="npm version"/></a>
+    <a href="https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kaiser-data%2Fkitsune-mcp"><img src="https://img.shields.io/badge/MCP%20Registry-listed-8a2be2" alt="Listed in the MCP Registry"/></a>
+    <a href="https://github.com/kaiser-data/kitsune-mcp/actions"><img src="https://github.com/kaiser-data/kitsune-mcp/actions/workflows/test.yml/badge.svg" alt="CI"/></a>
+    <a href="https://scorecard.dev/viewer/?uri=github.com/kaiser-data/kitsune-mcp"><img src="https://api.scorecard.dev/projects/github.com/kaiser-data/kitsune-mcp/badge" alt="OpenSSF Scorecard"/></a>
+    <a href="#releases-you-can-verify"><img src="https://img.shields.io/badge/releases-Sigstore%20signed-2e7d32" alt="Releases signed with Sigstore"/></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT license"/></a>
+  </p>
+  <p><a href="#try-it-in-a-minute"><strong>Try it in a minute</strong></a> · <a href="https://kaiser-data.github.io/kitsune-mcp/">Documentation</a> · <a href="https://kaiser-data.github.io/kitsune-mcp/hot-reload/">Hot-reload tutorial</a> · <a href="docs/safety.md">Safety model</a></p>
 </div>
-
-> **AI agents installing this server** (Cline, Claude Code, Cursor, …): follow [llms-install.md](llms-install.md). No clone or build needed. Add the `uvx kitsune-mcp` entry to your MCP settings.
-
-[![GitHub stars](https://img.shields.io/github/stars/kaiser-data/kitsune-mcp?style=social)](https://github.com/kaiser-data/kitsune-mcp)
-[![PyPI](https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi)](https://pypi.org/project/kitsune-mcp/)
-[![npm](https://img.shields.io/npm/v/kitsune-mcp?color=cb3837&label=npm&logo=npm)](https://www.npmjs.com/package/kitsune-mcp)
-[![PyPI downloads](https://static.pepy.tech/badge/kitsune-mcp)](https://pepy.tech/projects/kitsune-mcp)
-[![PyPI monthly](https://img.shields.io/pypi/dm/kitsune-mcp?label=pypi%20downloads)](https://pypistats.org/packages/kitsune-mcp)
-[![npm monthly](https://img.shields.io/npm/dm/kitsune-mcp?label=npm%20downloads&color=cb3837)](https://www.npmjs.com/package/kitsune-mcp)
-[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-8a2be2)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kaiser-data%2Fkitsune-mcp)
-[![Python](https://img.shields.io/pypi/pyversions/kitsune-mcp)](https://pypi.org/project/kitsune-mcp/)
-[![CI](https://github.com/kaiser-data/kitsune-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/kaiser-data/kitsune-mcp/actions)
-[![Coverage](https://codecov.io/gh/kaiser-data/kitsune-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/kaiser-data/kitsune-mcp)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kaiser-data/kitsune-mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/kaiser-data/kitsune-mcp)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Glama](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp/badges/score.svg)](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp)
-[![MCP Market](https://img.shields.io/badge/MCP%20Market-listed-ff6b35)](https://mcpmarket.com/server/kitsune)
-[![Listed in Awesome MCP Servers](https://img.shields.io/badge/Awesome%20MCP%20Servers-listed-fc60a8?logo=awesomelists&logoColor=white)](https://github.com/punkpeye/awesome-mcp-servers#aggregators)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/demo-hot-reload.gif" alt="Claude Code connects a weather MCP server through Kitsune, gets 59°C for Berlin, fixes the Fahrenheit conversion, calls reload(&quot;dev&quot;) and gets 15°C in the same session" width="800" />
   <br/><sub>One prompt: Claude finds the bug, fixes it, reloads, checks again. Real recording, 31 s.</sub>
 </p>
 
----
+## Try it in a minute
 
-## Why
+The demo server has one planted bug and fixed readings, so it needs no API key. With [uv](https://github.com/astral-sh/uv) and Claude Code installed:
 
-Your agent edits an MCP tool, but the client still runs the old process. Someone has to restart it before the agent can test the fix.
+```bash
+git clone https://github.com/kaiser-data/kitsune-mcp && cd kitsune-mcp
+claude mcp add -s user kitsune -- uvx kitsune-mcp
+claude
+```
 
-With Kitsune, `connect`, `call` and `reload` are tools. The agent runs the whole loop itself:
+Then paste:
+
+```text
+Use kitsune: connect("uv run examples/demo-hot-reload/weather_server.py", name="dev"),
+call get_weather for Berlin. If it looks wrong, fix the code, reload("dev") and check again.
+```
+
+Berlin comes back at **59°C** (Fahrenheit labelled as Celsius). The agent fixes the conversion, reloads and gets **15°C**, with no restart. Other clients: see [Install](#install).
+
+> **AI agents installing this server** (Cline, Claude Code, Cursor, …): follow [llms-install.md](llms-install.md). No clone or build needed.
+
+## The problem
+
+An MCP client starts each server once and keeps that process. When your agent edits a tool, the client still runs the old code, and the agent can't test its fix until a human restarts or reconnects the client. Trying someone else's server has the opposite problem: it goes into your config and starts as your user, with your files and your API keys.
+
+| Without Kitsune | With Kitsune |
+|---|---|
+| The agent edits a tool. You restart the client and explain the context again. | `reload("dev")` is a tool call. The agent restarts the server and re-tests in the same session. |
+| A throwaway JSON-RPC script checks the wire, not what the client shows. | Tools mount as native client tools with their real schemas. Structured output, images and `isError` pass through unchanged. |
+| A server you want to try starts as your user: every env var, API keys included, and your home directory. | `shapeshift("pkg", confirm=True)` runs community code in a Docker cage: no host filesystem, read-only root, all capabilities dropped. |
+| A server you need once stays in your config, and its tools in every session. | Mount one tool, use it, `shapeshift()` drops it again. |
+
+## The loop
+
+`connect`, `call` and `reload` are tools, so the agent runs the whole cycle itself:
 
 ```python
 connect("uv run my-mcp-server", name="dev")  # start your server
@@ -52,9 +71,14 @@ call("summarize", arguments={"url": "https://example.com"})  # new code, same se
 
 No Docker needed: `connect()` runs your own server as a plain local process, so the loop stays fast.
 
-It also mounts community servers from 6 registries mid-session. If Docker is installed, community packages run caged.
+## Why not just a script?
 
-Try it: [hot-reload tutorial](https://kaiser-data.github.io/kitsune-mcp/hot-reload/) · [`examples/demo-hot-reload/`](examples/demo-hot-reload/)
+In Claude Code an agent can start a server from Bash and speak JSON-RPC to it. That works for a quick check, and Kitsune doesn't replace it. It adds what a script doesn't have:
+
+1. **It tests what your users get.** After `reload`, the tools are real client tools again, with the same schema, structured output and errors a user sees. A script only tests the raw exchange.
+2. **No harness to write.** `connect`, `reload` and `call` replace the script, and the server stays up across many edits.
+3. **Other people's code stays contained.** A script runs the server as you. Kitsune asks for consent, cages community packages in Docker, pins the version you approved, and `inspect` probes a server with a stripped environment: only credentials that belong to that server, none of your other keys.
+4. **Not every client has a shell.** Claude Desktop gives the agent no Bash; there, Kitsune's tools are the only way to run the loop.
 
 ## Install
 
@@ -86,13 +110,13 @@ Also on PyPI (`pip install kitsune-mcp`, then `"command": "kitsune-mcp"`) and np
 
 **Requirements:** Python 3.12+ · [uv](https://github.com/astral-sh/uv) · `node`/`npx` for npm-based servers · Docker optional: not used for hot-reload, only to cage community servers when installed.
 
-## Three things it does
+## What it does
 
 | | Loop | What you get |
 |---|---|---|
-| **MCP REPL** | `connect` → `shapeshift` → edit → `reload` → `call` | Iterate on your own server without restarting the client |
-| **Long-tail reach** | `search` → `shapeshift` → `call` → `shapeshift()` | Use a server once without adding it to your config forever |
-| **Try before you trust** | `confirm=True` + Docker cage + version pins | Run community npm/PyPI code contained, not as your user |
+| **Hot-reload your server** | `connect` → `shapeshift` → edit → `reload` → `call` | The agent tests its own fix without a client restart |
+| **Try before you trust** | `search` → `shapeshift(…, confirm=True)` → `call` | Community npm/PyPI/GitHub code runs caged and pinned, not as your user |
+| **Borrow a server once** | `search` → `shapeshift(…, tools=[…])` → `call` → `shapeshift()` | One tool for one task, without a permanent config entry |
 
 ### Borrow a server you never configured
 
@@ -119,6 +143,8 @@ auth("BRAVE_API_KEY", "sk-...")  # saved to ~/.kitsune/.env, no restart
 shapeshift("brave", tools=["brave_web_search"])
 ```
 
+A hosted server that uses OAuth logs in with `auth("server-id")`: a browser flow with PKCE, tokens stored per server URL.
+
 Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 
 ## When to use it, when not to
@@ -126,13 +152,15 @@ Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 | Use Kitsune when… | Skip it when… |
 |---|---|
 | You're building an MCP server and want an edit/reload loop | You only use 1–3 trusted servers (configure them natively) |
-| A task needs a server that isn't in your config | Every turn hits the same server (keep it always-on) |
-| You want to evaluate community MCP code without installing it for good | You want lower token use: modern clients already defer tool schemas, so most configured servers cost little up front |
+| You want to evaluate community MCP code without installing it for good | Every turn hits the same server (keep it always-on) |
+| A task needs a server that isn't in your config | You want lower token use: modern clients already defer tool schemas, so most configured servers cost little up front |
 | Your MCP config is crowded ([GATEWAY](docs/configuration.md#gateway-consolidate-always-on-servers)) | You need a sub-second first call (cold mount takes ~1–15 s) |
 
 ## How it works
 
-`shapeshift(server_id)` picks a transport (stdio, HTTP+SSE, WebSocket, Docker), connects, reads `tools/list`, and registers each tool as a native tool with the server's real schema. The client receives `notifications/tools/list_changed` and sees first-class tools, with no wrapper in between. `shapeshift()` with no argument removes them and closes the connection.
+`shapeshift(server_id)` picks a transport (stdio, Streamable HTTP, legacy SSE, WebSocket, Docker), connects, reads `tools/list`, and registers each tool as a native tool with the server's real schema. The client receives `notifications/tools/list_changed` and sees first-class tools, with no wrapper in between. `shapeshift()` with no argument removes them and closes the connection.
+
+Mounted tools appear natively in clients that refresh on `tools/list_changed` (tested: Claude Code and Claude Desktop; see [compatibility](docs/compatibility.md)). In any client, `call()` reaches a mounted tool anyway.
 
 <div align="center">
   <picture>
@@ -147,7 +175,7 @@ Full live walkthrough: [`docs/demo-realtime.md`](docs/demo-realtime.md).
 
 ## Tools
 
-Default profile: **9 tools**. Standing cost: **~1,774 tokens/turn** on clients that load every tool schema up front (measured with `python examples/benchmark.py`); **~70 tokens/turn** on Claude Code with Tool Search, where schemas load only on first use (measured on Claude Code 2.1.319, 2026-11-06).
+Default profile: **9 tools**. Standing cost: **~1,770 tokens/turn** on clients that load every tool schema up front (measured with `python examples/benchmark.py`, 2026-11-22); **~70 tokens/turn** on Claude Code with Tool Search, where schemas load only on first use (measured on Claude Code 2.1.319, 2026-11-06).
 
 | Tool | Role |
 |---|---|
@@ -161,16 +189,33 @@ Default profile: **9 tools**. Standing cost: **~1,774 tokens/turn** on clients t
 | `auto(task, server_hint=)` | Search, mount and call in one step |
 | `status()` | Current form, connection pool, session stats |
 
-`KITSUNE_TOOLS=all` (or the `kitsune-forge` command) adds developer tools: `inspect` (schemas, credential check, token cost), `test` (quality score 0–100), `bench` (p50/p95 latency), `compare`, `prewarm`, `craft`, `setup`, and more. See [`docs/tools.md`](docs/tools.md). Companion skills for Claude Code: `kitsune-dev`, `kitsune-improve`.
+`KITSUNE_TOOLS=all` (or the `kitsune-forge` command) adds developer tools: `inspect` (schemas, credential check, token cost), `test` (quality score 0–100 for a registry server), `bench` (p50/p95 latency), `compare`, `prewarm`, `craft` (turn any HTTP endpoint into a tool), `setup`, and more. See [`docs/tools.md`](docs/tools.md). Companion skills for Claude Code: `kitsune-dev`, `kitsune-improve`.
 
-## Safety, in short
+## Safety
 
-- **Community sources need consent.** npm, PyPI and GitHub servers require `confirm=True`. The model can set that flag itself, so real approval belongs in your client's tool-approval UI.
-- **`connect()` runs the command it is given, as your user, with no consent gate and no cage.** It is meant for your own code. Approve `connect` calls in your client before the agent runs them.
-- **Community packages run in a Docker cage by default** when Docker is installed: no host filesystem, `--cap-drop ALL`, read-only root, memory and PID limits. Credentials are passed by name, never in argv.
+Reaching thousands of community servers only works if unknown code can be contained.
+
+### Community code
+
+- **Consent first.** npm, PyPI and GitHub sources need `confirm=True`, including GitHub installs found through other registries. The model can set that flag itself, so real approval belongs in your client's tool-approval UI.
+- **Docker cage by default** when Docker is installed: no host filesystem, read-only root, `--cap-drop ALL`, `no-new-privileges`, memory and PID limits. Credentials are passed by name, never in argv. Network stays on, so packages can install.
 - **Version pins (TOFU).** A later malicious publish doesn't silently replace a version you already ran.
-- **Opt-in action guard.** A `~/.kitsune/policy.json` checks every downstream call against allow/ask/deny rules, path roots and a host allowlist. `ask` goes to you through MCP elicitation.
-- Install commands are validated and launched without a shell. `fetch()` blocks private hosts and re-checks every redirect.
+- **`connect()` is for your own code.** It runs the command it is given, as your user, with no consent gate and no cage. Approve `connect` calls in your client.
+
+### Every call
+
+- **Opt-in action guard.** A `~/.kitsune/policy.json` checks each downstream call against allow/ask/deny rules, path roots and a host allowlist. It reads the arguments (paths in commands, `uri`, hosts), not just tool names. `ask` goes to you through MCP elicitation.
+- **No double runs.** A call that may have run (a timeout after sending, a broken pipe) is never sent again: Kitsune reports "outcome unknown" instead of retrying a payment or a delete.
+
+### Network
+
+- **SSRF blocked.** `fetch()` and crafted tools refuse private, loopback and cloud-metadata addresses. The address that passed the check is the one connected to, so DNS rebinding can't swap one in. Every redirect is re-checked, and credentials or request bodies never follow a redirect to another origin.
+- **OAuth 2.1 done by the book.** PKCE, issuer checks (RFC 8414, RFC 9207), HTTPS on every endpoint that sees a secret, no redirects on token requests.
+
+### Releases you can verify
+
+- Every GitHub release carries Sigstore signatures, and builds are reproducible: the signed files are byte-identical to PyPI's. Check one with `sigstore verify github --repository kaiser-data/kitsune-mcp <file>`.
+- Two rounds of external code review (Codex, Grok) in November 2026; every confirmed finding is fixed in 0.25.2–0.25.5. See the [CHANGELOG](CHANGELOG.md).
 
 Don't run it unattended with production admin, billing or security credentials. The full model, including what it does **not** protect against: [`docs/safety.md`](docs/safety.md).
 
@@ -179,6 +224,9 @@ Don't run it unattended with production admin, billing or security credentials. 
 - [Configuration](docs/configuration.md): env and `.env` lookup, tool profiles, sandbox and trust settings, GATEWAY, mount patterns
 - [Performance](docs/performance.md): cold/warm latency and token cost compared with always-on servers
 - [Transports](docs/transports.md) · [Compatibility](docs/compatibility.md) · [Agent patterns](docs/agent-patterns.md) · [Worked scenarios](examples/scenarios/)
+- Listed in: [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kaiser-data%2Fkitsune-mcp) · [Glama](https://glama.ai/mcp/servers/kaiser-data/kitsune-mcp) · [MCP Market](https://mcpmarket.com/server/kitsune) · [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers#aggregators)
+
+⭐ Saved you a restart? [Star it on GitHub](https://github.com/kaiser-data/kitsune-mcp) so other MCP developers find it.
 
 ## Why "Kitsune"?
 
@@ -190,7 +238,7 @@ In Japanese folklore the kitsune (狐) is known for what it can *become*: it bor
 
 ```bash
 make dev     # install with dev dependencies
-make test    # pytest
+make test    # pytest (runs offline)
 make lint    # ruff
 ```
 
