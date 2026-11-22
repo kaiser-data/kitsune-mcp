@@ -183,7 +183,11 @@ class TestMorphNotifications:
         """No notifications when registry lookup fails."""
         ctx = _make_ctx()
 
-        with patch.object(_registry, "get_server", AsyncMock(return_value=None)):
+        # search() too: a miss falls back to resolving the name by search.
+        with (
+            patch.object(_registry, "get_server", AsyncMock(return_value=None)),
+            patch.object(_registry, "search", AsyncMock(return_value=[])),
+        ):
             result = await shapeshift("nonexistent/server", ctx)
 
         assert "not found" in result.lower()
