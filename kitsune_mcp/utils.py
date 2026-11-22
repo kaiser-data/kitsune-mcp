@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
+import httpcore
 import httpx
 
 from kitsune_mcp.constants import MAX_RESPONSE_TOKENS
@@ -36,6 +37,98 @@ def _get_http_client() -> httpx.AsyncClient:
     if _http_client is None or _http_client.is_closed:
         _http_client = httpx.AsyncClient(follow_redirects=True)
     return _http_client
+
+
+class _PublicOnlyBackend(httpcore.AsyncNetworkBackend):
+    """httpcore network backend that connects only to public addresses it checked itself.
+
+    The SSRF pre-check resolves a hostname, and the connection used to resolve
+    it again: a rebinding resolver could answer public the first time and
+    private the second. Here the connect-time lookup *is* the check: every
+    address must be public, and the socket goes to one of those addresses.
+    TLS still verifies the hostname, because httpcore passes the request's
+    host as the SNI/verification name separately from the connect address.
+
+    Not pinned: KITSUNE_ALLOW_LOCAL_FETCH=1 (local targets allowed on purpose)
+    and the configured proxy host (the proxy resolves the target, so the
+    pre-check is all that applies there).
+    """
+
+    def __init__(self, inner: httpcore.AsyncNetworkBackend) -> None:
+        self._inner = inner
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ) -> httpcore.AsyncNetworkStream:
+        if not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH") and host.lower() not in _proxy_hosts():
+            host = await _checked_public_address(host)
+        return await self._inner.connect_tcp(
+            host, port, timeout=timeout, local_address=local_address, socket_options=socket_options
+        )
+
+    async def connect_unix_socket(self, path: str, timeout=None, socket_options=None):
+        raise httpcore.ConnectError("unix sockets are not reachable through guarded requests")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+def _proxy_hosts() -> set[str]:
+    hosts = set()
+    for var in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "all_proxy"):
+        value = os.environ.get(var)
+        if value:
+            host = urlparse(value if "://" in value else f"http://{value}").hostname
+            if host:
+                hosts.add(host.lower())
+    return hosts
+
+
+async def _checked_public_address(host: str) -> str:
+    """One public address for host (resolving it once), or httpcore.ConnectError."""
+    bare = host.strip("[]").rstrip(".")
+    literal = _literal_ip(bare)
+    if literal is not None:
+        if _is_public_ip(literal):
+            return str(literal)
+        raise httpcore.ConnectError(f"{host} is not a public address")
+    ips = await _resolve_host(bare)
+    if not ips:
+        raise httpcore.ConnectError(f"{host} does not resolve (not a public address)")
+    for ip in ips:
+        try:
+            addr = ipaddress.ip_address(ip.split("%", 1)[0])
+        except ValueError:
+            raise httpcore.ConnectError(
+                f"{host} resolved to {ip!r}: not a public address"
+            ) from None
+        if not _is_public_ip(addr):
+            raise httpcore.ConnectError(f"{host} resolved to {ip}: not a public address")
+    return ips[0]
+
+
+_guarded_client: httpx.AsyncClient | None = None
+
+
+def _get_guarded_client() -> httpx.AsyncClient:
+    """Shared client for SSRF-guarded requests: connections pinned to checked addresses.
+
+    Redirects are off; callers walk them hop by hop (_ssrf_safe_request, OAuth
+    metadata). Everything else (registries, MCP servers, which may be local on
+    purpose) keeps using _get_http_client().
+    """
+    global _guarded_client
+    if _guarded_client is None or _guarded_client.is_closed:
+        transport = httpx.AsyncHTTPTransport()
+        pool = transport._pool
+        pool._network_backend = _PublicOnlyBackend(pool._network_backend)
+        _guarded_client = httpx.AsyncClient(transport=transport, follow_redirects=False)
+    return _guarded_client
 
 
 def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -149,7 +242,7 @@ async def _ssrf_safe_request(
     unless KITSUNE_ALLOW_LOCAL_FETCH=1 is set. Handles POST→GET method
     downgrade on 301/302/303 per RFC 9110.
     """
-    client = _get_http_client()
+    client = _get_guarded_client()
     kw: dict = {"headers": headers or {}, "timeout": timeout}
     if params is not None:
         kw["params"] = params

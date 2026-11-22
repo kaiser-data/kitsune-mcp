@@ -656,6 +656,7 @@ name = "kitsune-mcp"
 version = "0.25.3"
 source = { editable = "." }
 dependencies = [
+    { name = "httpcore" },
     { name = "httpx" },
     { name = "mcp" },
     { name = "pydantic" },
@@ -685,6 +686,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpcore", specifier = ">=1.0,<2" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=2.4,<2.5" },

@@ -43,7 +43,12 @@ from pathlib import Path
 
 from kitsune_mcp.constants import TIMEOUT_FETCH_URL
 from kitsune_mcp.paths import kitsune_home
-from kitsune_mcp.utils import _get_http_client, _is_safe_url, _resolves_private
+from kitsune_mcp.utils import (
+    _get_guarded_client,
+    _get_http_client,
+    _is_safe_url,
+    _resolves_private,
+)
 
 _KITSUNE_DIR = kitsune_home() / "oauth"
 _CLIENT_NAME = "Kitsune MCP"
@@ -198,7 +203,11 @@ async def _get_json(url: str) -> dict | None:
     first = url
     try:
         for _ in range(5):
-            r = await _get_http_client().get(
+            # A URL admitted as public goes through the pinned client, so the
+            # address its check approved is the one connected to. Same-origin
+            # and loopback hops (a local dev server) use the shared client.
+            client = _get_guarded_client() if _is_safe_url(url) else _get_http_client()
+            r = await client.get(
                 url,
                 headers={"Accept": "application/json"},
                 timeout=TIMEOUT_FETCH_URL,

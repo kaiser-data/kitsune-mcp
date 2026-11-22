@@ -103,6 +103,13 @@ class TestOriginAndPaths:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _guarded_client_follows_patched_client(monkeypatch):
+    """These tests stub oauth._get_http_client. Public metadata URLs now use the
+    pinned client; route it through the stub so no test reaches the network."""
+    monkeypatch.setattr(oauth, "_get_guarded_client", lambda: oauth._get_http_client())
+
+
 class TestDiscovery:
     def test_discover_parses_full_metadata(self):
         fake_resp = MagicMock()
