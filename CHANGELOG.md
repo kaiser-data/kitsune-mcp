@@ -8,6 +8,8 @@ All notable changes to this project are documented here.
 - **Concurrent first calls to a stdio server start one process.** Two calls arriving together each spawned the server; the pool kept the last one and the other ran on with nothing tracking or stopping it. Starts are now serialised per server.
 - **A server that fails during startup is stopped.** If the MCP handshake was cut short (a `connect()` timeout, a broken pipe), the child process kept running. It is now killed on every failed or cancelled start.
 - **Pool eviction never kills a call in flight.** A call counted as idle from its *previous* use, so a long call could be killed by another call's idle sweep, and the process cap could pick a busy process. Busy processes are now skipped by both, and a `.env` change respawns the process on its next idle call instead of mid-call.
+- **A timeout after a call was sent no longer says "try again".** An HTTP tool call that timed out was reported as "Timeout connecting… try again" even when the request had reached the server, and a stdio server that never answered got "No response". Either way the tool may have run, so a blind retry could repeat a mutation. Both now return the outcome-unknown warning. A timeout during the handshake, before anything was sent, still suggests a retry.
+- **Only a reply answers a stdio request.** The reader took any message with the request's id, so a request *from* the server (sampling, roots, elicitation) that reused the id was returned as the tool's result. It now requires `result` or `error` and no `method`.
 
 ---
 

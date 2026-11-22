@@ -11,6 +11,7 @@ import sys
 import time
 import urllib.parse
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -367,10 +368,17 @@ async def _read_stdio_response(reader, expected_id: int, timeout: float = 30.0) 
             return None
         try:
             msg = json.loads(line.decode().strip())
-            if msg.get("id") == expected_id:
-                return msg
         except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
+            continue
+        # Only a response answers our request. A server-to-client request
+        # (sampling, roots, elicitation) carries `method` and may reuse our id.
+        if (
+            isinstance(msg, dict)
+            and msg.get("id") == expected_id
+            and "method" not in msg
+            and ("result" in msg or "error" in msg)
+        ):
+            return msg
 
 
 class _SSEParser:
@@ -889,7 +897,13 @@ class HTTPSSETransport(BaseTransport):
         return sess
 
     async def _rpc(
-        self, endpoint: str, bearer: str, config: dict, method: str, params: dict
+        self,
+        endpoint: str,
+        bearer: str,
+        config: dict,
+        method: str,
+        params: dict,
+        on_send: Callable[[], None] | None = None,
     ) -> dict | None:
         """Send one JSON-RPC request over this endpoint's (shared) MCP session.
 
@@ -912,6 +926,8 @@ class HTTPSSETransport(BaseTransport):
         for attempt in range(2):
             sess, fresh = await self._session(key, endpoint, bearer, stale)
             can_retry = attempt == 0 and not fresh
+            if on_send is not None:
+                on_send()  # from here on the server may have received the request
             try:
                 if sess.legacy is not None:
                     r = await sess.legacy.request(request)
@@ -967,19 +983,33 @@ class HTTPSSETransport(BaseTransport):
             return self._connect_failure_message()
         endpoint, token = result
 
+        sent = False
+
+        def _mark_sent() -> None:
+            nonlocal sent
+            sent = True
+
         async def _run(bearer: str):
             msg = await self._rpc(
-                endpoint, bearer, config, "tools/call", {"name": tool, "arguments": args}
+                endpoint,
+                bearer,
+                config,
+                "tools/call",
+                {"name": tool, "arguments": args},
+                on_send=_mark_sent,
             )
             if msg is None:
                 raise RuntimeError("Empty response")
             return msg
 
+        no_reply = f"no reply within {TIMEOUT_HTTP_TOOL:g}s"
         try:
             response = await asyncio.wait_for(_run(token), timeout=TIMEOUT_HTTP_TOOL)
         except CallOutcomeUnknown as e:
             return _outcome_unknown_message(tool, self.qualified_name, str(e))
         except TimeoutError:
+            if sent:
+                return _outcome_unknown_message(tool, self.qualified_name, no_reply)
             return (
                 f"Timeout connecting to {self.qualified_name}. Server may be sleeping — try again."
             )
@@ -991,6 +1021,10 @@ class HTTPSSETransport(BaseTransport):
                 response = await asyncio.wait_for(_run(new_token), timeout=TIMEOUT_HTTP_TOOL)
             except CallOutcomeUnknown as e2:
                 return _outcome_unknown_message(tool, self.qualified_name, str(e2))
+            except TimeoutError:
+                if sent:
+                    return _outcome_unknown_message(tool, self.qualified_name, no_reply)
+                return f"Timeout connecting to {self.qualified_name} after login — try again."
             except oauth.NoAuthMetadata as e2:
                 return f"{self.qualified_name} needs authorization: {e2}"
             except Exception as e2:
@@ -1132,7 +1166,7 @@ class StdioTransport(BaseTransport):
                 proc.stdout, expected_id=2, timeout=TIMEOUT_STDIO_TOOL
             )
             if tool_resp is None:
-                return f"No response from {self.install_cmd[0]} for tool '{tool}'"
+                return _outcome_unknown_message(tool, self.install_cmd[0], "no reply")
             if "error" in tool_resp:
                 err = tool_resp["error"]
                 return f"Tool error: {err.get('message', json.dumps(err))}"
@@ -1384,7 +1418,7 @@ class PersistentStdioTransport(BaseTransport):
                         return _outcome_unknown_message(
                             tool, self.install_cmd[0], "the server process exited before replying"
                         )
-                    return f"No response from {self.install_cmd[0]} for tool '{tool}'"
+                    return _outcome_unknown_message(tool, self.install_cmd[0], "no reply")
                 if "error" in tool_resp:
                     err = tool_resp["error"]
                     return f"Tool error: {err.get('message', json.dumps(err))}"

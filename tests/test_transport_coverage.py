@@ -675,7 +675,7 @@ class TestStdioErrorPaths:
         )
         with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
             result = await StdioTransport(["mycmd"]).execute("tool", {}, {})
-        assert "No response from mycmd" in result
+        assert "outcome unknown" in result and "mycmd" in result  # sent, so it may have run
 
     async def test_tool_error_response(self):
         proc = make_mock_process()
@@ -913,7 +913,8 @@ class TestPersistentExecuteRetries:
         silent.proc.stdout = make_stdout_with_responses([])  # EOF, but stays alive
         with patch.object(t, "_get_or_start", AsyncMock(return_value=silent)):
             result = await t.execute("mytool", {}, {})
-        assert "No response from mycmd for tool 'mytool'" in result
+        # The request was written, so the tool may have run: no blind retry hint.
+        assert "'mytool' on mycmd: outcome unknown" in result
 
     async def test_tool_error_response_reported(self):
         t = PersistentStdioTransport(["mycmd"])
