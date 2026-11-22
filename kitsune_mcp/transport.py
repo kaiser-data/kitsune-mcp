@@ -377,7 +377,7 @@ async def _ping(entry: "_PoolEntry", timeout: float = 2.0) -> bool:
             )
             await _stdin(entry.proc).drain()
             resp = await asyncio.wait_for(
-                _read_stdio_response(entry.proc.stdout, msg_id),
+                _read_stdio_response(entry.proc.stdout, msg_id, writer=_stdin(entry.proc)),
                 timeout=timeout,
             )
             return resp is not None and "error" not in resp
@@ -385,8 +385,16 @@ async def _ping(entry: "_PoolEntry", timeout: float = 2.0) -> bool:
         return False
 
 
-async def _read_stdio_response(reader, expected_id: int, timeout: float = 30.0) -> dict | None:
-    """Standalone version of StdioTransport._read_response for use before class definition."""
+async def _read_stdio_response(
+    reader, expected_id: int, timeout: float = 30.0, writer=None
+) -> dict | None:
+    """Read stdout lines until the response to *expected_id*; None on timeout/EOF.
+
+    Notifications are skipped. A request from the server (sampling, roots,
+    ping…) is answered on *writer* when one is given — ping succeeds, the rest
+    get "method not found" — so a server that waits for the answer before
+    sending our result does not hang the call. Same policy as HTTP servers.
+    """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     while True:
@@ -405,13 +413,18 @@ async def _read_stdio_response(reader, expected_id: int, timeout: float = 30.0) 
             continue
         # Only a response answers our request. A server-to-client request
         # (sampling, roots, elicitation) carries `method` and may reuse our id.
+        if not isinstance(msg, dict):
+            continue
         if (
-            isinstance(msg, dict)
-            and msg.get("id") == expected_id
+            msg.get("id") == expected_id
             and "method" not in msg
             and ("result" in msg or "error" in msg)
         ):
             return msg
+        if writer is not None and "method" in msg and "id" in msg:
+            with contextlib.suppress(Exception):  # a dying pipe must not mask our own reply
+                writer.write(json.dumps(_server_request_reply(msg)).encode() + b"\n")
+                await writer.drain()
 
 
 class _SSEParser:
@@ -1207,9 +1220,11 @@ class StdioTransport(BaseTransport):
         return json.dumps(msg).encode() + b"\n"
 
     @staticmethod
-    async def _read_response(reader, expected_id: int, timeout: float = 30.0) -> dict | None:
-        """Read lines from stdout, skipping notifications, until we find expected_id."""
-        return await _read_stdio_response(reader, expected_id, timeout)
+    async def _read_response(
+        reader, expected_id: int, timeout: float = 30.0, writer=None
+    ) -> dict | None:
+        """Read lines from stdout until expected_id, answering server requests on writer."""
+        return await _read_stdio_response(reader, expected_id, timeout, writer=writer)
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
         try:
@@ -1236,7 +1251,7 @@ class StdioTransport(BaseTransport):
             await _stdin(proc).drain()
 
             init_resp = await self._read_response(
-                proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
+                proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT, writer=_stdin(proc)
             )
             if init_resp is None:
                 return f"No initialize response from {self.install_cmd[0]}"
@@ -1258,7 +1273,7 @@ class StdioTransport(BaseTransport):
             await _stdin(proc).drain()
 
             tool_resp = await self._read_response(
-                proc.stdout, expected_id=2, timeout=TIMEOUT_STDIO_TOOL
+                proc.stdout, expected_id=2, timeout=TIMEOUT_STDIO_TOOL, writer=_stdin(proc)
             )
             if tool_resp is None:
                 return _outcome_unknown_message(tool, self.install_cmd[0], "no reply")
@@ -1378,7 +1393,7 @@ class PersistentStdioTransport(BaseTransport):
             await _stdin(proc).drain()
 
             init_resp = await StdioTransport._read_response(
-                proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT
+                proc.stdout, expected_id=1, timeout=TIMEOUT_STDIO_INIT, writer=_stdin(proc)
             )
             if init_resp is None:
                 raise RuntimeError(f"No initialize response from {self.install_cmd[0]}")
@@ -1428,7 +1443,7 @@ class PersistentStdioTransport(BaseTransport):
             )
             await _stdin(entry.proc).drain()
             resp = await _read_stdio_response(
-                entry.proc.stdout, expected_id=msg_id, timeout=timeout
+                entry.proc.stdout, expected_id=msg_id, timeout=timeout, writer=_stdin(entry.proc)
             )
             if not resp or "error" in resp:
                 return {}
@@ -1520,7 +1535,10 @@ class PersistentStdioTransport(BaseTransport):
                     )
 
                 tool_resp = await StdioTransport._read_response(
-                    entry.proc.stdout, expected_id=msg_id, timeout=TIMEOUT_STDIO_TOOL
+                    entry.proc.stdout,
+                    expected_id=msg_id,
+                    timeout=TIMEOUT_STDIO_TOOL,
+                    writer=_stdin(entry.proc),
                 )
                 if tool_resp is None:
                     if not entry.is_alive():

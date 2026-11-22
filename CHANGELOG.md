@@ -8,6 +8,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 - **A blocked or failed `fetch()` is reported as an error.** `Blocked: …` and `Failed to fetch …` came back as ordinary content (`isError: false`), so a client could not tell a refused URL from page text. Both now come back as tool errors (`isError: true`) with the same message. Successful fetches are unchanged.
+- **Stdio servers get an answer when they ask Kitsune something.** A server may send a request mid-call (`ping`, sampling, roots). HTTP servers already got a reply; stdio servers did not, so one that waited for it hung until the call timed out. `ping` now succeeds and anything else is refused with "method not found", the same as over HTTP.
 
 ### Tests
 - **The test suite runs offline.** Two tests reached real registries through unmocked fallbacks. They are mocked now, and a conftest guard fails any test that resolves a real hostname unless it is marked `@pytest.mark.network`.
