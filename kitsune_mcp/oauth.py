@@ -68,6 +68,8 @@ class AuthMeta:
     grant_types_supported: list[str]
     token_endpoint_auth_methods_supported: list[str]
     revocation_endpoint: str | None = None
+    # RFC 9207: the server promises an `iss` parameter on every authorization response.
+    iss_required: bool = False
 
 
 @dataclass
@@ -161,16 +163,26 @@ def _meta_from(m: dict) -> AuthMeta | None:
             issuer=m["issuer"],
             authorization_endpoint=m["authorization_endpoint"],
             token_endpoint=m["token_endpoint"],
-            registration_endpoint=m.get("registration_endpoint"),
+            registration_endpoint=_secure_or_none(m.get("registration_endpoint")),
             code_challenge_methods_supported=m.get("code_challenge_methods_supported", []),
             grant_types_supported=m.get("grant_types_supported", []),
             token_endpoint_auth_methods_supported=m.get(
                 "token_endpoint_auth_methods_supported", []
             ),
-            revocation_endpoint=m.get("revocation_endpoint"),
+            revocation_endpoint=_secure_or_none(m.get("revocation_endpoint")),
+            iss_required=m.get("authorization_response_iss_parameter_supported") is True,
         )
     except (KeyError, TypeError):
         return None
+
+
+def _secure_or_none(url) -> str | None:
+    """Keep an optional endpoint only if it uses TLS (or loopback).
+
+    Registration returns a client secret and revocation receives tokens; a
+    plaintext endpoint is treated as absent instead of failing the whole login.
+    """
+    return url if isinstance(url, str) and _secure_endpoint(url) else None
 
 
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
@@ -409,7 +421,7 @@ def _save_client(origin: str, client: ClientInfo) -> None:
 
 async def register_client(meta: AuthMeta, origin: str, redirect_uri: str) -> ClientInfo:
     """POST to the registration endpoint (RFC 7591). Falls back to manual if unsupported."""
-    if not meta.registration_endpoint:
+    if not meta.registration_endpoint or not _secure_endpoint(meta.registration_endpoint):
         raise RuntimeError(
             f"Server {origin} does not support Dynamic Client Registration. "
             "Manual registration is not supported in this version."
@@ -456,6 +468,43 @@ class _CallbackState:
         self.code: str | None = None
         self.state: str | None = None
         self.error: str | None = None
+        self.iss: str | None = None  # RFC 9207 issuer identifier, if the server sent one
+
+
+def _record_callback(state: _CallbackState, query: str) -> None:
+    """Store what the authorization response carried (success or error)."""
+    params = dict(urllib.parse.parse_qsl(query))
+    state.iss = params.get("iss")
+    if "error" in params:
+        state.error = params.get("error_description") or params["error"]
+    else:
+        state.code = params.get("code")
+        state.state = params.get("state")
+
+
+def _check_callback(cb: _CallbackState, expected_state: str, meta: AuthMeta) -> str:
+    """Validate an authorization response; return its code or raise RuntimeError.
+
+    The issuer is checked first, on errors too (RFC 9207 §2.4): a response
+    from another authorization server is a mix-up attack, whatever it says.
+    """
+    if cb.iss is not None and cb.iss != meta.issuer:
+        raise RuntimeError(
+            f"OAuth response came from issuer {cb.iss!r}, expected {meta.issuer!r} "
+            "(possible mix-up attack); refusing it."
+        )
+    if cb.iss is None and meta.iss_required:
+        raise RuntimeError(
+            f"{meta.issuer} promises an 'iss' parameter on its OAuth responses, but "
+            "this one had none; refusing it."
+        )
+    if cb.error:
+        raise RuntimeError(f"OAuth error: {cb.error}")
+    if cb.state != expected_state:
+        raise RuntimeError("OAuth state mismatch (possible CSRF)")
+    if not cb.code:
+        raise RuntimeError("OAuth callback missing authorization code")
+    return cb.code
 
 
 def _make_handler(state: _CallbackState):
@@ -464,13 +513,7 @@ def _make_handler(state: _CallbackState):
             pass
 
         def do_GET(self):  # noqa: N802
-            parsed = urllib.parse.urlparse(self.path)
-            params = dict(urllib.parse.parse_qsl(parsed.query))
-            if "error" in params:
-                state.error = params.get("error_description") or params["error"]
-            else:
-                state.code = params.get("code")
-                state.state = params.get("state")
+            _record_callback(state, urllib.parse.urlparse(self.path).query)
             body = (
                 b"<html><body style='font-family:sans-serif;text-align:center;"
                 b"padding:40px'><h2>You can close this window.</h2>"
@@ -587,14 +630,9 @@ async def authorize(
         got_callback = await asyncio.to_thread(cb_state.event.wait, _OAUTH_LISTENER_TIMEOUT)
         if not got_callback:
             raise TimeoutError("OAuth callback not received within 5 minutes")
-        if cb_state.error:
-            raise RuntimeError(f"OAuth error: {cb_state.error}")
-        if cb_state.state != state_value:
-            raise RuntimeError("OAuth state mismatch (possible CSRF)")
-        if not cb_state.code:
-            raise RuntimeError("OAuth callback missing authorization code")
+        code = _check_callback(cb_state, state_value, meta)
 
-        return await _exchange_code(meta, client, cb_state.code, verifier, resource=resource)
+        return await _exchange_code(meta, client, code, verifier, resource=resource)
     finally:
         server.shutdown()
         server.server_close()
@@ -790,8 +828,8 @@ async def revoke(meta: AuthMeta, client: ClientInfo, bundle: TokenBundle) -> boo
     access_token. Failures are swallowed — local deletion is the real source of
     truth; revocation is belt-and-braces for server-side state.
     """
-    if not meta.revocation_endpoint:
-        return False
+    if not meta.revocation_endpoint or not _secure_endpoint(meta.revocation_endpoint):
+        return False  # never send tokens over plaintext (a target saved before this check)
     tokens_to_try = [
         ("refresh_token", bundle.refresh_token),
         ("access_token", bundle.access_token),
