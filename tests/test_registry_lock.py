@@ -204,7 +204,10 @@ async def test_pool_connection_mount_waits_for_registry_lock():
     session["connections"] = {"k": {"name": "dev", "command": "python srv.py", "tools": []}}
     shed = MagicMock(return_value=[])
     transport = MagicMock()
-    transport.list_tools = AsyncMock(return_value=[])
+    # One tool: with none, the mount now stops before shedding.
+    transport.list_tools = AsyncMock(
+        return_value=[{"name": "t", "description": "", "inputSchema": {}}]
+    )
     # A fresh lock: the module-level one binds to the first event loop that
     # contends for it, and each test gets its own loop.
     lock = asyncio.Lock()
