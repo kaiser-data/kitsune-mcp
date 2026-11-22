@@ -22,6 +22,7 @@ from kitsune_mcp.constants import (
     TRUST_MEDIUM,
 )
 from kitsune_mcp.credentials import _credentials_guide, _credentials_ready
+from kitsune_mcp.guard import guard_call
 from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.session import _save_state, session
 from kitsune_mcp.shapeshift import _json_type_to_py
@@ -775,6 +776,15 @@ async def connect(
 
     if install_cmd is None:
         install_cmd = shlex.split(command)
+
+    # Launching a local command is connect()'s job, so nothing is refused by
+    # default — but a guard policy can restrict it (server "connect").
+    blocked = await guard_call(
+        "connect", "connect", {"command": command, "argv": " ".join(install_cmd)}
+    )
+    if blocked:
+        return blocked
+
     pool_key = json.dumps(install_cmd, sort_keys=True)
     friendly = name or install_cmd[0]
 

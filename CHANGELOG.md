@@ -7,6 +7,12 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **Glama listings that install from GitHub count as community code.** They run `npx github:owner/repo` locally, yet were treated as vetted (no `confirm=True`, no default Docker cage). They are now labelled `github`, so the community confirm gate and default cage apply. Remote Glama entries are unchanged.
+- **`bench()` and `test(level="full")` respect the Docker cage.** Both started servers on the host even when `call()` would have caged them.
+- **`docker:` calls can no longer loosen the cage from a tool call.** `call(config=…)` is agent input; it could add capabilities, make the rootfs writable or pick another network. Only `network: "none"` (tightening) is honoured now; the loosening overrides need `KITSUNE_DOCKER_ALLOW_OVERRIDES=1`.
+- **Docker secrets stay off the command line.** `env` values for `docker:` servers were passed as `-e KEY=value`, visible in `ps` and in `status`. They are now passed by name and read from the process environment; the pool key holds only a digest.
+- **`run()` rejects option-shaped package names.** A package like `--call=…` was handed to `npx` as an option, which runs a shell command.
+- **`connect()` goes through the guard.** Launching local commands is still what it is for, but a policy can now restrict it (server `connect`).
 - **`release()` can remove connections saved from an earlier session.** After a restart, `connect()`ed servers come back from `state.json` as launch records with no process. `release()` searched only running processes, so it answered "No connection named …" and the record stayed in `state.json` for good. It now removes the record and saves the state.
 - **`status` lists those saved connections.** They were invisible before. A new "SAVED CONNECTIONS — not running" section shows each one with `reload('name')` to start it and `release('name')` to forget it.
 
