@@ -390,6 +390,31 @@ def sandboxed_stdio_transport(cmd: list[str], srv, explicit: bool = False):
     return PersistentStdioTransport(cmd), note
 
 
+def _launch_source(srv) -> str:
+    """Trust source for *running* srv locally: what the command fetches, not who listed it.
+
+    A command that installs from GitHub (`npx github:owner/repo`,
+    `uvx --from git+https://github.com/...`) runs whatever the repo's tip is,
+    so it is community code whichever registry listed it — Glama keeps such an
+    entry as "glama" when it is also remote-capable, which is right for the
+    HTTP endpoint and wrong for the local launch.
+    """
+    from urllib.parse import urlparse
+
+    for part in getattr(srv, "install_cmd", None) or []:
+        p = str(part).strip().lower()
+        if p.startswith(("github:", "git+")):
+            return "github"
+        if "://" in p and urlparse(p).hostname in ("github.com", "www.github.com"):
+            return "github"
+    source = getattr(srv, "source", "") or ""
+    if source == "glama" and not getattr(srv, "install_cmd", None):
+        # Glama lists the server but names no package; a local launch falls
+        # back to `npx -y <id>`, i.e. whatever npm has under that name.
+        return "npm"
+    return source
+
+
 def transport_for_exec(server_id: str, srv, explicit_sandbox: bool = False):
     """Return (transport, note) for auto()/call() — sandbox local stdio per policy.
 
@@ -403,7 +428,7 @@ def transport_for_exec(server_id: str, srv, explicit_sandbox: bool = False):
         return _get_transport(server_id, srv), ""
     if srv is not None and getattr(srv, "transport", None) not in (None, "stdio"):
         return _get_transport(server_id, srv), ""
-    source = getattr(srv, "source", "") or ""
+    source = _launch_source(srv)
     cmd = getattr(srv, "install_cmd", None) or _infer_install_cmd(server_id)
     if cmd and cmd[0] in ("npx", "uvx") and _sandbox_default_for_exec(explicit_sandbox, source):
         if shutil.which("docker"):

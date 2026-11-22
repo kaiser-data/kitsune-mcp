@@ -54,7 +54,7 @@ shapeshift("dev")  # mount its tools as native tools
 ```
 
 `inherit_stderr=True` lets the server's own log output through to Kitsune's
-stderr, which is where you'll see tracebacks.
+stderr, which is where you'll see tracebacks. `inherit_stderr=False` discards it.
 
 ### `reload`
 

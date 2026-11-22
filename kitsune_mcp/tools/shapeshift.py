@@ -27,7 +27,12 @@ from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.session import _save_state, session
 from kitsune_mcp.shapeshift import _json_type_to_py
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import BaseTransport, _kill_process_tree, _process_pool
+from kitsune_mcp.transport import (
+    BaseTransport,
+    _drop_pool_entry,
+    _kill_process_tree,
+    _process_pool,
+)
 from kitsune_mcp.utils import _estimate_tokens, _is_safe_url, _ssrf_safe_request
 
 
@@ -340,7 +345,12 @@ async def shapeshift(
                     f"Use search() to find servers, or connect() for local servers."
                 )
 
-    srv_source = srv.source
+    # Running it locally is judged by what the command fetches (a GitHub
+    # install is community code whoever listed it); the hosted endpoint keeps
+    # the listing's source.
+    srv_source = (
+        _state._launch_source(srv) if source == "local" or srv.transport == "stdio" else srv.source
+    )
 
     # Check source constraint first — clearer error than the trust gate when source="official" resolves non-official
     if source == "official" and srv_source not in ("official", "mcpregistry"):
@@ -943,7 +953,9 @@ async def release(name: str) -> str:
     with contextlib.suppress(Exception):
         await asyncio.wait_for(found_entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
 
-    _process_pool.pop(found_key, None)
+    # Remove only the entry released here: a call that saw it die may already
+    # have started a replacement under the same key.
+    _drop_pool_entry(found_key, found_entry)
     session["connections"].pop(found_key, None)
 
     return f"Released: {label} (PID {pid}) | uptime: {uptime}s | calls: {calls}"
@@ -1062,12 +1074,14 @@ async def prewarm(
             f'no cold-install latency. Just shapeshift("{server_id}") directly.'
         )
 
-    # Same trust gate as shapeshift() — prewarm downloads and executes the package.
+    # Same trust gate as shapeshift() — prewarm downloads and executes the
+    # package, so trust follows the launch command, not the listing.
+    launch_source = _state._launch_source(srv)
     trust_level = (os.getenv("KITSUNE_TRUST") or "").lower()
     _trust_override = trust_level in ("community", "all", "low")
-    if srv.source in TRUST_LOW and not confirm and not _trust_override:
+    if launch_source in TRUST_LOW and not confirm and not _trust_override:
         return (
-            f"⚠️  '{server_id}' is from {srv.source} (community — not verified by the official MCP registry).\n"
+            f"⚠️  '{server_id}' is from {launch_source} (community — not verified by the official MCP registry).\n"
             f"prewarm downloads and runs its package locally.\n"
             f"To proceed: prewarm('{server_id}', confirm=True)"
         )
@@ -1084,7 +1098,13 @@ async def prewarm(
     # caller explicitly forced sandbox=True).
     cmd = (srv.install_cmd or ["npx", "-y", server_id]) + (server_args or [])
     uncaged_note = ""
-    if _state._sandbox_for_mount(sandbox, srv.source) and cmd[0] in ("npx", "uvx"):
+    if sandbox is True and cmd[0] not in ("npx", "uvx"):
+        return (
+            f"❌ prewarm sandbox failed: sandbox supports npx/uvx commands only, got '{cmd[0]}'.\n"
+            f'Prewarm unsandboxed (prewarm("{server_id}", confirm=True, sandbox=False)) '
+            f"or package it as a docker: image."
+        )
+    if _state._sandbox_for_mount(sandbox, launch_source) and cmd[0] in ("npx", "uvx"):
         if shutil.which("docker"):
             cmd = _state.sandbox_wrap_cmd(cmd, env_names=_state._sandbox_env_names(srv))
         elif sandbox is True:
