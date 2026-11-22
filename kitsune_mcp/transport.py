@@ -41,6 +41,7 @@ from kitsune_mcp.utils import (
     _estimate_tokens,
     _extract_content,
     _get_http_client,
+    _origin,
 )
 
 # ---------------------------------------------------------------------------
@@ -609,6 +610,7 @@ async def _answer_server_request(
             content=json.dumps(reply),
             headers=_http_headers(bearer, sess),
             timeout=TIMEOUT_HTTP_TOOL,
+            follow_redirects=False,
         )
 
 
@@ -621,39 +623,63 @@ async def _http_post(
     stream is read incrementally and closed as soon as the response matching
     our request id arrives; notifications on it are skipped and server-to-client
     requests are answered. Notifications (no id) only need the status code.
+
+    Redirects are followed only when they keep the method and body (307/308)
+    and stay on the same origin, e.g. `/mcp` → `/mcp/`. Anything else comes back
+    as the 3xx status: the shared client would otherwise replay the JSON-RPC
+    body (tool arguments) to whatever host the Location names.
     """
     request_id = payload.get("id") if "method" in payload else None
     client = _get_http_client()
-    async with client.stream(
-        "POST",
-        endpoint,
-        content=json.dumps(payload),
-        headers=_http_headers(bearer, sess),
-        timeout=TIMEOUT_HTTP_TOOL,
-    ) as r:
-        if request_id is None or not r.is_success:
-            await r.aread()
-            return _HTTPReply(r.status_code, r.headers, None)
+    url = endpoint
+    for _ in range(5):
+        async with client.stream(
+            "POST",
+            url,
+            content=json.dumps(payload),
+            headers=_http_headers(bearer, sess),
+            timeout=TIMEOUT_HTTP_TOOL,
+            follow_redirects=False,
+        ) as r:
+            if r.is_redirect:
+                await r.aread()
+                location = r.headers.get("location")
+                nxt = urllib.parse.urljoin(url, location) if location else ""
+                if nxt and r.status_code in (307, 308) and _origin(nxt) == _origin(url):
+                    url = nxt
+                    continue
+                return _HTTPReply(r.status_code, r.headers, None)
+            return await _read_http_reply(r, url, bearer, sess, request_id)
+    return _HTTPReply(310, httpx.Headers(), None)  # too many redirects
 
-        ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
-        if ctype == "text/event-stream":
-            parser = _SSEParser()
-            async for line in r.aiter_lines():
-                data = parser.feed_line(line)
-                for msg in _json_messages(data) if data is not None else []:
-                    if _is_response(msg, request_id):
-                        return _HTTPReply(r.status_code, r.headers, msg)
-                    if "method" in msg and "id" in msg:
-                        await _answer_server_request(endpoint, bearer, sess, msg)
-            tail = parser.flush()
-            for msg in _json_messages(tail) if tail is not None else []:
+
+async def _read_http_reply(
+    r: httpx.Response, endpoint: str, bearer: str, sess: "_HTTPSession | None", request_id
+) -> "_HTTPReply":
+    """Read one non-redirect reply to _http_post (JSON or an SSE stream)."""
+    if request_id is None or not r.is_success:
+        await r.aread()
+        return _HTTPReply(r.status_code, r.headers, None)
+
+    ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
+    if ctype == "text/event-stream":
+        parser = _SSEParser()
+        async for line in r.aiter_lines():
+            data = parser.feed_line(line)
+            for msg in _json_messages(data) if data is not None else []:
                 if _is_response(msg, request_id):
                     return _HTTPReply(r.status_code, r.headers, msg)
-            return _HTTPReply(r.status_code, r.headers, None)
+                if "method" in msg and "id" in msg:
+                    await _answer_server_request(endpoint, bearer, sess, msg)
+        tail = parser.flush()
+        for msg in _json_messages(tail) if tail is not None else []:
+            if _is_response(msg, request_id):
+                return _HTTPReply(r.status_code, r.headers, msg)
+        return _HTTPReply(r.status_code, r.headers, None)
 
-        # application/json, or a body with a missing or wrong content type.
-        body = (await r.aread()).decode("utf-8", errors="replace")
-        return _HTTPReply(r.status_code, r.headers, _parse_rpc_body(body, request_id))
+    # application/json, or a body with a missing or wrong content type.
+    body = (await r.aread()).decode("utf-8", errors="replace")
+    return _HTTPReply(r.status_code, r.headers, _parse_rpc_body(body, request_id))
 
 
 class _LegacySSEStream:
@@ -709,6 +735,7 @@ class _LegacySSEStream:
                 self.url,
                 headers={**self._headers(), "Accept": "text/event-stream"},
                 timeout=httpx.Timeout(TIMEOUT_HTTP_TOOL, read=None),
+                follow_redirects=False,
             ) as r:
                 if r.status_code in (401, 403):
                     raise AuthRequired(r.status_code, r.headers.get("www-authenticate"))
@@ -765,6 +792,7 @@ class _LegacySSEStream:
                 content=json.dumps(payload),
                 headers=self._headers(),
                 timeout=TIMEOUT_HTTP_TOOL,
+                follow_redirects=False,
             )
             if fut is None or not r.is_success:
                 return _HTTPReply(r.status_code, r.headers, None)
@@ -798,7 +826,10 @@ async def _close_http_session(sess: _HTTPSession) -> None:
         return
     with contextlib.suppress(httpx.HTTPError):
         await _get_http_client().delete(
-            sess.endpoint, headers=_http_headers(sess.bearer, sess), timeout=5.0
+            sess.endpoint,
+            headers=_http_headers(sess.bearer, sess),
+            timeout=5.0,
+            follow_redirects=False,
         )
 
 
