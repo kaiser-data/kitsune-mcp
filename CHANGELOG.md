@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased]
+## [0.25.1] — 2026-11-22
 
 ### Fixed
 - **`auto()` answered "what time is it in Tokyo" with local time.** `mcp-server-time` now declares `timezone` optional, with the server's own zone as the default, so Kitsune sent `{}` and returned Europe/Berlin time without any error. An optional `timezone`/`time_zone`/`tz` param is now filled when the task names a recognizable place or zone, and otherwise left to the server default.

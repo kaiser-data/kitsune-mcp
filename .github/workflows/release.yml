@@ -26,7 +26,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           # Extract the section for this version from CHANGELOG.md
-          NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md | sed '/^[[:space:]]*$/d' | head -40)
+          NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md | sed -e '/^[[:space:]]*$/d' -e '/^---$/d' | head -40)
           if [ -z "$NOTES" ]; then
             NOTES="See [CHANGELOG.md](https://github.com/kaiser-data/kitsune-mcp/blob/main/CHANGELOG.md) for details."
           fi
