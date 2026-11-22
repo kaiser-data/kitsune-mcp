@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Docs
+- **One-click install.** "Add to Cursor", "Install in VS Code" and "VS Code Insiders" buttons in the README and the installation guide. Each opens the client with `uvx kitsune-mcp` preconfigured.
+
+---
+
 ## [0.25.1] — 2026-11-22
 
 ### Fixed
