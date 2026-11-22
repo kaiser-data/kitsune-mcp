@@ -234,6 +234,10 @@ class NpmRegistry(BaseRegistry):
         return result
 
 
+# PEP 508 project name (case-insensitive); rules out "/", "@", ":" and spaces.
+_PYPI_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?")
+
+
 class PyPIRegistry(BaseRegistry):
     """Search PyPI for MCP server packages (installed via uvx)."""
 
@@ -241,12 +245,52 @@ class PyPIRegistry(BaseRegistry):
         self._search_cache: TTLDict = TTLDict(60.0)
         self._server_cache: TTLDict = TTLDict(300.0)
 
+    @staticmethod
+    def _exact_candidates(query: str) -> list[str]:
+        """Likely PyPI names for a query, for lookup through the JSON API."""
+        q = re.sub(r"[\s_]+", "-", query.strip().lower())
+        if not _PYPI_NAME.fullmatch(q) or q in ("mcp", "server", "mcp-server"):
+            return []  # no name to build on
+        if q.startswith("mcp-") or q.endswith("-mcp"):
+            return [q]
+        return [f"mcp-server-{q}", f"{q}-mcp", f"mcp-{q}"]
+
     async def search(self, query: str, limit: int) -> list:
         cache_key = (query, limit)
         cached = self._search_cache.get(cache_key)
         if cached is not None:
             return cached
 
+        # PyPI has no search API, and its HTML search page now serves a bot
+        # challenge to most automated clients. Exact-name lookups through the
+        # JSON API run alongside it, so a known package is still found.
+        html_names, exact = await asyncio.gather(
+            self._search_html(query),
+            asyncio.gather(*(self.get_server(n) for n in self._exact_candidates(query))),
+        )
+        found = {srv.id: srv for srv in exact if srv is not None}
+        results = list(found.values())
+        for name in html_names:
+            if name not in found and len(results) < limit:
+                results.append(
+                    ServerInfo(
+                        id=name,
+                        name=name,
+                        description="",
+                        source="pypi",
+                        transport="stdio",
+                        url="",
+                        install_cmd=["uvx", name],
+                        credentials={},
+                        tools=[],
+                        token_cost=0,
+                    )
+                )
+        results = results[:limit]
+        self._search_cache.set(cache_key, results)
+        return results
+
+    async def _search_html(self, query: str) -> list[str]:
         try:
             r = await _get_http_client().get(
                 "https://pypi.org/search/",
@@ -258,29 +302,13 @@ class PyPIRegistry(BaseRegistry):
             # Extract package slugs from stable /project/<name>/ links rather
             # than CSS class names (package-snippet__name) which change with
             # PyPI redesigns.
-            names = list(dict.fromkeys(re.findall(r'href="/project/([^/"]+)/"', r.text)))
+            return list(dict.fromkeys(re.findall(r'href="/project/([^/"]+)/"', r.text)))
         except Exception:
             return []
 
-        results = [
-            ServerInfo(
-                id=name,
-                name=name,
-                description="",
-                source="pypi",
-                transport="stdio",
-                url="",
-                install_cmd=["uvx", name],
-                credentials={},
-                tools=[],
-                token_cost=0,
-            )
-            for name in names[:limit]
-        ]
-        self._search_cache.set(cache_key, results)
-        return results
-
     async def get_server(self, id: str):
+        if not _PYPI_NAME.fullmatch(id):
+            return None  # scoped npm names, owner/repo ids and URLs are never PyPI packages
         cached = self._server_cache.get(id)
         if cached is not None:
             return cached
@@ -428,6 +456,7 @@ class MultiRegistry(BaseRegistry):
             GitHubRegistry(),
             GlamaRegistry(),
             NpmRegistry(),
+            PyPIRegistry(),
             AbsorbedRegistry(),
         ]
         # Server cache stores `_NOT_FOUND` sentinel for negative results so

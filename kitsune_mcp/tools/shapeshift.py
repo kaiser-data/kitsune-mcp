@@ -276,17 +276,22 @@ async def shapeshift(
             # so quoted paths (e.g. "/path with spaces") are never mangled.
             cmd = conn.get("install_cmd") or shlex.split(conn["command"])
             tool_names = conn.get("tools", [])
-            # Same shed→register sequence as the registry path, same lock.
+            # Same fetch→shed→register sequence as the registry path, same lock.
             async with _registry_lock:
-                _state._do_shed()
-                session["current_form_local_install"] = None
-
                 transport: BaseTransport = _state.PersistentStdioTransport(cmd)
                 raw_tools = await transport.list_tools()  # type: ignore[attr-defined]
                 if not raw_tools and tool_names:
                     raw_tools = [
                         {"name": n, "description": "", "inputSchema": {}} for n in tool_names
                     ]
+                if not raw_tools:
+                    # Nothing to mount: keep the current form instead of shedding it.
+                    return (
+                        f"❌ shapeshift failed: no tools found for '{server_id}'. "
+                        f"Check the process with status(), or reload('{server_id}')."
+                    )
+                _state._do_shed()
+                session["current_form_local_install"] = None
 
                 return await _commit_shapeshift(
                     server_id,
@@ -453,9 +458,10 @@ async def shapeshift(
     # _registry_lock serialises all shed→register sequences. Without it a concurrent
     # shapeshift() could interleave: A sheds, B sheds (no-op), A registers, B registers —
     # leaving both servers' tools mounted while session only tracks B's tools.
+    # The current form is shed only once the new server's tools are known, so a
+    # server that yields none leaves the user where they were.
     async with _registry_lock:
-        _state._do_shed()
-        session["current_form_local_install"] = None  # overwritten below for source="local"
+        local_install: dict | None = None  # recorded for source="local" below
 
         _original_transport = srv.transport  # track before local override for honest labelling
         if source == "local":
@@ -464,10 +470,7 @@ async def shapeshift(
             if not sandboxing:
                 # Sandboxed installs live inside the container's tmpfs —
                 # nothing lands on the host, so there is nothing to uninstall.
-                session["current_form_local_install"] = {
-                    "cmd": srv.install_cmd,
-                    "package": server_id,
-                }
+                local_install = {"cmd": srv.install_cmd, "package": server_id}
 
         pin_note = ""
         if srv.transport == "stdio":
@@ -505,6 +508,9 @@ async def shapeshift(
 
         if not tool_schemas:
             return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."
+
+        _state._do_shed()
+        session["current_form_local_install"] = local_install
 
         # Only show "via local npx/uvx" when a real local process was started.
         _actually_local = source == "local" or _original_transport == "stdio"
