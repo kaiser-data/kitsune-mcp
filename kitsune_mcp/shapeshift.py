@@ -400,6 +400,40 @@ def _proxy_name_for(server_id: str, raw_name: str, base_tool_names: set | None) 
     return raw_name
 
 
+def _registrable_tools(
+    server_id: str,
+    tools: list,
+    transport: "BaseTransport",
+    config: dict,
+    base_tool_names: set | None = None,
+    only: set[str] | None = None,
+) -> list[str]:
+    """Proxy names _register_proxy_tools would register, without registering any.
+
+    Run before the current form is shed, so a mount that would register
+    nothing (a `tools=` filter matching none, every name taken, schemas that
+    cannot be built) fails while the user's current server is still mounted.
+    Names held by the current form count as free: it is shed just before
+    registering.
+    """
+    registry = getattr(getattr(mcp, "_tool_manager", None), "_tools", {})
+    freed = set(session.get("shapeshift_tools", []))
+    names: list[str] = []
+    for tool_schema in tools:
+        raw_name = tool_schema.get("name", "")
+        if not raw_name or (only is not None and raw_name not in only):
+            continue
+        proxy_name = _proxy_name_for(server_id, raw_name, base_tool_names)
+        if proxy_name in names or (proxy_name in registry and proxy_name not in freed):
+            continue
+        try:
+            _make_proxy_tool(server_id, tool_schema, transport, config, proxy_name)
+        except Exception:
+            continue
+        names.append(proxy_name)
+    return names
+
+
 def _register_proxy_tools(
     server_id: str,
     tools: list,
