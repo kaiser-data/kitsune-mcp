@@ -667,16 +667,32 @@ def _make_endpoint_proxy(
         blocked = await guard_call("craft", name, {**kwargs, "url": url})
         if blocked:
             return blocked
+
+        async def _recheck(next_url: str) -> str | None:
+            # A redirect is a new destination: the policy judges it too, or an
+            # allowed host could bounce the request body to any other host.
+            return await guard_call("craft", name, {**kwargs, "url": next_url})
+
         try:
             # _ssrf_safe_request validates each redirect hop to block SSRF via
             # open redirects on otherwise-trusted public hosts.
             if _method == "GET":
                 r = await _ssrf_safe_request(
-                    "GET", url, params=kwargs, headers=headers, timeout=30.0
+                    "GET",
+                    url,
+                    params=kwargs,
+                    headers=headers,
+                    timeout=30.0,
+                    before_redirect=_recheck,
                 )
             else:
                 r = await _ssrf_safe_request(
-                    _method, url, json_body=kwargs, headers=headers, timeout=30.0
+                    _method,
+                    url,
+                    json_body=kwargs,
+                    headers=headers,
+                    timeout=30.0,
+                    before_redirect=_recheck,
                 )
             r.raise_for_status()
             return r.text
