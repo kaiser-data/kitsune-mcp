@@ -1431,7 +1431,6 @@ class PersistentStdioTransport(BaseTransport):
                             }
                         )
                     )
-                    await _stdin(entry.proc).drain()
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     # Process died mid-write — evict, and retry once
                     _kill_process_tree(entry.proc)
@@ -1441,6 +1440,19 @@ class PersistentStdioTransport(BaseTransport):
                     return f"Failed to send to {self.install_cmd[0]} after reconnect"
                 except Exception as e:
                     return f"Failed to send to {self.install_cmd[0]}: {e}"
+                # write() only buffered the request; drain() is where it goes
+                # out. A failure here may come after the server read it, so the
+                # call is never sent again.
+                try:
+                    await _stdin(entry.proc).drain()
+                except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                    _kill_process_tree(entry.proc)
+                    _drop_pool_entry(self._pool_key, entry)
+                    return _outcome_unknown_message(
+                        tool,
+                        self.install_cmd[0],
+                        f"the pipe broke while sending ({type(e).__name__})",
+                    )
 
                 tool_resp = await StdioTransport._read_response(
                     entry.proc.stdout, expected_id=msg_id, timeout=TIMEOUT_STDIO_TOOL
