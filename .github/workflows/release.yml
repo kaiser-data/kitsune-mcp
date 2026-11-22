@@ -51,7 +51,7 @@ jobs:
       # and publish.yml uses the same value, so these files are byte-identical
       # to the ones on PyPI (same hatchling release assumed — both run on the
       # same tag push).
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           # No Actions cache in a release path: a poisoned cache entry would
           # flow into published artifacts (zizmor cache-poisoning).
