@@ -1,7 +1,7 @@
 {
   "name": "kitsune-mcp",
   "version": "0.25.6",
-  "description": "Hot-reload for MCP servers: edit your tool, reload(), call it again in the same session. Plus mount community servers from 6 registries mid-session, optionally caged in Docker. No client restarts.",
+  "description": "One MCP server, every form your agent needs: hot-reload your own MCP server (edit, reload(), call again, no client restart) and test any MCP server from 6 registries in seconds, caged in Docker when available.",
   "mcpName": "io.github.kaiser-data/kitsune-mcp",
   "bin": {
     "kitsune-mcp": "./bin/kitsune-mcp.js"
