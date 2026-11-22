@@ -26,6 +26,7 @@ from kitsune_mcp.probe import _format_setup_guide
 from kitsune_mcp.registry import _relevance_score, _works_now_score
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
+from kitsune_mcp.transport import _as_text
 
 
 @mcp.tool()
@@ -287,24 +288,29 @@ async def auto(
         blocked = await guard_call(server_id, tool_name, arguments)
         if blocked:
             return blocked
-        last_result = await transport.execute(tool_name, arguments, resolved_config)
+        raw = await transport.call_tool(tool_name, arguments, resolved_config)
+        last_result = _as_text(raw)
         _state._track_call(server_id, tool_name)
         attempted.append((server_id, tool_name))
 
-        # Auth-failure detection — surfaces from the inner server's text response
-        # (which arrives via Kitsune's transport.execute as a string body).
-        # We only fall back when the caller didn't pin a server AND there are
-        # candidates left.
-        is_auth_fail = _looks_like_auth_failure(last_result)
-        if not is_auth_fail or not candidates:
+        # Fall back only on a call that *failed* (a Kitsune error string, or a
+        # result the server flagged isError) with an auth-shaped first line.
+        # A successful result is never retried elsewhere, whatever its text
+        # says: the tool ran, and running it on another server would repeat it.
+        failed = isinstance(raw, str) or (isinstance(raw, dict) and bool(raw.get("isError")))
+        if not (failed and _looks_like_auth_failure(last_result)):
             break
 
-        # Try the next candidate
-        nxt = candidates.pop(0)
-        # Skip candidates whose creds we still can't satisfy
-        cfg2, missing2 = _state._resolve_config(nxt.credentials, {})
-        if missing2:
-            continue
+        # Next candidate whose credentials are available; none left → stop.
+        nxt, cfg2 = None, {}
+        while candidates:
+            cand = candidates.pop(0)
+            cfg2, missing2 = _state._resolve_config(cand.credentials, {})
+            if not missing2:
+                nxt = cand
+                break
+        if nxt is None:
+            break
         server_id, server_name, credentials = nxt.id, nxt.name, nxt.credentials
         resolved_config = cfg2
         # If a different server is chosen, the previously picked tool_name may
