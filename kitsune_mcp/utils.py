@@ -9,6 +9,7 @@ import os
 import os as _os
 import re
 import shutil
+import socket
 import subprocess
 from html.parser import HTMLParser
 from urllib.parse import urlparse
@@ -36,23 +37,77 @@ def _get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 
+def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """The address a host string denotes on its own, without DNS.
+
+    Besides dotted quads this catches the legacy IPv4 spellings that resolvers
+    still accept: 127.1, 2130706433, 0x7f.0.0.1 all mean 127.0.0.1.
+    """
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    try:
+        return ipaddress.IPv4Address(socket.inet_aton(host))
+    except (OSError, ValueError):
+        return None
+
+
 def _is_safe_url(url: str) -> bool:
-    """Return True only for public HTTPS URLs — blocks SSRF to private/loopback addresses."""
+    """Return True only for public HTTPS URLs — blocks SSRF to private/loopback addresses.
+
+    Static check only; hostnames are resolved per request in _ssrf_safe_request.
+    """
     try:
         p = urlparse(url)
         if p.scheme != "https":
             return False
-        host = p.hostname or ""
-        if not host or host == "localhost":
+        host = (p.hostname or "").rstrip(".").lower()
+        if not host or host == "localhost" or host.endswith(".localhost"):
             return False
-        try:
-            addr = ipaddress.ip_address(host)
+        addr = _literal_ip(host)
+        if addr is not None:
             return addr.is_global
-        except ValueError:
-            pass  # hostname, not a bare IP — allow it
         return True
     except Exception:
         return False
+
+
+async def _resolve_host(host: str) -> list[str]:
+    """IP addresses a hostname resolves to ([] if it does not resolve)."""
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except (OSError, UnicodeError):
+        return []
+    return [str(info[4][0]) for info in infos]
+
+
+async def _resolves_private(url: str) -> bool:
+    """True if the URL's hostname resolves to any non-public address.
+
+    Closes the gap where internal DNS names pass _is_safe_url. A rebinding
+    resolver can still answer differently at connect time; this check makes
+    the common case (an internal name) fail closed.
+    """
+    host = (urlparse(url).hostname or "").rstrip(".")
+    if not host or _literal_ip(host) is not None:
+        return False  # literal IPs are fully judged by _is_safe_url
+    for ip in await _resolve_host(host):
+        try:
+            if not ipaddress.ip_address(ip.split("%", 1)[0]).is_global:
+                return True
+        except ValueError:
+            return True
+    return False
+
+
+# Sent only to the origin they were meant for; dropped when a redirect leaves it.
+_CREDENTIAL_HEADERS = frozenset({"authorization", "cookie", "proxy-authorization"})
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    p = urlparse(url)
+    return (p.scheme.lower(), (p.hostname or "").lower(), p.port)
 
 
 async def _ssrf_safe_request(
@@ -78,7 +133,13 @@ async def _ssrf_safe_request(
         kw["content"] = json.dumps(json_body).encode()
         kw["headers"] = {**kw["headers"], "Content-Type": "application/json"}
 
+    allow_local = bool(os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"))
     for _ in range(10):
+        if not allow_local and (not _is_safe_url(url) or await _resolves_private(url)):
+            raise ValueError(
+                f"Blocked: '{url}' resolves to a private/loopback address. "
+                "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
+            )
         r = await client.request(method, url, follow_redirects=False, **kw)
         if not r.is_redirect:
             return r
@@ -86,11 +147,16 @@ async def _ssrf_safe_request(
         if next_req is None:
             return r
         next_url = str(next_req.url)
-        if not _is_safe_url(next_url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+        if not _is_safe_url(next_url) and not allow_local:
             raise ValueError(
                 f"Blocked: redirect to '{next_url}' resolves to a private/loopback address. "
                 "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
             )
+        if _origin(next_url) != _origin(url):
+            # Never hand a token or session cookie to a different origin.
+            kw["headers"] = {
+                k: v for k, v in kw["headers"].items() if k.lower() not in _CREDENTIAL_HEADERS
+            }
         url = next_url
         # RFC 9110: 301/302/303 downgrades non-GET to GET
         if r.status_code in (301, 302, 303) and method.upper() in ("POST", "PUT", "PATCH"):
