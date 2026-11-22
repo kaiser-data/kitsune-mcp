@@ -1,6 +1,9 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  # "uv" (not "pip") so each PR updates pyproject.toml AND uv.lock together.
+  # CI installs with `uv sync --locked` (#138), which fails on a stale lock —
+  # the pip ecosystem bumped pyproject only (#133/#135 drifted until #137).
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -8,9 +11,9 @@ updates:
     labels:
       - "dependencies"
     ignore:
-      # mcp 2.x removed mcp.server.fastmcp; lift together with the migration (#79).
+      # Next breaking SDK major; migrate deliberately like 1.x → 2.x (#79, #131).
       - dependency-name: "mcp"
-        versions: [">=2"]
+        versions: [">=3"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
