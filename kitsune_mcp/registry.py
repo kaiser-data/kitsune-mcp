@@ -520,9 +520,23 @@ class MultiRegistry(BaseRegistry):
         # Sort: cached tools first (usable immediately), then by trust tier within each group.
         # An entry with known tools beats one with none.
         # If an official/high-trust source has tools, it wins over everything.
-        candidates.sort(key=lambda r: (0 if r.tools else 1, _SOURCE_TIER.get(r.source, 99)))
+        # The user's own absorbed config always wins, then entries with known
+        # tools, then trust tier. (absorbed and official share tier 0, so the
+        # tier alone let an official listing shadow the user's config.)
+        candidates.sort(
+            key=lambda r: (
+                0 if r.source == "absorbed" else 1,
+                0 if r.tools else 1,
+                _SOURCE_TIER.get(r.source, 99),
+            )
+        )
         result = candidates[0] if candidates else None
-        self._server_cache.set(cache_key, result if result is not None else _NOT_FOUND)
+        if result is not None:
+            self._server_cache.set(cache_key, result)
+        elif not self.last_registry_errors:
+            # Cache "not found" only on a clean miss — a registry that timed
+            # out may be the one that has it.
+            self._server_cache.set(cache_key, _NOT_FOUND)
         return result
 
 

@@ -7,6 +7,11 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`auto()` no longer discards a good answer that mentions 401 or 403.** Any result containing those digits (an issue title, a result count) counted as an auth failure, and `auto()` silently retried on another server and returned *its* answer. Only an error-shaped first line counts now.
+- **A registry outage is no longer cached as "server not found".** If a registry timed out, the miss was cached for five minutes even though that registry might have had the server. Misses are cached only when every registry answered.
+- **Your absorbed config wins over an official listing with the same id.** Both had the same rank, so the official entry (without your args and env) was used.
+- **`state.json` is written atomically, mode 0600.** A crash mid-write left a truncated file, which the next start treated as empty and dropped all crafted tools and saved connections.
+- **`setup(name=…)` uses the command `connect()` actually ran.** It re-split the command string, which broke quoted paths.
 - **Credentials no longer follow a redirect to another site.** When a request with an `Authorization` header (or cookies) was redirected to a different origin, the header went along. It is now dropped on any cross-origin hop.
 - **Internal hostnames are blocked like private IPs.** The private-address check only judged literal IPs (and the request helper skipped it for the first URL, which restored crafted tools relied on), so internal DNS names, `localhost.`, `*.localhost` and shorthand loopback forms (`127.1`, `2130706433`, `0x7f.0.0.1`) passed. Hostnames are now resolved before each request (including `fetch()`'s external fetcher path) and refused if they point at a non-public address. `KITSUNE_ALLOW_LOCAL_FETCH=1` still opts out.
 - **OAuth discovery follows redirects only to places it may fetch.** Each redirect hop of a metadata request must pass the same check as the first URL.
