@@ -630,6 +630,61 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
     return "\n".join(result_lines)
 
 
+def _make_endpoint_proxy(
+    name: str,
+    url: str,
+    method: str,
+    headers: dict,
+    params: dict,
+    *,
+    description: str = "",
+):
+    """The callable behind a crafted tool — shared by craft() and restore-on-startup.
+
+    Every call goes through the guard as server "craft", with the endpoint URL
+    added to the arguments so a network allowlist applies to it.
+    """
+    py_params = []
+    for pname, pschema in params.items():
+        json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
+        py_params.append(
+            _inspect.Parameter(
+                pname,
+                _inspect.Parameter.KEYWORD_ONLY,
+                default=_inspect.Parameter.empty,
+                annotation=_json_type_to_py(json_type),
+            )
+        )
+    _method = method.upper()
+
+    async def _endpoint_proxy(**kwargs) -> str:
+        blocked = await guard_call("craft", name, {**kwargs, "url": url})
+        if blocked:
+            return blocked
+        try:
+            # _ssrf_safe_request validates each redirect hop to block SSRF via
+            # open redirects on otherwise-trusted public hosts.
+            if _method == "GET":
+                r = await _ssrf_safe_request(
+                    "GET", url, params=kwargs, headers=headers, timeout=30.0
+                )
+            else:
+                r = await _ssrf_safe_request(
+                    _method, url, json_body=kwargs, headers=headers, timeout=30.0
+                )
+            r.raise_for_status()
+            return r.text
+        except httpx.HTTPStatusError as e:
+            return f"HTTP {e.response.status_code} from {url}: {e.response.text[:200]}"
+        except Exception as e:
+            return f"Error calling {url}: {e}"
+
+    _endpoint_proxy.__name__ = name
+    _endpoint_proxy.__doc__ = description[:120]
+    _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)  # type: ignore[attr-defined]
+    return _endpoint_proxy
+
+
 @mcp.tool()
 async def craft(
     ctx: Context,
@@ -651,46 +706,10 @@ async def craft(
             "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
         )
 
-    _url = url
     _method = method.upper()
-    _headers = headers or {}
-
-    # Build Python parameters from JSON Schema properties
-    py_params = []
-    for pname, pschema in (params or {}).items():
-        json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
-        ptype = _json_type_to_py(json_type)
-        py_params.append(
-            _inspect.Parameter(
-                pname,
-                _inspect.Parameter.KEYWORD_ONLY,
-                default=_inspect.Parameter.empty,
-                annotation=ptype,
-            )
-        )
-
-    async def _endpoint_proxy(**kwargs) -> str:
-        try:
-            # _ssrf_safe_request validates each redirect hop to block SSRF via
-            # open redirects on otherwise-trusted public hosts.
-            if _method == "GET":
-                r = await _ssrf_safe_request(
-                    "GET", _url, params=kwargs, headers=_headers, timeout=30.0
-                )
-            else:
-                r = await _ssrf_safe_request(
-                    _method, _url, json_body=kwargs, headers=_headers, timeout=30.0
-                )
-            r.raise_for_status()
-            return r.text
-        except httpx.HTTPStatusError as e:
-            return f"HTTP {e.response.status_code} from {_url}: {e.response.text[:200]}"
-        except Exception as e:
-            return f"Error calling {_url}: {e}"
-
-    _endpoint_proxy.__name__ = name
-    _endpoint_proxy.__doc__ = description[:120]
-    _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)  # type: ignore[attr-defined]
+    _endpoint_proxy = _make_endpoint_proxy(
+        name, url, _method, headers or {}, params or {}, description=description
+    )
 
     # Remove previous registration if re-crafting the same name
     if name in session["crafted_tools"]:
