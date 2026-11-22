@@ -507,8 +507,8 @@ class TestInheritStderr:
         assert captured_kwargs.get("stderr") is None
         _process_pool.pop(pool_key, None)
 
-    async def test_inherit_stderr_false_passes_pipe(self):
-        """inherit_stderr=False → stderr=asyncio.subprocess.PIPE."""
+    async def test_inherit_stderr_false_discards_output(self):
+        """inherit_stderr=False → stderr=DEVNULL (an unread PIPE would fill and block)."""
         mock_proc = _make_mock_process(returncode=None)
         tool_resp = {
             "jsonrpc": "2.0",
@@ -530,7 +530,7 @@ class TestInheritStderr:
             transport = PersistentStdioTransport(["inherit-false-cmd"], inherit_stderr=False)
             await transport.execute("my_tool", {}, {})
 
-        assert captured_kwargs.get("stderr") == asyncio.subprocess.PIPE
+        assert captured_kwargs.get("stderr") == asyncio.subprocess.DEVNULL
         _process_pool.pop(pool_key, None)
 
 

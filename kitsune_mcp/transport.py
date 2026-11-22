@@ -1254,7 +1254,9 @@ class PersistentStdioTransport(BaseTransport):
                 *self.install_cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=None if self.inherit_stderr else asyncio.subprocess.PIPE,
+                # Not inherited → discarded. A PIPE nobody reads fills up and
+                # blocks the server mid-write.
+                stderr=None if self.inherit_stderr else asyncio.subprocess.DEVNULL,
                 limit=STDIO_BUFFER_LIMIT,
                 env=self._spawn_env(),
                 **_SUBPROC_SPAWN_KWARGS,
