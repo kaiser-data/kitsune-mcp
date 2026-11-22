@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ---
 
+## [0.25.6] — 2026-11-22
+
+Documentation release: the PyPI and npm pages get the new README. No code changes.
+
+### Docs
+- **README rewritten around what Kitsune is for.** Your agent tests the MCP server it's building without a client restart, and you can try other people's servers without trusting them. New: a one-minute try-it with the planted-bug demo, a Without/With table, an honest "why not just a script?" section, client support stated as tested (Claude Code, Claude Desktop; `call()` works anywhere), and a safety section covering the 0.25.2–0.25.5 hardening and signed releases.
+
+---
+
 ## [0.25.5] — 2026-11-22
 
 Follow-ups from the live check of 0.25.4. Behaviour changes: a blocked or failed `fetch()` comes back as a tool error (`isError: true`); stdio servers that ask Kitsune something mid-call get an answer (`ping` succeeds, anything else is refused), as HTTP servers already did.
