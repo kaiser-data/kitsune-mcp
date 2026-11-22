@@ -574,6 +574,18 @@ async def status() -> str:
             lines.append(f"    {tool_str}")
         lines.append("")
 
+    # Saved launch records with no process (restored from state.json after a
+    # restart, or the process died). Listed so they can be restarted or removed.
+    saved_only = [
+        (k, c) for k, c in session.get("connections", {}).items() if k not in _process_pool
+    ]
+    if saved_only:
+        lines.append(f"SAVED CONNECTIONS — not running ({len(saved_only)})")
+        for pool_key, conn in saved_only:
+            label = conn.get("name") or pool_key
+            lines.append(f"  {label} | reload('{label}') to start, release('{label}') to forget")
+        lines.append("")
+
     if explored:
         lines.append(f"EXPLORED ({len(explored)})")
         for sid, info in explored.items():

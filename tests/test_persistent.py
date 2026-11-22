@@ -205,6 +205,36 @@ class TestReleaseKillsProcess:
         assert "Released" in result
         assert "voice" in result
 
+    async def test_release_forgets_restored_connection_without_process(self, tmp_path):
+        # A connection row restored from state.json after a restart has no
+        # process behind it. release() used to search only the live pool, so
+        # such a row could never be removed and lingered in state.json forever.
+        _process_pool.clear()
+        pool_key = json.dumps(["npx", "-y", "@modelcontextprotocol/server-filesystem"])
+        session["connections"][pool_key] = {"name": "fs", "command": "filesystem", "tools": []}
+        state_path = tmp_path / "state.json"
+        try:
+            with patch("kitsune_mcp.session._STATE_PATH", state_path):
+                result = await srv_module.release("fs")
+            assert pool_key not in session["connections"]
+            assert "not running" in result
+            assert "fs" in result
+            saved = json.loads(state_path.read_text())
+            assert pool_key not in saved["connections"]
+        finally:
+            session["connections"].pop(pool_key, None)
+
+    async def test_status_lists_saved_connections_that_are_not_running(self):
+        _process_pool.clear()
+        pool_key = json.dumps(["npx", "-y", "some-server"])
+        session["connections"][pool_key] = {"name": "ghost", "command": "some-server"}
+        try:
+            result = await srv_module.status()
+            assert "ghost" in result
+            assert "release('ghost')" in result
+        finally:
+            session["connections"].pop(pool_key, None)
+
     async def test_release_unknown_name_returns_error(self):
         # Clear pool
         _process_pool.clear()
