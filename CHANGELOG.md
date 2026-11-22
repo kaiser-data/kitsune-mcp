@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+---
+
+## [Unreleased]
+
+### Fixed
+- **OAuth logins reject a response from another authorization server.** When the login callback carries an `iss` parameter (RFC 9207), it must match the expected issuer; if the server's metadata promises `iss`, a response without it is refused. This closes the mix-up attack where a second authorization server's code is accepted. The token endpoint may still be on another host than the issuer (as with Google).
+- **OAuth registration and revocation endpoints must use HTTPS.** Revocation sends your tokens and registration returns a client secret; a plaintext endpoint was used as is. Such endpoints are now treated as absent (loopback excepted), also for logins saved before this change.
+
+---
+
 ## [0.25.3] — 2026-11-22
 
 The rest of the first external review (stdio pool lifecycle, honest timeout messages, discovery) and the fixes from a second round of reviews (Codex and Grok), including a regression in 0.25.2: `docker:` env values could steer the host Docker client. Behaviour changes: cross-origin redirects carry only a short list of safe headers and never resend a request body; MCP HTTP servers may redirect only within their own origin; a hostname that does not resolve is refused; `connect(inherit_stderr=False)` discards server output; GitHub-installed or package-less Glama launches need `confirm=True`.
