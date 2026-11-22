@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased]
+## [0.25.4] — 2026-11-22
+
+The last findings from both external reviews: DNS rebinding is closed for guarded requests, leftover servers of exited launchers are stopped, OAuth follows RFC 8414 / RFC 9207 best practice, and crafted tools, `.env` values and guard argument checks are fixed. Behaviour changes: OAuth registration and revocation endpoints must use HTTPS; `auth()` writes `.env` values single-quoted and refuses values containing `${`; `shiftback()` (or mounting another server) deletes crafted tools for good. Kitsune now depends on `httpcore` directly (already installed with httpx).
 
 ### Fixed
 - **A server whose launcher already exited is stopped too.** `npx`/`uvx` wrappers can exit while the real server keeps running in their process group. Cleanup skipped any process whose wrapper had exited, so that server survived `release()`, eviction and shutdown. It is now killed when the group is provably Kitsune's: the leader's pid is free and the group still exists, which POSIX only allows for the original group.
