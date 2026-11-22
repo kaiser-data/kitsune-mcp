@@ -175,7 +175,7 @@ class TestAutoCapabilityFilter:
             return '{"results": ["ok"]}'
 
         transport = MagicMock()
-        transport.execute = fake_execute
+        transport.execute = transport.call_tool = fake_execute
 
         with (
             patch("kitsune_mcp.tools._state._registry") as reg,
@@ -203,7 +203,7 @@ class TestAutoCapabilityFilter:
         git = _srv(id="git", name="Git", description="Git repository operations")
 
         transport = MagicMock()
-        transport.execute = AsyncMock(return_value="should never run")
+        transport.execute = transport.call_tool = AsyncMock(return_value="should never run")
 
         with (
             patch("kitsune_mcp.tools._state._registry") as reg,
@@ -239,7 +239,7 @@ class TestAutoCapabilityFilter:
             ],
         )
         transport = MagicMock()
-        transport.execute = AsyncMock(return_value='{"time": "12:00"}')
+        transport.execute = transport.call_tool = AsyncMock(return_value='{"time": "12:00"}')
 
         with (
             patch("kitsune_mcp.tools._state._registry") as reg,
@@ -274,7 +274,7 @@ class TestAutoCapabilityFilter:
             ],
         )
         transport = MagicMock()
-        transport.execute = AsyncMock(return_value="fetched")
+        transport.execute = transport.call_tool = AsyncMock(return_value="fetched")
 
         with (
             patch("kitsune_mcp.tools._state._registry") as reg,

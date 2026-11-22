@@ -5,6 +5,9 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`auto()` never repeats a call that succeeded.** The auth-failure check read the text of any result, so a successful one whose first line said "Unauthorized" or "Forbidden" (an issue title, a report) made `auto()` run the same request on another server. Only a call that failed (a Kitsune error, or a result the server marked `isError`) can trigger the fallback now.
+- **`auto()` no longer re-runs the first server when the fallback lacks credentials.** Skipping a candidate without its credentials went back to the top of the loop and called the server that had just failed again. It now moves to the next usable candidate, or stops.
+- **A stdio call is not resent when the pipe breaks while sending.** A failure in `drain()` can come after the server has read the request, but it triggered the reconnect-and-retry path. It now returns the outcome-unknown warning. A failure before anything was written still retries.
 - **Concurrent first calls to a stdio server start one process.** Two calls arriving together each spawned the server; the pool kept the last one and the other ran on with nothing tracking or stopping it. Starts are now serialised per server.
 - **A server that fails during startup is stopped.** If the MCP handshake was cut short (a `connect()` timeout, a broken pipe), the child process kept running. It is now killed on every failed or cancelled start.
 - **Pool eviction never kills a call in flight.** A call counted as idle from its *previous* use, so a long call could be killed by another call's idle sweep, and the process cap could pick a busy process. Busy processes are now skipped by both, and a `.env` change respawns the process on its next idle call instead of mid-call.
