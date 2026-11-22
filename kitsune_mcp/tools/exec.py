@@ -25,6 +25,7 @@ from kitsune_mcp.transport import BaseTransport, _process_pool
 from kitsune_mcp.utils import (
     _estimate_tokens,
     _is_safe_url,
+    _resolves_private,
     _ssrf_safe_request,
     _strip_html,
     _truncate,
@@ -159,7 +160,9 @@ async def fetch(url: str, intent: str = "") -> str:
     """Fetch a URL and return compressed content (~500 tokens vs ~25K raw HTML)."""
     raw_estimate = 6000  # typical webpage token count before compression
 
-    if not _is_safe_url(url) and not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH"):
+    if not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH") and (
+        not _is_safe_url(url) or await _resolves_private(url)
+    ):
         return (
             f"Blocked: '{url}' resolves to a private/loopback address. "
             "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
