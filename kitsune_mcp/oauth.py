@@ -173,12 +173,35 @@ def _meta_from(m: dict) -> AuthMeta | None:
         return None
 
 
+_REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
+
+
 async def _get_json(url: str) -> dict | None:
-    """GET a metadata document; None unless it is a 200 with a JSON object."""
+    """GET a metadata document; None unless it is a 200 with a JSON object.
+
+    Redirects are followed by hand: each hop must pass the same _may_fetch
+    test as the first URL, so a public metadata URL cannot bounce discovery
+    to a private address.
+    """
+    first = url
     try:
-        r = await _get_http_client().get(
-            url, headers={"Accept": "application/json"}, timeout=TIMEOUT_FETCH_URL
-        )
+        for _ in range(5):
+            r = await _get_http_client().get(
+                url,
+                headers={"Accept": "application/json"},
+                timeout=TIMEOUT_FETCH_URL,
+                follow_redirects=False,
+            )
+            if r.status_code not in _REDIRECT_CODES:
+                break
+            location = r.headers.get("location")
+            if not location:
+                return None
+            url = urllib.parse.urljoin(url, location)
+            if not _may_fetch(url, first):
+                return None
+        else:
+            return None
         if r.status_code != 200:
             return None
         doc = r.json()
@@ -340,6 +363,13 @@ async def discover_target(server_url: str, challenge: str | None = None) -> Auth
             f"{server_url} asks for authorization but publishes no OAuth metadata "
             f"({_PRM_PATH} or {_WELL_KNOWN_PATH}). If it expects an API key "
             "header instead, Kitsune cannot send one yet."
+        )
+    if not (
+        _secure_endpoint(meta.authorization_endpoint) and _secure_endpoint(meta.token_endpoint)
+    ):
+        raise RuntimeError(
+            f"The OAuth metadata for {server_url} uses an endpoint without a secure "
+            "connection (OAuth 2.1 requires HTTPS except on loopback); refusing to log in."
         )
     return AuthTarget(server_url, _canonical(server_url), meta, params.get("scope"))
 
