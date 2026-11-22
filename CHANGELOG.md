@@ -5,6 +5,7 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`docker:` env can no longer steer the host Docker client.** Since 0.25.2, `config.env` values are passed to `docker run` by name, so they land in the environment of the `docker` process on the host. A tool call could set `PATH` (which binary runs as `docker`), `DOCKER_HOST` (which daemon), `HOME` (its credential helpers) or `LD_PRELOAD`. Protected names (the same list `.env` writes use) and names that are not plain identifiers are now refused before anything starts.
 - **Concurrent first calls to a stdio server start one process.** Two calls arriving together each spawned the server; the pool kept the last one and the other ran on with nothing tracking or stopping it. Starts are now serialised per server.
 - **A server that fails during startup is stopped.** If the MCP handshake was cut short (a `connect()` timeout, a broken pipe), the child process kept running. It is now killed on every failed or cancelled start.
 - **Pool eviction never kills a call in flight.** A call counted as idle from its *previous* use, so a long call could be killed by another call's idle sweep, and the process cap could pick a busy process. Busy processes are now skipped by both, and a `.env` change respawns the process on its next idle call instead of mid-call.
