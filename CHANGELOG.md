@@ -12,6 +12,8 @@ All notable changes to this project are documented here.
 
 ### CI
 - **Installs are pinned to `uv.lock`.** The test and docker-e2e jobs install with `uv sync --locked` (exact versions and hashes) instead of unpinned `pip install`, and the release build uses `uv build` instead of `pip install build`. `--locked` also fails a PR whose `uv.lock` is stale, which is what Dependabot pip bumps caused in #133/#135. The weekly canary still resolves the newest upstream releases (`--upgrade`). `pytest-cov` is now part of the `dev` extra.
+- **Signed releases.** Each GitHub Release now carries the wheel, the sdist and a Sigstore bundle (`*.sigstore.json`) for each. Both release workflows build reproducibly (`SOURCE_DATE_EPOCH` = tag commit time), so the signed files are byte-identical to the ones on PyPI. Verify with `sigstore verify github --repository kaiser-data/kitsune-mcp <file>`.
+- **Release-workflow hardening (zizmor).** The uv cache is off in the release paths (cache poisoning), and checkouts there no longer keep git credentials.
 
 ---
 

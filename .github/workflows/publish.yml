@@ -31,6 +31,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # nothing here pushes via git
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -40,9 +42,15 @@ jobs:
       # uv build replaces `pip install build` + `python -m build` — no unpinned
       # tool install in the release path. Output (dist/*.whl, *.tar.gz) is the same.
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # No Actions cache in a release path: a poisoned cache entry would
+          # flow into published artifacts (zizmor cache-poisoning).
+          enable-cache: false
 
-      - name: Build package
-        run: uv build
+      # Same SOURCE_DATE_EPOCH as release.yml → PyPI files are byte-identical
+      # to the Sigstore-signed GitHub Release assets.
+      - name: Build package (reproducible)
+        run: SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" uv build
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
@@ -64,6 +72,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # nothing here pushes via git
 
       - name: Set up Node 24 (ships with npm 11+ — required for OIDC Trusted Publishing)
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -97,6 +107,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # nothing here pushes via git
 
       # A fresh npm release can take minutes to appear; publishing earlier
       # fails with 400 "version not found".
