@@ -795,6 +795,15 @@ async def connect(
 
     if install_cmd is None:
         install_cmd = shlex.split(command)
+
+    # Launching a local command is connect()'s job, so nothing is refused by
+    # default — but a guard policy can restrict it (server "connect").
+    blocked = await guard_call(
+        "connect", "connect", {"command": command, "argv": " ".join(install_cmd)}
+    )
+    if blocked:
+        return blocked
+
     pool_key = json.dumps(install_cmd, sort_keys=True)
     friendly = name or install_cmd[0]
 

@@ -7,6 +7,12 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **Glama listings that install from GitHub count as community code.** They run `npx github:owner/repo` locally, yet were treated as vetted (no `confirm=True`, no default Docker cage). They are now labelled `github`, so the community confirm gate and default cage apply. Remote Glama entries are unchanged.
+- **`bench()` and `test(level="full")` respect the Docker cage.** Both started servers on the host even when `call()` would have caged them.
+- **`docker:` calls can no longer loosen the cage from a tool call.** `call(config=…)` is agent input; it could add capabilities, make the rootfs writable or pick another network. Only `network: "none"` (tightening) is honoured now; the loosening overrides need `KITSUNE_DOCKER_ALLOW_OVERRIDES=1`.
+- **Docker secrets stay off the command line.** `env` values for `docker:` servers were passed as `-e KEY=value`, visible in `ps` and in `status`. They are now passed by name and read from the process environment; the pool key holds only a digest.
+- **`run()` rejects option-shaped package names.** A package like `--call=…` was handed to `npx` as an option, which runs a shell command.
+- **`connect()` goes through the guard.** Launching local commands is still what it is for, but a policy can now restrict it (server `connect`).
 - **Guard: both ends of a move are checked.** Keys like `source`, `src`, `target`, `from`, `to` count as paths when their value looks like one, so a move *out of* a protected location (including `~/.kitsune/policy.json`) is now caught, not just the destination.
 - **Guard fails closed if its policy disappears.** A policy file that was loaded and then removed used to switch the guard off. Calls are now held for approval until Kitsune restarts; deleting the policy on purpose still turns the guard off after a restart.
 - **Guard reads URL hosts with a URL parser.** A `@` in a query or fragment (`https://evil.example?x=@allowed.example`) could make `network.allow` see the wrong host, and hosts ending in a file extension (`files.zip`) were skipped. Explicit URLs are now parsed properly and always checked.

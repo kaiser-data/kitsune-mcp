@@ -219,7 +219,7 @@ class TestDockerTransport:
 
     def test_build_cmd_defaults(self):
         t = DockerTransport("mcp/my-image:latest")
-        cmd = t._build_cmd({})
+        cmd, _ = t._build_cmd({})
         assert cmd[0] == "docker"
         assert "--rm" in cmd
         assert "-i" in cmd
@@ -227,22 +227,26 @@ class TestDockerTransport:
         assert "512m" in cmd
         assert cmd[-1] == "mcp/my-image:latest"
 
-    def test_build_cmd_custom_memory(self):
+    def test_build_cmd_custom_memory(self, monkeypatch):
+        # Loosening/limit overrides need the user's opt-in (call() config is agent input).
+        monkeypatch.setenv("KITSUNE_DOCKER_ALLOW_OVERRIDES", "1")
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({"memory": "256m"})
+        cmd, _ = t._build_cmd({"memory": "256m"})
         idx = cmd.index("--memory")
         assert cmd[idx + 1] == "256m"
 
     def test_build_cmd_env_vars_injected(self):
+        # Passed by name; the values travel in the process env, never on argv.
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({"env": {"API_KEY": "abc", "DEBUG": "1"}})
+        cmd, env = t._build_cmd({"env": {"API_KEY": "abc", "DEBUG": "1"}})
         assert "-e" in cmd
-        assert "API_KEY=abc" in cmd
-        assert "DEBUG=1" in cmd
+        assert "API_KEY" in cmd and "DEBUG" in cmd
+        assert "abc" not in " ".join(cmd)
+        assert env == {"API_KEY": "abc", "DEBUG": "1"}
 
     def test_build_cmd_label_set(self):
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({})
+        cmd, _ = t._build_cmd({})
         assert "--label" in cmd
         label_idx = cmd.index("--label")
         assert cmd[label_idx + 1] == "kitsune-mcp=1"
@@ -252,7 +256,7 @@ class TestDockerTransport:
     def test_build_cmd_hardened_by_default(self):
         """Untrusted images get a locked-down profile with no extra config."""
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({})
+        cmd, _ = t._build_cmd({})
         joined = " ".join(cmd)
         # No new privileges
         assert "--security-opt" in cmd
@@ -268,32 +272,36 @@ class TestDockerTransport:
 
     def test_build_cmd_pids_limit_default(self):
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({})
+        cmd, _ = t._build_cmd({})
         idx = cmd.index("--pids-limit")
         assert cmd[idx + 1] == "512"
 
-    def test_build_cmd_writable_opt_out(self):
+    def test_build_cmd_writable_opt_out(self, monkeypatch):
+        # Loosening/limit overrides need the user's opt-in (call() config is agent input).
+        monkeypatch.setenv("KITSUNE_DOCKER_ALLOW_OVERRIDES", "1")
         """config['writable']=True drops --read-only for servers that need to write."""
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({"writable": True})
+        cmd, _ = t._build_cmd({"writable": True})
         assert "--read-only" not in cmd
 
     def test_build_cmd_network_none(self):
         """config['network'] pins --network for network-isolated servers."""
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({"network": "none"})
+        cmd, _ = t._build_cmd({"network": "none"})
         idx = cmd.index("--network")
         assert cmd[idx + 1] == "none"
 
     def test_build_cmd_no_network_flag_by_default(self):
         """Default keeps bridge networking (most MCP servers need egress)."""
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({})
+        cmd, _ = t._build_cmd({})
         assert "--network" not in cmd
 
-    def test_build_cmd_custom_pids_limit(self):
+    def test_build_cmd_custom_pids_limit(self, monkeypatch):
+        # Loosening/limit overrides need the user's opt-in (call() config is agent input).
+        monkeypatch.setenv("KITSUNE_DOCKER_ALLOW_OVERRIDES", "1")
         t = DockerTransport("mcp/image")
-        cmd = t._build_cmd({"pids_limit": 128})
+        cmd, _ = t._build_cmd({"pids_limit": 128})
         idx = cmd.index("--pids-limit")
         assert cmd[idx + 1] == "128"
 

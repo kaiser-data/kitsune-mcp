@@ -926,11 +926,16 @@ class GlamaRegistry(_PaginatedListRegistry):
         creds = {k: (v.get("description") or "") for k, v in props.items() if k in required}
         attributes = entry.get("attributes") or []
         transport = "http" if "hosting:remote-capable" in attributes else "stdio"
+        # Glama indexes repos; it does not vet them. A local launch runs the
+        # repo's current tip from GitHub, so trust follows what actually runs:
+        # source "github" puts it under the community confirm gate and the
+        # default Docker cage. Remote (http) entries run nothing locally.
+        runs_github_code = transport == "stdio" and bool(install_cmd)
         return ServerInfo(
             id=server_id,
             name=name,
             description=(entry.get("description") or "").strip()[:MAX_EXPLORE_DESC],
-            source="glama",
+            source="github" if runs_github_code else "glama",
             transport=transport,
             url=entry.get("url", ""),
             install_cmd=install_cmd,

@@ -137,7 +137,12 @@ async def run(
     """Run a tool from npm/pip. package: 'pkg-name' (npx) or 'uvx:pkg-name' (Python)."""
     if arguments is None:
         arguments = {}
-    cmd = ["uvx", package[4:]] if package.startswith("uvx:") else ["npx", "-y", package]
+    spec = package[4:] if package.startswith("uvx:") else package
+    # The spec lands on npx/uvx argv: a leading "-" would be read as an option
+    # (npx --call=... runs a shell command), not a package name.
+    if not spec or spec.startswith("-") or any(c.isspace() for c in spec):
+        return f"Invalid package {package!r}: expected a package name like 'pkg' or 'uvx:pkg'."
+    cmd = ["uvx", spec] if package.startswith("uvx:") else ["npx", "-y", spec]
     blocked = await guard_call(package, tool_name, arguments)
     if blocked:
         return blocked
@@ -267,7 +272,9 @@ async def test(server_id: str, level: str = "basic") -> str:
         call_score = 0
         resolved_config, _ = _state._resolve_config(srv.credentials, {})
         # Build one transport for the full-mode run — reuse pool entry across all tool calls
-        transport_obj: BaseTransport = _state._get_transport(server_id, srv)
+        # Same cage policy as the discovery above — a full test runs the tools.
+        transport_obj: BaseTransport
+        transport_obj, _ = _state.transport_for_exec(server_id, srv)
         for t in tools[:5]:
             tname = t.get("name", "")
             props, required = _state._extract_tool_schema(t)
@@ -323,7 +330,9 @@ async def bench(
     if srv is None:
         return f"Server '{server_id}' not found. Use search() to find servers."
 
-    transport_obj: BaseTransport = _state._get_transport(server_id, srv)
+    # Benchmarking runs the server: same cage policy as call()/auto().
+    transport_obj: BaseTransport
+    transport_obj, _ = _state.transport_for_exec(server_id, srv)
     resolved_config, missing = _state._resolve_config(srv.credentials, {})
     if missing:
         return _credentials_guide(server_id, srv.credentials, resolved_config)
