@@ -513,9 +513,12 @@ class CallOutcomeUnknown(RuntimeError):
     """A tools/call reached the server but no result came back; it may have run."""
 
 
+OUTCOME_UNKNOWN = "outcome unknown"  # marker callers test for: the call may have run
+
+
 def _outcome_unknown_message(tool: str, server: str, reason: str) -> str:
     return (
-        f"⚠️  '{tool}' on {server}: outcome unknown, {reason}.\n"
+        f"⚠️  '{tool}' on {server}: {OUTCOME_UNKNOWN}, {reason}.\n"
         f"  The call may have run. Check its effect before calling it again."
     )
 

@@ -5,6 +5,8 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`bench()` stops when a call may have run.** After an outcome-unknown reply, or a timeout that cancelled a call in flight, it sent the next iteration anyway, which repeats the call on a server that is already failing. It now stops there and says so.
+- **A search with a failed registry is not cached.** A timeout in one registry left the other registries' results cached for a minute, so `auto()` kept ranking from that partial list.
 - **Trust follows what a local launch fetches.** A Glama entry that is remote-capable kept Glama's trust even when it was run locally from `npx github:…` by `prewarm()` or `shapeshift(source="local")`, so it skipped `confirm=True` and the default cage. Any launch that installs from GitHub (`github:`, `git+…`) is now treated as community code, whichever registry listed it. A Glama stdio listing that names no package (launched as `npx -y <id>`) now counts as npm. The hosted endpoint keeps the listing's trust.
 - **`prewarm(sandbox=True)` refuses launchers it cannot cage.** For anything but `npx`/`uvx` it started the command on the host and reported success. It now fails before launching, like `shapeshift()`.
 - **`release()` removes only the process it released.** If a call started a replacement under the same key while `release()` waited for the old process to exit, the replacement was dropped from the pool and kept running untracked.

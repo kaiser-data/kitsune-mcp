@@ -21,7 +21,7 @@ from kitsune_mcp.credentials import _credentials_guide
 from kitsune_mcp.guard import guard_call
 from kitsune_mcp.session import session
 from kitsune_mcp.tools import _state
-from kitsune_mcp.transport import BaseTransport, _process_pool
+from kitsune_mcp.transport import OUTCOME_UNKNOWN, BaseTransport, _process_pool
 from kitsune_mcp.utils import (
     _estimate_tokens,
     _is_safe_url,
@@ -344,6 +344,7 @@ async def bench(
     latencies: list[float] = []
     errors: list[str] = []
     boot_ms: float | None = None  # first call includes process boot — reported separately
+    stopped = False
 
     for i in range(iterations):
         t0 = time.monotonic()
@@ -353,6 +354,12 @@ async def bench(
             )
             elapsed_ms = (time.monotonic() - t0) * 1000
             _r = result.lower()
+            if OUTCOME_UNKNOWN in _r:
+                # This call may have run without a reply: sending the next one
+                # could repeat it on a server that is already struggling.
+                errors.append(f"call {i + 1}: outcome unknown — stopped here")
+                stopped = True
+                break
             if any(
                 kw in _r
                 for kw in ("error", "auth failed", "failed to connect", "timeout connecting")
@@ -363,10 +370,18 @@ async def bench(
             else:
                 latencies.append(elapsed_ms)
         except TimeoutError:
-            errors.append(f"call {i + 1}: timeout (>30s)")
+            # The call was cancelled mid-flight and may have run; stop.
+            errors.append(f"call {i + 1}: timeout (>30s) — stopped here")
+            stopped = True
+            break
         except Exception as e:
             errors.append(f"call {i + 1}: {e!s:.60}")
 
+    if stopped:
+        errors.append(
+            f"Stopped after call {i + 1} of {iterations}: a call with no reply may have "
+            "run, so no further calls were sent."
+        )
     if not latencies and boot_ms is None:
         return f"All {iterations} calls failed:\n" + "\n".join(errors)
 
