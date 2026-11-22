@@ -169,8 +169,12 @@ def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
     All errors are suppressed — by the time we kill, the proc may already be
     reaped (returncode set) or its pgid lookup may fail (Linux race after fork).
     Always safe to call; never raises.
+
+    A wrapper that already exited (npx/uvx often do) can leave the real server
+    running in its group; _kill_orphaned_group handles that case.
     """
     if proc.returncode is not None:
+        _kill_orphaned_group(proc)
         return
     pid = proc.pid
     if sys.platform == "win32":
@@ -197,6 +201,34 @@ def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
     # this one pid (never a group), so it is safe on both real and mock procs.
     with contextlib.suppress(ProcessLookupError, Exception):
         proc.kill()
+
+
+def _kill_orphaned_group(proc: asyncio.subprocess.Process) -> None:
+    """SIGKILL what is left of an exited leader's process group, if it is provably ours.
+
+    Every child is spawned with start_new_session=True, so its group id is its
+    pid. POSIX never hands out a pid while a process group with that id still
+    exists. So if *no process* holds the leader's pid but the *group* still
+    exists, the group is the one we started: kill it. If a process does hold the
+    pid, it may be an unrelated program that reused it — leave it alone.
+
+    Only real asyncio Process objects qualify: tests use MagicMock procs with
+    made-up pids, which must never reach killpg.
+    """
+    if sys.platform == "win32" or not isinstance(proc, asyncio.subprocess.Process):
+        return
+    pid = proc.pid
+    if not isinstance(pid, int) or pid <= 1:
+        return
+    try:
+        os.kill(pid, 0)
+        return  # a live process has this pid now: not provably ours
+    except ProcessLookupError:
+        pass  # leader is gone; the pid cannot be reused while its group exists
+    except OSError:
+        return  # exists but not ours (PermissionError), or unknown
+    with contextlib.suppress(OSError):
+        os.killpg(pid, signal.SIGKILL)
 
 
 async def _reap(proc: asyncio.subprocess.Process, timeout: float) -> None:
