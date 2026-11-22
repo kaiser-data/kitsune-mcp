@@ -6,6 +6,7 @@ import os
 import time
 from typing import Annotated
 
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from kitsune_mcp.app import mcp
@@ -160,10 +161,12 @@ async def fetch(url: str, intent: str = "") -> str:
     """Fetch a URL and return compressed content (~500 tokens vs ~25K raw HTML)."""
     raw_estimate = 6000  # typical webpage token count before compression
 
+    # Failures raise ToolError so the client gets isError=true: a blocked or
+    # failed fetch must not look like page content.
     if not os.getenv("KITSUNE_ALLOW_LOCAL_FETCH") and (
         not _is_safe_url(url) or await _resolves_private(url)
     ):
-        return (
+        raise ToolError(
             f"Blocked: '{url}' resolves to a private address, or does not resolve. "
             "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
         )
@@ -183,7 +186,7 @@ async def fetch(url: str, intent: str = "") -> str:
         r.raise_for_status()
         text = r.text
     except Exception as e:
-        return f"Failed to fetch {url}: {e}"
+        raise ToolError(f"Failed to fetch {url}: {e}") from e
 
     stripped = _strip_html(text)
     result = _truncate(stripped, max_tokens=MAX_RESPONSE_TOKENS)
