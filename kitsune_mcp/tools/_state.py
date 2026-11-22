@@ -41,6 +41,7 @@ from kitsune_mcp.shapeshift import (
     _register_proxy_prompts,  # noqa: F401  (accessed as _state._register_proxy_prompts)
     _register_proxy_resources,  # noqa: F401  (accessed as _state._register_proxy_resources)
     _register_proxy_tools,  # noqa: F401  (accessed as _state._register_proxy_tools)
+    _registrable_tools,  # noqa: F401  (accessed as _state._registrable_tools)
 )
 from kitsune_mcp.transport import (
     BaseTransport,

@@ -60,6 +60,30 @@ def _schemas_missing_required(schemas: list) -> bool:
     return has_props
 
 
+def _nothing_registrable(
+    server_id: str, tool_schemas: list, transport, config: dict, tools: list[str] | None
+) -> str | None:
+    """Failure message if no tool of the new server could be registered, else None.
+
+    Checked before the current form is shed, so the failure leaves it mounted.
+    """
+    only = set(tools) if tools else None
+    if _state._registrable_tools(
+        server_id, tool_schemas, transport, config, _state._BASE_TOOL_NAMES, only
+    ):
+        return None
+    hint = (
+        f" None of tools={sorted(only)} exist there; "
+        f"available: {', '.join(t.get('name', '?') for t in tool_schemas[:12])}."
+        if only
+        else ""
+    )
+    return (
+        f"❌ shapeshift failed: no tools could be registered from '{server_id}'.{hint} "
+        "Your current server is still mounted."
+    )
+
+
 async def _commit_shapeshift(
     server_id: str,
     transport: BaseTransport,
@@ -290,6 +314,9 @@ async def shapeshift(
                         f"❌ shapeshift failed: no tools found for '{server_id}'. "
                         f"Check the process with status(), or reload('{server_id}')."
                     )
+                refusal = _nothing_registrable(server_id, raw_tools, transport, {}, tools)
+                if refusal:
+                    return refusal
                 _state._do_shed()
                 session["current_form_local_install"] = None
 
@@ -508,6 +535,9 @@ async def shapeshift(
 
         if not tool_schemas:
             return f"❌ shapeshift failed: no tools found for '{server_id}'. Try inspect() first."
+        refusal = _nothing_registrable(server_id, tool_schemas, transport, resolved_config, tools)
+        if refusal:
+            return refusal
 
         _state._do_shed()
         session["current_form_local_install"] = local_install
