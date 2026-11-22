@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **A server whose launcher already exited is stopped too.** `npx`/`uvx` wrappers can exit while the real server keeps running in their process group. Cleanup skipped any process whose wrapper had exited, so that server survived `release()`, eviction and shutdown. It is now killed when the group is provably Kitsune's: the leader's pid is free and the group still exists, which POSIX only allows for the original group.
 - **Crafted tools keep their headers after a restart.** `craft(..., headers=…)` worked until Kitsune restarted; the saved definition had no headers, so the restored tool called its endpoint without `Authorization` and got 401. Headers are now saved with the tool (`state.json` is written `0600`, like `.env`).
 - **A removed crafted tool stays removed.** `shiftback()` unregistered a crafted tool but kept its definition, so it came back on the next start, untracked (a second `shiftback()` said "Already in base form"). Shedding now forgets crafted tools, and restored ones are tracked again.
 - **Saved keys come back exactly as written.** `auth()` wrote `.env` values unquoted, so `abc #def` reloaded as `abc`, surrounding quotes and spaces were stripped. Values are now single-quoted. A value containing `${` is refused, because dotenv would expand it as a variable.
