@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ---
 
-## [Unreleased]
+## [0.25.2] — 2026-11-22
+
+Security and correctness fixes from two external code reviews. Three behaviour changes: deleting `~/.kitsune/policy.json` turns the guard off only after a Kitsune restart (until then, calls wait for approval); Glama servers that install from GitHub need `confirm=True` and run in the Docker cage by default; loosening the Docker cage from a tool call needs `KITSUNE_DOCKER_ALLOW_OVERRIDES=1`.
 
 ### Fixed
 - **`auto()` no longer discards a good answer that mentions 401 or 403.** Any result containing those digits (an issue title, a result count) counted as an auth failure, and `auto()` silently retried on another server and returned *its* answer. Only an error-shaped first line counts now.
