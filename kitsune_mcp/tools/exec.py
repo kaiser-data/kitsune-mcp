@@ -164,7 +164,7 @@ async def fetch(url: str, intent: str = "") -> str:
         not _is_safe_url(url) or await _resolves_private(url)
     ):
         return (
-            f"Blocked: '{url}' resolves to a private/loopback address. "
+            f"Blocked: '{url}' resolves to a private address, or does not resolve. "
             "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow local URLs."
         )
 

@@ -54,6 +54,11 @@ def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | No
         return None
 
 
+def _is_public_ip(addr) -> bool:
+    """Globally routable unicast. `is_global` alone admits multicast (224.0.0.0/4)."""
+    return addr.is_global and not addr.is_multicast
+
+
 def _is_safe_url(url: str) -> bool:
     """Return True only for public HTTPS URLs — blocks SSRF to private/loopback addresses.
 
@@ -68,7 +73,7 @@ def _is_safe_url(url: str) -> bool:
             return False
         addr = _literal_ip(host)
         if addr is not None:
-            return addr.is_global
+            return _is_public_ip(addr)
         return True
     except Exception:
         return False
@@ -84,18 +89,24 @@ async def _resolve_host(host: str) -> list[str]:
 
 
 async def _resolves_private(url: str) -> bool:
-    """True if the URL's hostname resolves to any non-public address.
+    """True if the URL's hostname resolves to any non-public address, or to none.
 
-    Closes the gap where internal DNS names pass _is_safe_url. A rebinding
-    resolver can still answer differently at connect time; this check makes
-    the common case (an internal name) fail closed.
+    Closes the gap where internal DNS names pass _is_safe_url. A name that does
+    not resolve now counts as unsafe too: the connection would resolve it
+    again, and a rebinding resolver can fail the check's lookup and answer the
+    connection's with a private address. (A resolver can still answer the two
+    lookups differently; binding the connection to the checked addresses would
+    close that, and is not done here.)
     """
     host = (urlparse(url).hostname or "").rstrip(".")
     if not host or _literal_ip(host) is not None:
         return False  # literal IPs are fully judged by _is_safe_url
-    for ip in await _resolve_host(host):
+    ips = await _resolve_host(host)
+    if not ips:
+        return True
+    for ip in ips:
         try:
-            if not ipaddress.ip_address(ip.split("%", 1)[0]).is_global:
+            if not _is_public_ip(ipaddress.ip_address(ip.split("%", 1)[0])):
                 return True
         except ValueError:
             return True
@@ -150,7 +161,7 @@ async def _ssrf_safe_request(
     for _ in range(10):
         if not allow_local and (not _is_safe_url(url) or await _resolves_private(url)):
             raise ValueError(
-                f"Blocked: '{url}' resolves to a private/loopback address. "
+                f"Blocked: '{url}' resolves to a private address, or does not resolve. "
                 "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
             )
         r = await client.request(method, url, follow_redirects=False, **kw)
@@ -163,13 +174,21 @@ async def _ssrf_safe_request(
         next_url = str(next_req.url)
         if not _is_safe_url(next_url) and not allow_local:
             raise ValueError(
-                f"Blocked: redirect to '{next_url}' resolves to a private/loopback address. "
+                f"Blocked: redirect to '{next_url}' is a private/loopback address. "
                 "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
             )
         if before_redirect is not None:
             refusal = await before_redirect(next_url)
             if refusal:
                 raise ValueError(refusal)
+        downgrade = r.status_code in (301, 302, 303) and method.upper() in ("POST", "PUT", "PATCH")
+        if _origin(next_url) != _origin(url) and "content" in kw and not downgrade:
+            # 307/308 keep the method and body: the body was meant for this
+            # origin only (tool arguments, secrets), so it is never replayed.
+            raise ValueError(
+                f"Blocked: {r.status_code} redirect would resend the request body to "
+                f"another origin ({_origin(next_url)[1]})."
+            )
         if _origin(next_url) != _origin(url):
             # Never hand a token, session cookie or API-key header to a
             # different origin.

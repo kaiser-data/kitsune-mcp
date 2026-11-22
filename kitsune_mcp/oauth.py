@@ -43,7 +43,7 @@ from pathlib import Path
 
 from kitsune_mcp.constants import TIMEOUT_FETCH_URL
 from kitsune_mcp.paths import kitsune_home
-from kitsune_mcp.utils import _get_http_client, _is_safe_url
+from kitsune_mcp.utils import _get_http_client, _is_safe_url, _resolves_private
 
 _KITSUNE_DIR = kitsune_home() / "oauth"
 _CLIENT_NAME = "Kitsune MCP"
@@ -198,7 +198,7 @@ async def _get_json(url: str) -> dict | None:
             if not location:
                 return None
             url = urllib.parse.urljoin(url, location)
-            if not _may_fetch(url, first):
+            if not await _may_fetch(url, first):
                 return None
         else:
             return None
@@ -262,10 +262,16 @@ def _same_origin(a: str, b: str) -> bool:
     return (pa.scheme.lower(), pa.netloc.lower()) == (pb.scheme.lower(), pb.netloc.lower())
 
 
-def _may_fetch(url: str, server_url: str) -> bool:
-    """Metadata URLs we follow: public HTTPS, the server's own origin, or loopback for a loopback server."""
-    if _is_safe_url(url) or _same_origin(url, server_url):
+async def _may_fetch(url: str, server_url: str) -> bool:
+    """Metadata URLs we follow: public HTTPS, the server's own origin, or loopback for a loopback server.
+
+    "Public" is judged by what the name resolves to, not just how it looks: a
+    public-looking https name that points at a private address is refused.
+    """
+    if _same_origin(url, server_url):
         return True
+    if _is_safe_url(url):
+        return not await _resolves_private(url)
     return _is_loopback(server_url) and _is_loopback(url)
 
 
@@ -288,7 +294,7 @@ async def _protected_resource_metadata(server_url: str, challenge: dict[str, str
     """RFC 9728 metadata: the challenge's URL first, then the well-known locations."""
     candidates: list[str] = []
     hinted = challenge.get("resource_metadata")
-    if hinted and _may_fetch(hinted, server_url):
+    if hinted and await _may_fetch(hinted, server_url):
         candidates.append(hinted)
     p = urllib.parse.urlsplit(server_url)
     origin = f"{p.scheme}://{p.netloc}"
@@ -319,7 +325,7 @@ def _as_metadata_urls(issuer: str) -> list[str]:
 
 async def _authorization_server(issuer: str, server_url: str) -> AuthMeta | None:
     """Metadata for `issuer`, accepted only if it names that same issuer (mix-up defence)."""
-    if not _may_fetch(issuer, server_url) or not _secure_endpoint(issuer):
+    if not await _may_fetch(issuer, server_url) or not _secure_endpoint(issuer):
         return None
     for url in _as_metadata_urls(issuer):
         doc = await _get_json(url)
