@@ -486,7 +486,10 @@ class MultiRegistry(BaseRegistry):
                     candidates.append(srv)
         candidates.sort(key=lambda s: _relevance_score(s, query), reverse=True)
         result = candidates[:limit]
-        self._search_cache.set(cache_key, result)
+        if not self.last_registry_errors:
+            # A registry that failed may have had better matches: don't pin a
+            # partial list for the cache lifetime, ask again next time.
+            self._search_cache.set(cache_key, result)
         return result
 
     async def get_server(self, id: str, source_preference: str | None = None):

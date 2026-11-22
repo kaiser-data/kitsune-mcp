@@ -5,6 +5,8 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`bench()` stops when a call may have run.** After an outcome-unknown reply, or a timeout that cancelled a call in flight, it sent the next iteration anyway, which repeats the call on a server that is already failing. It now stops there and says so.
+- **A search with a failed registry is not cached.** A timeout in one registry left the other registries' results cached for a minute, so `auto()` kept ranking from that partial list.
 - **Concurrent first calls to a stdio server start one process.** Two calls arriving together each spawned the server; the pool kept the last one and the other ran on with nothing tracking or stopping it. Starts are now serialised per server.
 - **A server that fails during startup is stopped.** If the MCP handshake was cut short (a `connect()` timeout, a broken pipe), the child process kept running. It is now killed on every failed or cancelled start.
 - **Pool eviction never kills a call in flight.** A call counted as idle from its *previous* use, so a long call could be killed by another call's idle sweep, and the process cap could pick a busy process. Busy processes are now skipped by both, and a `.env` change respawns the process on its next idle call instead of mid-call.
