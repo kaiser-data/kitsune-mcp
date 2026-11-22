@@ -2,9 +2,9 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/assets/kitsune-logo-reveal.gif" alt="The Kitsune MCP logo builds itself: a fox head appears, seven tool tails fan out one by one, and the fox's eyes light up" width="240" />
   <h1>🦊 Kitsune MCP</h1>
-  <h3>Your agent tests the MCP server it's building. No client restart.</h3>
-  <p><strong>Edit a tool, <code>reload("dev")</code>, call it again: same session, through the client's real tools.</strong><br/>
-  <strong>Try anyone's MCP server without trusting it: consent gate, Docker cage, version pins.</strong></p>
+  <h3>One MCP server. Every form your agent needs.</h3>
+  <p><strong>Nine tools, like the nine-tailed fox.</strong> Your agent borrows a server's powers, uses them and casts them off, mid-session, with no client restart.<br/>
+  <strong>Build</strong> your own MCP server in a live loop. <strong>Test</strong> any server in seconds, caged.</p>
   <p>
     <a href="https://pypi.org/project/kitsune-mcp/"><img src="https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi" alt="PyPI version"/></a>
     <a href="https://www.npmjs.com/package/kitsune-mcp"><img src="https://img.shields.io/npm/v/kitsune-mcp?color=cb3837&label=npm&logo=npm" alt="npm version"/></a>
@@ -21,6 +21,19 @@
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/demo-hot-reload.gif" alt="Claude Code connects a weather MCP server through Kitsune, gets 59°C for Berlin, fixes the Fahrenheit conversion, calls reload(&quot;dev&quot;) and gets 15°C in the same session" width="800" />
   <br/><sub>One prompt: Claude finds the bug, fixes it, reloads, checks again. Real recording, 31 s.</sub>
 </p>
+
+## Powers
+
+| Power | Ask your agent | What happens |
+|---|---|---|
+| **Heal its own tool** | *"Call get_weather. If it's wrong, fix it, reload and check again."* | Edit → `reload("dev")` → call. Same session, no client restart. |
+| **Shapeshift on demand** | *"What time is it in Tokyo?"* | `auto()` finds a server, takes its form, answers. Nothing lands in your config. |
+| **Test any server in seconds** | *"Find a PDF server and try it on report.pdf."* | Search 6 registries → mount it caged → call → drop. |
+| **Sniff before it bites** | *"Score mcp-server-time and benchmark it."* | `test()` grades it 0–100, `bench()` measures p50/p95. |
+| **Turn any API into a power** | *"Make a tool for POST https://api.example.com/summarize."* | `craft()`: live at once, kept across restarts. |
+| **Cast off the form** | *"Drop it."* | `shapeshift()`: tools gone, session stays. |
+
+`test()`, `bench()` and `craft()` come with `KITSUNE_TOOLS=all`. The cage needs Docker; without it, community code runs uncaged, with a warning.
 
 ## Try it in a minute
 
@@ -110,13 +123,7 @@ Also on PyPI (`pip install kitsune-mcp`, then `"command": "kitsune-mcp"`) and np
 
 **Requirements:** Python 3.12+ · [uv](https://github.com/astral-sh/uv) · `node`/`npx` for npm-based servers · Docker optional: not used for hot-reload, only to cage community servers when installed.
 
-## What it does
-
-| | Loop | What you get |
-|---|---|---|
-| **Hot-reload your server** | `connect` → `shapeshift` → edit → `reload` → `call` | The agent tests its own fix without a client restart |
-| **Try before you trust** | `search` → `shapeshift(…, confirm=True)` → `call` | Community npm/PyPI/GitHub code runs caged and pinned, not as your user |
-| **Borrow a server once** | `search` → `shapeshift(…, tools=[…])` → `call` → `shapeshift()` | One tool for one task, without a permanent config entry |
+## Examples
 
 ### Borrow a server you never configured
 
