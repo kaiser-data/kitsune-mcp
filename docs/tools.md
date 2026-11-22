@@ -262,8 +262,9 @@ craft(name, description, params, url, method="POST", headers=None)
 ```
 
 Register a tool backed by your own HTTP endpoint. It is live immediately.
-`POST` sends a JSON body, `GET` sends query parameters. `shiftback()` removes
-it.
+`POST` sends a JSON body, `GET` sends query parameters. The tool and its
+`headers` are saved in `~/.kitsune/state.json` (mode `0600`) and come back after
+a restart. `shiftback()`, or mounting another server, removes it for good.
 
 ---
 

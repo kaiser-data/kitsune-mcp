@@ -41,7 +41,11 @@ def test_save_to_env_still_writes_normal_values(tmp_path, monkeypatch):
     monkeypatch.delenv("SOME_API_KEY", raising=False)
     with patch("kitsune_mcp.credentials.ENV_PATH", str(env_file)):
         _save_to_env("SOME_API_KEY", "sk-abc=123")
-    assert env_file.read_text() == "SOME_API_KEY=sk-abc=123\n"
+    # Single-quoted so dotenv reads it back exactly (#, quotes, spaces survive).
+    assert env_file.read_text() == "SOME_API_KEY='sk-abc=123'\n"
+    from dotenv import dotenv_values
+
+    assert dotenv_values(env_file)["SOME_API_KEY"] == "sk-abc=123"
     assert oct(env_file.stat().st_mode & 0o777) == "0o600"
     monkeypatch.delenv("SOME_API_KEY", raising=False)
 

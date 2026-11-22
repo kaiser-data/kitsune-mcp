@@ -18,7 +18,7 @@ from kitsune_mcp._fastmcp_compat import (
 )
 from kitsune_mcp.app import mcp
 from kitsune_mcp.guard import guard_call
-from kitsune_mcp.session import session
+from kitsune_mcp.session import _save_state, session
 from kitsune_mcp.transport import (
     BaseTransport,
     DockerTransport,
@@ -265,6 +265,14 @@ def _do_shed() -> list[str]:
         except Exception:
             pass
     session["shapeshift_tools"] = []
+    # A crafted tool that is shed is gone for good: forget its definition too,
+    # or it would come back, untracked, on the next start.
+    crafted = session.get("crafted_tools", {})
+    forgotten = [t for t in removed if t in crafted]
+    for tname in forgotten:
+        crafted.pop(tname, None)
+    if forgotten:
+        _save_state()
 
     for uri in session.get("shapeshift_resources", []):
         remove_resource(mcp, uri)

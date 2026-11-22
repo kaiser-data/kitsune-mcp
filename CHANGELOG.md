@@ -7,6 +7,10 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **Crafted tools keep their headers after a restart.** `craft(..., headers=…)` worked until Kitsune restarted; the saved definition had no headers, so the restored tool called its endpoint without `Authorization` and got 401. Headers are now saved with the tool (`state.json` is written `0600`, like `.env`).
+- **A removed crafted tool stays removed.** `shiftback()` unregistered a crafted tool but kept its definition, so it came back on the next start, untracked (a second `shiftback()` said "Already in base form"). Shedding now forgets crafted tools, and restored ones are tracked again.
+- **Saved keys come back exactly as written.** `auth()` wrote `.env` values unquoted, so `abc #def` reloaded as `abc`, surrounding quotes and spaces were stripped. Values are now single-quoted. A value containing `${` is refused, because dotenv would expand it as a variable.
+- **The guard finds more paths and hosts.** A path after a shell separator (`cat /tmp/x;/etc/shadow`), a `uri` argument (including `file://`), and bare hosts in `host`/`hostname`/`server`/`address`/`domain`/`endpoint` arguments were not checked against the path rules and `network.allow`. They are now.
 - **OAuth logins reject a response from another authorization server.** When the login callback carries an `iss` parameter (RFC 9207), it must match the expected issuer; if the server's metadata promises `iss`, a response without it is refused. This closes the mix-up attack where a second authorization server's code is accepted. The token endpoint may still be on another host than the issuer (as with Google).
 - **OAuth registration and revocation endpoints must use HTTPS.** Revocation sends your tokens and registration returns a client secret; a plaintext endpoint was used as is. Such endpoints are now treated as absent (loopback excepted), also for logins saved before this change.
 

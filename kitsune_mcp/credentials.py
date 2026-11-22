@@ -172,7 +172,20 @@ def invalid_env_entry(name: str, value: str) -> str | None:
         return f"'{name}' is not a valid environment variable name"
     if any(ch in value for ch in _ENV_VALUE_FORBIDDEN):
         return "the value contains a line break or NUL character"
+    if "${" in value:
+        # dotenv expands ${VAR} even inside quotes and has no escape for it,
+        # so the value would not come back as written.
+        return "the value contains '${', which .env would expand as a variable"
     return None
+
+
+def _dotenv_quote(value: str) -> str:
+    """Single-quoted .env value that python-dotenv reads back unchanged.
+
+    Unquoted, `#` starts a comment, surrounding quotes and spaces are
+    stripped. Inside single quotes only \\ and \' are escapes.
+    """
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 def invalid_env_message(name: str, value: str) -> str:
@@ -199,13 +212,13 @@ def _save_to_env(env_var: str, value: str) -> None:
         found = False
         for i, line in enumerate(lines):
             if line.startswith(f"{env_var}="):
-                lines[i] = f"{env_var}={value}\n"
+                lines[i] = f"{env_var}={_dotenv_quote(value)}\n"
                 found = True
                 break
         if not found:
             if lines and not lines[-1].endswith("\n"):
                 lines.append("\n")
-            lines.append(f"{env_var}={value}\n")
+            lines.append(f"{env_var}={_dotenv_quote(value)}\n")
         with open(ENV_PATH, "w") as f:
             f.writelines(lines)
         os.chmod(ENV_PATH, 0o600)

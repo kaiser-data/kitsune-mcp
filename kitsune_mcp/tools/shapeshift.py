@@ -759,6 +759,9 @@ async def craft(
         "method": _method,
         "description": description,
         "params": params or {},
+        # state.json is written 0600, like .env; without them a restored
+        # tool would call its endpoint unauthenticated.
+        "headers": dict(headers or {}),
     }
     if name not in session["shapeshift_tools"]:
         session["shapeshift_tools"].append(name)
