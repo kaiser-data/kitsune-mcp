@@ -23,7 +23,7 @@ from kitsune_mcp.constants import (
 )
 from kitsune_mcp.credentials import _credentials_guide, _credentials_ready
 from kitsune_mcp.probe import _format_setup_guide
-from kitsune_mcp.session import session
+from kitsune_mcp.session import _save_state, session
 from kitsune_mcp.shapeshift import _json_type_to_py
 from kitsune_mcp.tools import _state
 from kitsune_mcp.transport import BaseTransport, _kill_process_tree, _process_pool
@@ -865,6 +865,19 @@ async def release(name: str) -> str:
             break
 
     if found_key is None or found_entry is None:
+        # A row restored from state.json after a restart has no process. It
+        # must still be removable, or it lingers in state.json forever.
+        saved_key = next(
+            (k for k, c in session["connections"].items() if c.get("name") == name or k == name),
+            None,
+        )
+        if saved_key is not None:
+            session["connections"].pop(saved_key, None)
+            _save_state()
+            return (
+                f"Released: {name} (not running — saved from an earlier session; "
+                "removed from state)"
+            )
         active = [e.name or k for k, e in _process_pool.items()]
         if active:
             return f"No connection named '{name}'. Active: {', '.join(active)}"
