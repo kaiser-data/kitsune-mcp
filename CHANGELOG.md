@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
-- **Trust follows what a local launch fetches.** A Glama entry that is remote-capable kept Glama's trust even when it was run locally from `npx github:…` by `prewarm()` or `shapeshift(source="local")`, so it skipped `confirm=True` and the default cage. Any launch that installs from GitHub (`github:`, `git+…`) is now treated as community code, whichever registry listed it. The hosted endpoint keeps the listing's trust.
+- **Trust follows what a local launch fetches.** A Glama entry that is remote-capable kept Glama's trust even when it was run locally from `npx github:…` by `prewarm()` or `shapeshift(source="local")`, so it skipped `confirm=True` and the default cage. Any launch that installs from GitHub (`github:`, `git+…`) is now treated as community code, whichever registry listed it. A Glama stdio listing that names no package (launched as `npx -y <id>`) now counts as npm. The hosted endpoint keeps the listing's trust.
 - **`prewarm(sandbox=True)` refuses launchers it cannot cage.** For anything but `npx`/`uvx` it started the command on the host and reported success. It now fails before launching, like `shapeshift()`.
 - **`release()` removes only the process it released.** If a call started a replacement under the same key while `release()` waited for the old process to exit, the replacement was dropped from the pool and kept running untracked.
 - **`connect(inherit_stderr=False)` discards server output.** It captured stderr in a pipe nobody read; a chatty server filled it and blocked mid-write, then stopped answering.

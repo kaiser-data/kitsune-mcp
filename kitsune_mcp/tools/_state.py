@@ -407,7 +407,12 @@ def _launch_source(srv) -> str:
             return "github"
         if "://" in p and urlparse(p).hostname in ("github.com", "www.github.com"):
             return "github"
-    return getattr(srv, "source", "") or ""
+    source = getattr(srv, "source", "") or ""
+    if source == "glama" and not getattr(srv, "install_cmd", None):
+        # Glama lists the server but names no package; a local launch falls
+        # back to `npx -y <id>`, i.e. whatever npm has under that name.
+        return "npm"
+    return source
 
 
 def transport_for_exec(server_id: str, srv, explicit_sandbox: bool = False):

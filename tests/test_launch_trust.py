@@ -41,7 +41,10 @@ def _srv(source, transport, install_cmd):
             _srv("mcpregistry", "stdio", ["uvx", "--from", "git+https://github.com/o/r", "r"]),
             "github",
         ),
-        (_srv("glama", "http", []), "glama"),
+        # No package named: a local launch is `npx -y <id>`, so npm trust (Grok #2).
+        (_srv("glama", "http", []), "npm"),
+        (_srv("glama", "stdio", []), "npm"),
+        (_srv("glama", "http", ["npx", "-y", "@scope/pkg"]), "glama"),
         (
             _srv("official", "stdio", ["npx", "-y", "@modelcontextprotocol/server-memory"]),
             "official",
@@ -119,3 +122,11 @@ async def test_captured_stderr_is_discarded_not_piped():
 )
 def test_launch_source_checks_the_url_host(spec, expected):
     assert _state._launch_source(_srv("npm", "stdio", ["uvx", "--from", spec, "r"])) == expected
+
+
+async def test_shapeshift_glama_stdio_without_package_needs_confirm(monkeypatch):
+    monkeypatch.delenv("KITSUNE_TRUST", raising=False)
+    srv = _srv("glama", "stdio", [])
+    with patch.object(_state._registry, "get_server", AsyncMock(return_value=srv)), _no_spawn():
+        out = await ss.shapeshift("owner/thing", MagicMock())
+    assert "confirm=True" in out and "npm" in out
