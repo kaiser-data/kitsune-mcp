@@ -164,7 +164,7 @@ class TestAutoFillsArgs:
             return '{"results": []}'
 
         fake_transport = AsyncMock()
-        fake_transport.execute = fake_execute
+        fake_transport.execute = fake_transport.call_tool = fake_execute
 
         with (
             patch("kitsune_mcp.tools._state._registry") as mock_reg,
@@ -240,7 +240,7 @@ class TestAutoFillsArgs:
 
         async def get_transport_side_effect(server_id, srv):
             transport = AsyncMock()
-            transport.execute = await fake_execute_factory(server_id)
+            transport.execute = transport.call_tool = await fake_execute_factory(server_id)
             return transport
 
         async def get_server_side_effect(server_id, source_preference=None):
@@ -256,7 +256,7 @@ class TestAutoFillsArgs:
                     return "Auth failed: API key invalid"
                 return '{"results": ["ok"]}'
 
-            t.execute = _exec
+            t.execute = t.call_tool = _exec
             return t
 
         with (
@@ -294,7 +294,7 @@ class TestAutoFillsArgs:
                 call_log.append(server_id)
                 return results_per_id[server_id]
 
-            t.execute = _exec
+            t.execute = t.call_tool = _exec
             return t
 
         call_log.clear()
@@ -352,7 +352,7 @@ class TestAutoFillsArgs:
                 call_log.append(server_id)
                 return "Auth failed"
 
-            t.execute = _exec
+            t.execute = t.call_tool = _exec
             return t
 
         with (
@@ -401,7 +401,7 @@ class TestAutoFillsArgs:
             return "ok"
 
         fake_transport = AsyncMock()
-        fake_transport.execute = fake_execute
+        fake_transport.execute = fake_transport.call_tool = fake_execute
 
         with (
             patch("kitsune_mcp.tools._state._registry") as mock_reg,
