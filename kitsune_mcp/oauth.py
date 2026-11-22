@@ -422,6 +422,7 @@ async def register_client(meta: AuthMeta, origin: str, redirect_uri: str) -> Cli
     }
     r = await _get_http_client().post(
         meta.registration_endpoint,
+        follow_redirects=False,  # never POST secrets to a redirect target
         json=body,
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         timeout=TIMEOUT_FETCH_URL,
@@ -614,6 +615,7 @@ async def _exchange_code(
         data["client_secret"] = client.client_secret
     r = await _get_http_client().post(
         meta.token_endpoint,
+        follow_redirects=False,  # never POST secrets to a redirect target
         data=data,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -661,6 +663,7 @@ async def refresh(
         data["client_secret"] = client.client_secret
     r = await _get_http_client().post(
         meta.token_endpoint,
+        follow_redirects=False,  # never POST secrets to a redirect target
         data=data,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -794,6 +797,7 @@ async def revoke(meta: AuthMeta, client: ClientInfo, bundle: TokenBundle) -> boo
         try:
             r = await _get_http_client().post(
                 meta.revocation_endpoint,
+                follow_redirects=False,  # never POST secrets to a redirect target
                 data={
                     "token": tok,
                     "token_type_hint": hint,

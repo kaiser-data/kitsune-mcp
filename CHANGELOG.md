@@ -5,6 +5,9 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **API-key headers and query parameters no longer follow redirects.** Only `Authorization`, `Cookie` and `Proxy-Authorization` were dropped on a redirect to another origin, so headers like `X-API-Key` went along. Only a short list of safe headers (`Accept`, `Content-Type`, `User-Agent`, …) crosses origins now. The first request's `params` were also re-sent to every redirect target, replacing the target's own query; they now go to the first URL only.
+- **OAuth secrets are never POSTed to a redirect target.** Token exchange, refresh, client registration and revocation followed redirects, so a 307/308 could forward the refresh token, client secret or authorization code to another host. They no longer follow redirects.
+- **A crafted tool's redirect is checked against the guard.** The guard judged only the crafted endpoint's URL; a redirect to a host outside `network.allow` was followed with the request body. Every redirect target now goes through the guard first.
 - **Concurrent first calls to a stdio server start one process.** Two calls arriving together each spawned the server; the pool kept the last one and the other ran on with nothing tracking or stopping it. Starts are now serialised per server.
 - **A server that fails during startup is stopped.** If the MCP handshake was cut short (a `connect()` timeout, a broken pipe), the child process kept running. It is now killed on every failed or cancelled start.
 - **Pool eviction never kills a call in flight.** A call counted as idle from its *previous* use, so a long call could be killed by another call's idle sweep, and the process cap could pick a busy process. Busy processes are now skipped by both, and a `.env` change respawns the process on its next idle call instead of mid-call.

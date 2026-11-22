@@ -11,6 +11,7 @@ import re
 import shutil
 import socket
 import subprocess
+from collections.abc import Awaitable, Callable
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
@@ -103,6 +104,12 @@ async def _resolves_private(url: str) -> bool:
 
 # Sent only to the origin they were meant for; dropped when a redirect leaves it.
 _CREDENTIAL_HEADERS = frozenset({"authorization", "cookie", "proxy-authorization"})
+# The only headers that may follow a redirect to another origin. Any other
+# header may carry a secret (X-API-Key, Api-Token, vendor-specific names), and
+# there is no way to tell, so it stays with the origin it was meant for.
+_CROSS_ORIGIN_SAFE_HEADERS = frozenset(
+    {"accept", "accept-language", "content-type", "user-agent", "cache-control"}
+)
 
 
 def _origin(url: str) -> tuple[str, str, int | None]:
@@ -118,8 +125,14 @@ async def _ssrf_safe_request(
     json_body=None,
     headers: dict | None = None,
     timeout: float = 30.0,
+    before_redirect: Callable[[str], Awaitable[str | None]] | None = None,
 ) -> httpx.Response:
     """HTTP request that validates every redirect hop against _is_safe_url.
+
+    *before_redirect* (optional) is awaited with each redirect target before it
+    is requested; a returned string refuses the hop with that message (the
+    guard's network policy uses it). `params` go to the first URL only: a
+    redirect target carries its own query.
 
     Raises ValueError if any redirect target is a private/loopback address,
     unless KITSUNE_ALLOW_LOCAL_FETCH=1 is set. Handles POST→GET method
@@ -141,6 +154,7 @@ async def _ssrf_safe_request(
                 "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
             )
         r = await client.request(method, url, follow_redirects=False, **kw)
+        kw.pop("params", None)
         if not r.is_redirect:
             return r
         next_req = r.next_request
@@ -152,10 +166,15 @@ async def _ssrf_safe_request(
                 f"Blocked: redirect to '{next_url}' resolves to a private/loopback address. "
                 "Set KITSUNE_ALLOW_LOCAL_FETCH=1 to allow."
             )
+        if before_redirect is not None:
+            refusal = await before_redirect(next_url)
+            if refusal:
+                raise ValueError(refusal)
         if _origin(next_url) != _origin(url):
-            # Never hand a token or session cookie to a different origin.
+            # Never hand a token, session cookie or API-key header to a
+            # different origin.
             kw["headers"] = {
-                k: v for k, v in kw["headers"].items() if k.lower() not in _CREDENTIAL_HEADERS
+                k: v for k, v in kw["headers"].items() if k.lower() in _CROSS_ORIGIN_SAFE_HEADERS
             }
         url = next_url
         # RFC 9110: 301/302/303 downgrades non-GET to GET
