@@ -25,8 +25,17 @@ class TestAuthServerIdGuard:
         assert os.environ.get("NOTION_HOSTED") == original
 
     async def test_server_id_logout_does_not_write_env(self):
+        from unittest.mock import AsyncMock, patch
+
+        from kitsune_mcp.tools import _state
+
         original = os.environ.get("NOTION_HOSTED")
-        result = await self._call("notion-hosted", "logout")
+        # logout looks the id up in the registries; keep that offline.
+        with (
+            patch.object(_state._registry, "get_server", AsyncMock(return_value=None)),
+            patch.object(_state._registry, "search", AsyncMock(return_value=[])),
+        ):
+            result = await self._call("notion-hosted", "logout")
         assert os.environ.get("NOTION_HOSTED") == original
         # Response should NOT say "Saved"
         assert "Saved" not in result

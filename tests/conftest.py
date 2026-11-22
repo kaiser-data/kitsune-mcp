@@ -4,6 +4,7 @@ import atexit
 import json
 import os
 import shutil
+import socket
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -358,3 +359,30 @@ def _public_dns(monkeypatch):
         return ["93.184.215.14"]
 
     monkeypatch.setattr(utils, "_resolve_host", _resolve)
+
+
+_OFFLINE_OK = {"localhost", "127.0.0.1", "::1", "0.0.0.0", ""}
+
+
+@pytest.fixture(autouse=True)
+def _offline(request, monkeypatch):
+    """Fail fast if a test resolves a real hostname: the suite stays offline.
+
+    respx and the _public_dns stub never resolve, so only an unmocked request
+    reaches getaddrinfo. Loopback (fixture servers) is fine. A test that really
+    needs the internet says so with @pytest.mark.network.
+    """
+    if request.node.get_closest_marker("network"):
+        return
+    real = socket.getaddrinfo
+
+    def guarded(host, *args, **kwargs):
+        name = host.decode() if isinstance(host, bytes) else (host or "")
+        if name.lower() in _OFFLINE_OK or name.lower().endswith(".localhost"):
+            return real(host, *args, **kwargs)
+        raise socket.gaierror(
+            f"offline test suite: unmocked lookup of {name!r}; mock the request "
+            "(respx / AsyncMock) or mark the test @pytest.mark.network"
+        )
+
+    monkeypatch.setattr(socket, "getaddrinfo", guarded)

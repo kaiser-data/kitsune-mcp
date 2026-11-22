@@ -9,6 +9,9 @@ All notable changes to this project are documented here.
 ### Fixed
 - **A blocked or failed `fetch()` is reported as an error.** `Blocked: …` and `Failed to fetch …` came back as ordinary content (`isError: false`), so a client could not tell a refused URL from page text. Both now come back as tool errors (`isError: true`) with the same message. Successful fetches are unchanged.
 
+### Tests
+- **The test suite runs offline.** Two tests reached real registries through unmocked fallbacks. They are mocked now, and a conftest guard fails any test that resolves a real hostname unless it is marked `@pytest.mark.network`.
+
 ---
 
 ## [0.25.4] — 2026-11-22
