@@ -329,3 +329,16 @@ def _clear_registry_search_cache():
     McpRegistryIO._SEARCH_CACHE.clear()
     yield
     McpRegistryIO._SEARCH_CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_guard_policy_memory():
+    """The guard remembers policy files it has seen (to fail closed if one is
+    removed). Tests create and delete policies freely; start each one clean."""
+    from kitsune_mcp import guard
+
+    guard._policy_seen.clear()
+    guard._policy_cache.clear()
+    yield
+    guard._policy_seen.clear()
+    guard._policy_cache.clear()

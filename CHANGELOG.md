@@ -7,6 +7,10 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **Guard: both ends of a move are checked.** Keys like `source`, `src`, `target`, `from`, `to` count as paths when their value looks like one, so a move *out of* a protected location (including `~/.kitsune/policy.json`) is now caught, not just the destination.
+- **Guard fails closed if its policy disappears.** A policy file that was loaded and then removed used to switch the guard off. Calls are now held for approval until Kitsune restarts; deleting the policy on purpose still turns the guard off after a restart.
+- **Guard reads URL hosts with a URL parser.** A `@` in a query or fragment (`https://evil.example?x=@allowed.example`) could make `network.allow` see the wrong host, and hosts ending in a file extension (`files.zip`) were skipped. Explicit URLs are now parsed properly and always checked.
+- **Crafted tools go through the guard.** Tools from `craft()` (and ones restored at startup) never consulted the policy. They are now checked as server `craft`, with the endpoint URL included so `network.allow` applies. Both code paths share one implementation.
 - **`release()` can remove connections saved from an earlier session.** After a restart, `connect()`ed servers come back from `state.json` as launch records with no process. `release()` searched only running processes, so it answered "No connection named …" and the record stayed in `state.json` for good. It now removes the record and saves the state.
 - **`status` lists those saved connections.** They were invisible before. A new "SAVED CONNECTIONS — not running" section shows each one with `reload('name')` to start it and `release('name')` to forget it.
 
