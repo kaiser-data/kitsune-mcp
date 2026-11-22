@@ -88,8 +88,12 @@ _PATH_KEY_HINTS = ("path", "file", "dir", "folder", "cwd", "dest", "root")
 # as a path (translate(target="es"), send_mail(to=...)), so they count only when
 # the value looks like one.
 _PATH_ENDPOINT_KEYS = frozenset(
-    {"source", "src", "target", "from", "to", "origin", "old", "new", "old_path", "new_path"}
+    {"source", "src", "target", "from", "to", "origin", "old", "new", "old_path", "new_path", "uri"}
 )
+# Keys whose value names a host (`host="169.254.169.254"`, `endpoint="x.example:8443"`):
+# checked against network.allow like a URL's host.
+_HOST_KEYS = frozenset({"host", "hostname", "server", "address", "domain", "endpoint"})
+_BARE_HOST = re.compile(r"^\[?([A-Za-z0-9.-]+|[0-9A-Fa-f:]+)\]?(?::\d{1,5})?/?$")
 _FILE_EXTS = {
     "txt", "json", "py", "js", "ts", "md", "yaml", "yml", "toml", "csv", "log", "sh", "html",
     "xml", "lock", "cfg", "ini", "conf", "tar", "gz", "tgz", "zip", "whl", "pem", "key", "out",
@@ -102,7 +106,9 @@ _NET_CMD_HOST = re.compile(
     r"\b(?:curl|wget|ssh|scp|nc|ncat|telnet|nmap|nikto|dirb|gobuster|ffuf|wpscan|sqlmap|hydra|ping)\b"
     r"[^\n|;&]*?\s(?:[\w.-]+@)?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})(?=[\s/:]|$)"
 )
-_FREE_TEXT_PATH = re.compile(r"(?:^|[\s'\"=(<>])((?:~/|/)[^\s'\"<>|;&)]*)")
+# A path starts after whitespace, a quote, = ( < >, or a shell separator
+# (`cat /tmp/x;/etc/shadow` holds two paths).
+_FREE_TEXT_PATH = re.compile(r"(?:^|[\s'\"=(<>;&|])((?:~/|/)[^\s'\"<>|;&)]*)")
 _B64_RUN = re.compile(r"[A-Za-z0-9+/_-]{120,}={0,2}")
 _HEX_RUN = re.compile(r"\b[0-9a-fA-F]{120,}\b")
 _OPAQUE_MAGIC = (
@@ -297,6 +303,9 @@ def _paths(args: dict, free_keys: set[str]) -> list[str]:
     found = []
     for key, value in _strings(args):
         lower = key.lower()
+        if value.strip().lower().startswith("file://"):
+            found.append(urllib.parse.unquote(urllib.parse.urlsplit(value.strip()).path))
+            continue
         if lower in free_keys:
             text = _URL.sub(" ", value)  # a URL's path is not a file path
             found += [m.group(1) for m in _FREE_TEXT_PATH.finditer(text)]
@@ -334,6 +343,10 @@ def _hosts(args: dict, free_keys: set[str]) -> set[str]:
                 host = None
             if host:
                 url_hosts.add(host)
+        if key.lower() in _HOST_KEYS and "://" not in value and not _looks_like_path(value):
+            m = _BARE_HOST.match(value.strip())
+            if m:
+                url_hosts.add(m.group(1))
         if key.lower() in free_keys:
             text_hosts.update(m.lower() for m in _SSH_HOST.findall(value))
             text_hosts.update(_IP.findall(value))

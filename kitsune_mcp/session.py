@@ -117,12 +117,15 @@ def _restore_crafted_tools() -> None:
             tool_name,
             info.get("url", ""),
             info.get("method", "POST"),
-            {},
+            dict(info.get("headers") or {}),
             info.get("params", {}),
             description=info.get("description", ""),
         )
         with contextlib.suppress(Exception):
             _mcp.add_tool(proxy)
+            # Tracked like a freshly crafted tool, so shiftback() removes it.
+            if tool_name not in session["shapeshift_tools"]:
+                session["shapeshift_tools"].append(tool_name)
 
 
 _load_skills()
