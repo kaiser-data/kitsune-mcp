@@ -28,6 +28,7 @@ import math
 import os
 import re
 import time
+import urllib.parse
 from collections import Counter
 from dataclasses import dataclass
 
@@ -83,16 +84,17 @@ _WRITE_VERBS = {
 # the form and leave the request open; silence is a no.
 ASK_TIMEOUT = 120.0
 _PATH_KEY_HINTS = ("path", "file", "dir", "folder", "cwd", "dest", "root")
+# Keys that name one end of a move/copy/rename. Too generic to treat every value
+# as a path (translate(target="es"), send_mail(to=...)), so they count only when
+# the value looks like one.
+_PATH_ENDPOINT_KEYS = frozenset(
+    {"source", "src", "target", "from", "to", "origin", "old", "new", "old_path", "new_path"}
+)
 _FILE_EXTS = {
     "txt", "json", "py", "js", "ts", "md", "yaml", "yml", "toml", "csv", "log", "sh", "html",
     "xml", "lock", "cfg", "ini", "conf", "tar", "gz", "tgz", "zip", "whl", "pem", "key", "out",
 }  # fmt: skip
 
-# Bracketed IPv6 literals ([::1]) first; the plain form stops at ":" so it would
-# otherwise read "[" as the host.
-_URL_HOST = re.compile(
-    r"\b(?:https?|wss?|ftp)://(?:[^@/\s]+@)?(\[[0-9A-Fa-f:.]+\]|[^/:\s\"'<>?#\[]+)", re.I
-)
 _URL = re.compile(r"\b(?:https?|wss?|ftp)://[^\s'\"<>|;&)]*", re.I)
 _SSH_HOST = re.compile(r"\b[\w.-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3}):")
 _IP = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
@@ -205,6 +207,10 @@ def parse_policy(data) -> Policy:
 
 
 _policy_cache: dict = {}
+# Policy files seen in this process. One that vanishes afterwards is treated as
+# an error (fail closed), not as "guard off" — otherwise a tool that moves or
+# deletes the file would switch the guard off.
+_policy_seen: set[str] = set()
 
 
 def load_policy() -> Policy | PolicyError | None:
@@ -213,9 +219,15 @@ def load_policy() -> Policy | PolicyError | None:
     try:
         st = path.stat()
     except FileNotFoundError:
+        if str(path) in _policy_seen:
+            return PolicyError(
+                f"{path} was removed while Kitsune was running; restart Kitsune "
+                "to turn the guard off"
+            )
         return None
     except OSError as e:
         return PolicyError(str(e))
+    _policy_seen.add(str(path))
     key = (str(path), st.st_mtime_ns, st.st_size)
     if key not in _policy_cache:
         try:
@@ -276,6 +288,11 @@ def _access(tool: str) -> str:
     return "read" if words & _READ_VERBS and not words & _WRITE_VERBS else "write"
 
 
+def _looks_like_path(value: str) -> bool:
+    v = value.strip()
+    return v.startswith(("/", "~", "./", "../")) or (len(v) > 2 and v[1] == ":" and v[2] in "/\\")
+
+
 def _paths(args: dict, free_keys: set[str]) -> list[str]:
     found = []
     for key, value in _strings(args):
@@ -283,8 +300,11 @@ def _paths(args: dict, free_keys: set[str]) -> list[str]:
         if lower in free_keys:
             text = _URL.sub(" ", value)  # a URL's path is not a file path
             found += [m.group(1) for m in _FREE_TEXT_PATH.finditer(text)]
-        elif any(h in lower for h in _PATH_KEY_HINTS) and value and "://" not in value:
-            found.append(value)
+        else:
+            hinted = any(h in lower for h in _PATH_KEY_HINTS) and value and "://" not in value
+            endpoint = lower in _PATH_ENDPOINT_KEYS and _looks_like_path(value)
+            if hinted or endpoint:
+                found.append(value)
     return [_norm(p) for p in found if p.strip()]
 
 
@@ -304,14 +324,22 @@ def _path_denied(path: str, policy: Policy) -> bool:
 
 
 def _hosts(args: dict, free_keys: set[str]) -> set[str]:
-    hosts: set[str] = set()
+    url_hosts: set[str] = set()  # from explicit URLs: always real hosts
+    text_hosts: set[str] = set()  # guessed from free text: may be file names
     for key, value in _strings(args):
-        hosts.update(m.lower().strip("[]") for m in _URL_HOST.findall(value))
+        for url in _URL.findall(value):
+            try:
+                host = urllib.parse.urlsplit(url).hostname
+            except ValueError:
+                host = None
+            if host:
+                url_hosts.add(host)
         if key.lower() in free_keys:
-            hosts.update(m.lower() for m in _SSH_HOST.findall(value))
-            hosts.update(_IP.findall(value))
-            hosts.update(m.lower() for m in _NET_CMD_HOST.findall(value))
-    return {h.rstrip(".") for h in hosts if h.rsplit(".", 1)[-1].lower() not in _FILE_EXTS}
+            text_hosts.update(m.lower() for m in _SSH_HOST.findall(value))
+            text_hosts.update(_IP.findall(value))
+            text_hosts.update(m.lower() for m in _NET_CMD_HOST.findall(value))
+    text_hosts = {h for h in text_hosts if h.rsplit(".", 1)[-1].lower() not in _FILE_EXTS}
+    return {h.lower().rstrip(".") for h in url_hosts | text_hosts}
 
 
 def _host_allowed(host: str, allow: tuple[str, ...]) -> bool:

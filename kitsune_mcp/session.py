@@ -109,54 +109,17 @@ def _restore_crafted_tools() -> None:
     crafted = session.get("crafted_tools", {})
     if not crafted:
         return
-    import inspect as _inspect
-
-    import httpx as _httpx
-
     from kitsune_mcp.app import mcp as _mcp
-    from kitsune_mcp.shapeshift import _json_type_to_py
-    from kitsune_mcp.utils import _ssrf_safe_request
-
-    def _build_proxy(name: str, url: str, method: str, description: str, params: dict):
-        py_params = []
-        for pname, pschema in params.items():
-            json_type = pschema.get("type", "string") if isinstance(pschema, dict) else "string"
-            ptype = _json_type_to_py(json_type)
-            py_params.append(
-                _inspect.Parameter(
-                    pname,
-                    _inspect.Parameter.KEYWORD_ONLY,
-                    default=_inspect.Parameter.empty,
-                    annotation=ptype,
-                )
-            )
-        _u, _m = url, method
-
-        async def _endpoint_proxy(**kwargs) -> str:
-            try:
-                if _m == "GET":
-                    r = await _ssrf_safe_request("GET", _u, params=kwargs, timeout=30.0)
-                else:
-                    r = await _ssrf_safe_request(_m, _u, json_body=kwargs, timeout=30.0)
-                r.raise_for_status()
-                return r.text
-            except _httpx.HTTPStatusError as e:
-                return f"HTTP {e.response.status_code} from {_u}: {e.response.text[:200]}"
-            except Exception as e:
-                return f"Error calling {_u}: {e}"
-
-        _endpoint_proxy.__name__ = name
-        _endpoint_proxy.__doc__ = description[:120]
-        _endpoint_proxy.__signature__ = _inspect.Signature(py_params, return_annotation=str)  # type: ignore[attr-defined]
-        return _endpoint_proxy
+    from kitsune_mcp.tools.shapeshift import _make_endpoint_proxy
 
     for tool_name, info in crafted.items():
-        proxy = _build_proxy(
+        proxy = _make_endpoint_proxy(
             tool_name,
             info.get("url", ""),
             info.get("method", "POST"),
-            info.get("description", ""),
+            {},
             info.get("params", {}),
+            description=info.get("description", ""),
         )
         with contextlib.suppress(Exception):
             _mcp.add_tool(proxy)

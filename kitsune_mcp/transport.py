@@ -1159,6 +1159,7 @@ class PersistentStdioTransport(BaseTransport):
         install_cmd: list,
         inherit_stderr: bool = True,
         probe_env: dict | None = None,
+        extra_env: dict | None = None,
     ):
         self.install_cmd = install_cmd
         self.inherit_stderr = inherit_stderr
@@ -1166,8 +1167,26 @@ class PersistentStdioTransport(BaseTransport):
         # of inheriting the host's. Pool key is suffixed so probe processes
         # never satisfy production tool calls (which expect full host env).
         self.probe_env = probe_env
+        # extra_env: values layered over the host env for this process only.
+        # Used to keep secrets off argv (docker `-e NAME` reads them from here).
+        # The pool key carries a digest, never the values, so two accounts get
+        # two processes without the key (shown by status()) leaking either.
+        self.extra_env = dict(extra_env) if extra_env else None
         suffix = "#probe" if probe_env is not None else ""
+        if self.extra_env:
+            digest = hashlib.sha256(
+                json.dumps(self.extra_env, sort_keys=True).encode()
+            ).hexdigest()[:12]
+            suffix += f"#env:{digest}"
         self._pool_key = json.dumps(install_cmd, sort_keys=True) + suffix
+
+    def _spawn_env(self) -> dict | None:
+        """None = inherit the host env (default)."""
+        if self.probe_env is not None:
+            return self.probe_env
+        if self.extra_env:
+            return {**os.environ, **self.extra_env}
+        return None
 
     @staticmethod
     def _frame(msg: dict) -> bytes:
@@ -1186,7 +1205,7 @@ class PersistentStdioTransport(BaseTransport):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=None if self.inherit_stderr else asyncio.subprocess.PIPE,
                 limit=STDIO_BUFFER_LIMIT,
-                env=self.probe_env,  # None = inherit host env (default)
+                env=self._spawn_env(),
                 **_SUBPROC_SPAWN_KWARGS,
             )
         except FileNotFoundError:
@@ -1548,6 +1567,19 @@ def sandbox_wrap_cmd(
     return wrapped
 
 
+def _docker_overrides(config: dict) -> dict:
+    """The hardening overrides a `docker:` call may apply.
+
+    `config` reaches DockerTransport from call()/auto() arguments, i.e. from the
+    agent. It may tighten the cage (network="none") but not loosen it: extra
+    capabilities, a writable rootfs, another network or bigger limits need the
+    user's own opt-in, KITSUNE_DOCKER_ALLOW_OVERRIDES=1.
+    """
+    if os.getenv("KITSUNE_DOCKER_ALLOW_OVERRIDES"):
+        return config
+    return {"network": "none"} if config.get("network") == "none" else {}
+
+
 class DockerTransport(BaseTransport):
     """Run an MCP server inside a Docker container via stdio, hardened by default.
 
@@ -1566,13 +1598,15 @@ class DockerTransport(BaseTransport):
     run`, but Docker is not a security boundary against a kernel exploit —
     treat it as defence-in-depth, not a guarantee.
 
-    Config overrides (all optional):
+    Config overrides (all optional). Only network="none" is honoured by
+    default; the loosening ones need KITSUNE_DOCKER_ALLOW_OVERRIDES=1, because
+    call() config comes from the agent (see _docker_overrides):
         memory:     RAM limit                (default "512m")
         pids_limit: max processes            (default 512)
         writable:   True → drop --read-only  (for servers that write to disk)
         network:    docker --network value   (e.g. "none")
         cap_add:    list of caps to re-add   (for servers that truly need one)
-        env:        {name: value} passed as -e
+        env:        {name: value} — passed by name (`-e NAME`), never on argv
 
     Usage:
         call("docker:mcp/my-image:latest", "tool_name", {...})
@@ -1582,17 +1616,19 @@ class DockerTransport(BaseTransport):
     def __init__(self, image: str):
         self.image = image
 
-    def _build_cmd(self, config: dict) -> list[str]:
-        cmd = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(config)]
-        for k, v in (config.get("env") or {}).items():
-            cmd += ["-e", f"{k}={v}"]
+    def _build_cmd(self, config: dict) -> tuple[list[str], dict[str, str]]:
+        """(argv, env). Env values never go on argv: `-e NAME` reads them from env."""
+        cmd = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(_docker_overrides(config))]
+        env = {str(k): str(v) for k, v in (config.get("env") or {}).items()}
+        for k in env:
+            cmd += ["-e", k]
         cmd.append(self.image)
-        return cmd
+        return cmd, env
 
     async def execute(self, tool: str, args: dict, config: dict) -> str:
-        cmd = self._build_cmd(config)
-        return await PersistentStdioTransport(cmd).execute(tool, args, config)
+        cmd, env = self._build_cmd(config)
+        return await PersistentStdioTransport(cmd, extra_env=env).execute(tool, args, config)
 
     async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
-        cmd = self._build_cmd(config)
-        return await PersistentStdioTransport(cmd).call_tool(tool, args, config)
+        cmd, env = self._build_cmd(config)
+        return await PersistentStdioTransport(cmd, extra_env=env).call_tool(tool, args, config)

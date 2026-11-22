@@ -788,7 +788,10 @@ class TestGlamaRegistry:
             reg = GlamaRegistry()
             results = await reg.search("brave", 5)
         assert len(results) >= 1
-        assert results[0].source == "glama"
+        # Local-only entries install from GitHub, so they carry the trust of
+        # what runs ("github"), not of the index that listed them.
+        assert results[0].source == "github"
+        assert results[0].install_cmd == ["npx", "github:example/brave-search"]
 
     async def test_required_env_vars_become_credentials(self):
         from server import GlamaRegistry
