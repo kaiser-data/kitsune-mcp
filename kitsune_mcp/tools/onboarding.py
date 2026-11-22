@@ -5,6 +5,7 @@ import contextlib
 import json
 import os
 import re
+import shlex
 from datetime import UTC, datetime
 
 from kitsune_mcp.adapters import get_adapter, get_adapter_for_category
@@ -294,16 +295,7 @@ async def auto(
         # (which arrives via Kitsune's transport.execute as a string body).
         # We only fall back when the caller didn't pin a server AND there are
         # candidates left.
-        is_auth_fail = any(
-            kw in last_result.lower()
-            for kw in (
-                "auth failed",
-                "unauthorized",
-                "401",
-                "403",
-                "invalid token",
-            )
-        )
+        is_auth_fail = _looks_like_auth_failure(last_result)
         if not is_auth_fail or not candidates:
             break
 
@@ -332,6 +324,26 @@ async def auto(
             )
 
     return last_result + sandbox_note if sandbox_note else last_result
+
+
+# An auth failure arrives as a short status line ("Auth failed for X",
+# "HTTP 401 Unauthorized", "OAuth failed for …"), never as content. Only the
+# first line is judged, and a bare 401/403 counts only next to HTTP/status/
+# error — a successful result quoting "401" must not trigger a fallback that
+# silently swaps in another server's answer.
+_AUTH_FAIL_RE = re.compile(
+    r"(?i)\b(?:auth(?:entication|orization)?\s+failed|oauth\s+failed|unauthori[sz]ed"
+    r"|forbidden|invalid\s+(?:api\s+)?(?:token|key)|needs\s+authorization"
+    r"|(?:http|status|error|code)\W{0,3}40[13])\b"
+)
+
+
+def _looks_like_auth_failure(result: str) -> bool:
+    text = (result or "").lstrip()
+    if text.startswith(("{", "[")):
+        return False  # structured tool output, not a transport error line
+    first_line = text.split("\n", 1)[0][:300]
+    return bool(_AUTH_FAIL_RE.search(first_line))
 
 
 # Param names that semantically take a free-text query — always safe to fill
@@ -1162,7 +1174,9 @@ async def setup(
                 return f"No connection named '{name}'. Connected: {', '.join(connected)}"
             return f"No connection named '{name}'. Use connect() first."
 
-        install_cmd = conn["command"].split()
+        # connect() stored the parsed argv; re-splitting the string breaks
+        # quoted paths and turns a bare server id into a bogus argv[0].
+        install_cmd = conn.get("install_cmd") or shlex.split(conn["command"])
         transport = _state.PersistentStdioTransport(install_cmd)
         tools = await transport.list_tools()
 

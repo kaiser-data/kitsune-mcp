@@ -1,5 +1,6 @@
 import contextlib
 import json
+import os
 
 from kitsune_mcp.paths import kitsune_home
 
@@ -61,6 +62,7 @@ def _save_skills() -> None:
 
 def _save_state() -> None:
     """Persist crafted_tools, connections metadata, and explored history to disk."""
+    tmp = _STATE_PATH.with_name(f"{_STATE_PATH.name}.{os.getpid()}.tmp")
     try:
         _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
         state = {
@@ -73,10 +75,18 @@ def _save_state() -> None:
             # Cap explored history to 100 entries (keep most recent)
             "explored": dict(list(session.get("explored", {}).items())[-100:]),
         }
-        with open(_STATE_PATH, "w") as f:
+        # Atomic: write a temp file, then rename over the old one. A crash or a
+        # second process mid-write can no longer leave a truncated state.json
+        # (which _load_state would silently treat as empty).
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
             json.dump(state, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, _STATE_PATH)
     except OSError:
-        pass
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
 
 
 def _load_state() -> None:

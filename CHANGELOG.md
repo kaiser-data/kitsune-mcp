@@ -7,6 +7,11 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Fixed
+- **`auto()` no longer discards a good answer that mentions 401 or 403.** Any result containing those digits (an issue title, a result count) counted as an auth failure, and `auto()` silently retried on another server and returned *its* answer. Only an error-shaped first line counts now.
+- **A registry outage is no longer cached as "server not found".** If a registry timed out, the miss was cached for five minutes even though that registry might have had the server. Misses are cached only when every registry answered.
+- **Your absorbed config wins over an official listing with the same id.** Both had the same rank, so the official entry (without your args and env) was used.
+- **`state.json` is written atomically, mode 0600.** A crash mid-write left a truncated file, which the next start treated as empty and dropped all crafted tools and saved connections.
+- **`setup(name=…)` uses the command `connect()` actually ran.** It re-split the command string, which broke quoted paths.
 - **Glama listings that install from GitHub count as community code.** They run `npx github:owner/repo` locally, yet were treated as vetted (no `confirm=True`, no default Docker cage). They are now labelled `github`, so the community confirm gate and default cage apply. Remote Glama entries are unchanged.
 - **`bench()` and `test(level="full")` respect the Docker cage.** Both started servers on the host even when `call()` would have caged them.
 - **`docker:` calls can no longer loosen the cage from a tool call.** `call(config=…)` is agent input; it could add capabilities, make the rootfs writable or pick another network. Only `network: "none"` (tightening) is honoured now; the loosening overrides need `KITSUNE_DOCKER_ALLOW_OVERRIDES=1`.
