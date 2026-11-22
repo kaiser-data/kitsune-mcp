@@ -108,3 +108,14 @@ async def test_captured_stderr_is_discarded_not_piped():
         proc.stdout.readline = AsyncMock(return_value=b"")
         await PersistentStdioTransport(["quiet"], inherit_stderr=False)._start_process()
     assert spawn.call_args.kwargs["stderr"] == asyncio.subprocess.DEVNULL
+
+
+@pytest.mark.parametrize(
+    "spec, expected",
+    [
+        ("https://github.com/o/r/archive/main.tar.gz", "github"),
+        ("https://evil.example/github.com/o/r.tar.gz", "npm"),
+    ],
+)
+def test_launch_source_checks_the_url_host(spec, expected):
+    assert _state._launch_source(_srv("npm", "stdio", ["uvx", "--from", spec, "r"])) == expected

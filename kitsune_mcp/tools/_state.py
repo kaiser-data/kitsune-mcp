@@ -399,9 +399,13 @@ def _launch_source(srv) -> str:
     entry as "glama" when it is also remote-capable, which is right for the
     HTTP endpoint and wrong for the local launch.
     """
+    from urllib.parse import urlparse
+
     for part in getattr(srv, "install_cmd", None) or []:
-        p = str(part).lower()
-        if p.startswith(("github:", "git+")) or "://github.com/" in p:
+        p = str(part).strip().lower()
+        if p.startswith(("github:", "git+")):
+            return "github"
+        if "://" in p and urlparse(p).hostname in ("github.com", "www.github.com"):
             return "github"
     return getattr(srv, "source", "") or ""
 
