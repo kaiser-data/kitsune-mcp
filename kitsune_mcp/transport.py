@@ -11,7 +11,7 @@ import sys
 import time
 import urllib.parse
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -478,6 +478,34 @@ class AuthRequired(PermissionError):
 
 def _auth_error(r: "_HTTPReply") -> AuthRequired:
     return AuthRequired(r.status, r.headers.get("www-authenticate"))
+
+
+LIST_MAX_PAGES = 50  # bound a server that never stops paginating
+
+
+async def _paginate_list(
+    fetch: Callable[[dict], Awaitable[dict]], key: str, max_pages: int = LIST_MAX_PAGES
+) -> list[dict]:
+    """Collect *key* items from an MCP list method across nextCursor pages.
+
+    *fetch* sends one request with the given params and returns its result
+    dict. Stops at the last page, at a cursor the server already sent (a loop),
+    or after *max_pages*. A failing page ends the walk with what was collected.
+    """
+    items: list[dict] = []
+    params: dict = {}
+    seen: set[str] = set()
+    for _ in range(max_pages):
+        result = await fetch(params)
+        page = result.get(key) if isinstance(result, dict) else None
+        if isinstance(page, list):
+            items.extend(page)
+        cursor = result.get("nextCursor") if isinstance(result, dict) else None
+        if not isinstance(cursor, str) or not cursor or cursor in seen:
+            break
+        seen.add(cursor)
+        params = {"cursor": cursor}
+    return items
 
 
 class CallOutcomeUnknown(RuntimeError):
@@ -1058,10 +1086,11 @@ class HTTPSSETransport(BaseTransport):
         endpoint, token = result
 
         async def _run(bearer: str) -> list[dict]:
-            msg = await self._rpc(endpoint, bearer, config, "tools/list", {})
-            if msg and "result" in msg:
-                return msg["result"].get("tools", [])
-            return []
+            async def page(params: dict) -> dict:
+                msg = await self._rpc(endpoint, bearer, config, "tools/list", params)
+                return (msg or {}).get("result") or {}
+
+            return await _paginate_list(page, "tools")
 
         try:
             return await asyncio.wait_for(_run(token), timeout=TIMEOUT_HTTP_TOOL)
@@ -1338,9 +1367,12 @@ class PersistentStdioTransport(BaseTransport):
             return resp.get("result") or {}
 
     async def list_tools(self) -> list[dict]:
-        """Ask live process for its tool list via tools/list."""
-        result = await self._send_request("tools/list", {}, TIMEOUT_STDIO_TOOL)
-        return result.get("tools", [])
+        """Ask live process for its tool list via tools/list, following cursors."""
+
+        async def page(params: dict) -> dict:
+            return await self._send_request("tools/list", params, TIMEOUT_STDIO_TOOL)
+
+        return await _paginate_list(page, "tools")
 
     async def list_resources(self) -> list[dict]:
         """Ask live process for its resource list via resources/list."""
@@ -1528,17 +1560,12 @@ class WebSocketTransport(BaseTransport):
         """tools/list over WebSocket, following pagination cursors. [] on any failure."""
         try:
             async with self._connect() as request:
-                tools: list[dict] = []
-                params: dict = {}
-                for _ in range(50):  # bound a server that never stops paginating
+
+                async def page(params: dict) -> dict:
                     msg = await request("tools/list", params, TIMEOUT_HTTP_TOOL)
-                    result = msg.get("result") or {}
-                    tools.extend(result.get("tools", []))
-                    cursor = result.get("nextCursor")
-                    if not cursor:
-                        break
-                    params = {"cursor": cursor}
-                return tools
+                    return msg.get("result") or {}
+
+                return await _paginate_list(page, "tools")
         except Exception:
             return []
 
