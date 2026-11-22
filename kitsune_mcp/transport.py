@@ -1638,6 +1638,9 @@ def _docker_overrides(config: dict) -> dict:
     return {"network": "none"} if config.get("network") == "none" else {}
 
 
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
 class DockerTransport(BaseTransport):
     """Run an MCP server inside a Docker container via stdio, hardened by default.
 
@@ -1675,18 +1678,38 @@ class DockerTransport(BaseTransport):
         self.image = image
 
     def _build_cmd(self, config: dict) -> tuple[list[str], dict[str, str]]:
-        """(argv, env). Env values never go on argv: `-e NAME` reads them from env."""
+        """(argv, env). Env values never go on argv: `-e NAME` reads them from env.
+
+        That env is also the *host docker client's* environment, so a name that
+        steers the client (PATH picks the binary, DOCKER_HOST the daemon, HOME
+        its credential helpers, LD_PRELOAD its loader) is refused, as is any
+        name that is not a plain identifier. Raises ValueError (or
+        ProtectedEnvVarError, a subclass) before anything is spawned.
+        """
         cmd = ["docker", "run", "--rm", "-i", *_hardened_docker_flags(_docker_overrides(config))]
         env = {str(k): str(v) for k, v in (config.get("env") or {}).items()}
         for k in env:
+            if not _ENV_NAME.fullmatch(k):
+                raise ValueError(f"✗ Invalid env name {k!r} for docker: use letters, digits, _")
+            if _creds.is_protected_env_var(k):
+                raise _creds.ProtectedEnvVarError(k)
             cmd += ["-e", k]
         cmd.append(self.image)
         return cmd, env
 
+    def _transport(self, config: dict) -> "PersistentStdioTransport | str":
+        try:
+            cmd, env = self._build_cmd(config)
+        except _creds.ProtectedEnvVarError as e:
+            return _creds.protected_env_message(str(e))
+        except ValueError as e:
+            return str(e)
+        return PersistentStdioTransport(cmd, extra_env=env)
+
     async def execute(self, tool: str, args: dict, config: dict) -> str:
-        cmd, env = self._build_cmd(config)
-        return await PersistentStdioTransport(cmd, extra_env=env).execute(tool, args, config)
+        t = self._transport(config)
+        return t if isinstance(t, str) else await t.execute(tool, args, config)
 
     async def call_tool(self, tool: str, args: dict, config: dict) -> dict | str:
-        cmd, env = self._build_cmd(config)
-        return await PersistentStdioTransport(cmd, extra_env=env).call_tool(tool, args, config)
+        t = self._transport(config)
+        return t if isinstance(t, str) else await t.call_tool(tool, args, config)

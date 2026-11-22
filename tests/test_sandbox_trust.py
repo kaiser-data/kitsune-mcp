@@ -158,3 +158,40 @@ async def test_connect_consults_guard(monkeypatch):
     assert "Blocked" in result
     assert seen["server_id"] == "connect"
     assert seen["args"]["command"] == "bash -c 'echo hi'"
+
+
+# --- docker env cannot steer the host docker client (review 2, Codex #4) ----
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PATH",
+        "HOME",
+        "DOCKER_HOST",
+        "DOCKER_CONFIG",
+        "LD_PRELOAD",
+        "DYLD_INSERT_LIBRARIES",
+        "HTTPS_PROXY",
+        "path",
+    ],
+)
+async def test_docker_env_rejects_host_launch_variables(name, monkeypatch):
+    import asyncio as _asyncio
+
+    spawned = []
+
+    async def _spawn(*a, **kw):
+        spawned.append(kw.get("env"))
+        raise AssertionError("must not spawn")
+
+    monkeypatch.setattr(_asyncio, "create_subprocess_exec", _spawn)
+    out = await DockerTransport("alpine").call_tool("t", {}, {"env": {name: "/tmp/evil"}})
+    assert isinstance(out, str) and "protected" in out and name in out
+    assert not spawned
+
+
+@pytest.mark.parametrize("name", ["", "A B", "X=Y", "1ABC", "-e"])
+def test_docker_env_rejects_malformed_names(name):
+    with pytest.raises(ValueError):
+        DockerTransport("alpine")._build_cmd({"env": {name: "v"}})
