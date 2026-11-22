@@ -1,6 +1,6 @@
 {
   "name": "kitsune-mcp",
-  "version": "0.25.1",
+  "version": "0.25.2",
   "description": "Hot-reload for MCP servers: edit your tool, reload(), call it again in the same session. Plus mount community servers from 6 registries mid-session, optionally caged in Docker. No client restarts.",
   "mcpName": "io.github.kaiser-data/kitsune-mcp",
   "bin": {
