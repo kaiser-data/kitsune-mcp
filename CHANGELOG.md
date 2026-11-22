@@ -10,6 +10,9 @@ All notable changes to this project are documented here.
 - **`release()` can remove connections saved from an earlier session.** After a restart, `connect()`ed servers come back from `state.json` as launch records with no process. `release()` searched only running processes, so it answered "No connection named …" and the record stayed in `state.json` for good. It now removes the record and saves the state.
 - **`status` lists those saved connections.** They were invisible before. A new "SAVED CONNECTIONS — not running" section shows each one with `reload('name')` to start it and `release('name')` to forget it.
 
+### Docs
+- **One-click install.** "Add to Cursor", "Install in VS Code" and "VS Code Insiders" buttons in the README and the installation guide. Each opens the client with `uvx kitsune-mcp` preconfigured.
+
 ---
 
 ## [0.25.1] — 2026-11-22

@@ -9,6 +9,11 @@ servers.
 
 ## Add it to your client
 
+**One click** (needs [uv](https://github.com/astral-sh/uv)):
+[Add to Cursor](https://cursor.com/en/install-mcp?name=kitsune&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJraXRzdW5lLW1jcCJdfQ==) ·
+[Install in VS Code](https://vscode.dev/redirect/mcp/install?name=kitsune&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22kitsune-mcp%22%5D%7D) ·
+[VS Code Insiders](https://insiders.vscode.dev/redirect/mcp/install?name=kitsune&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22kitsune-mcp%22%5D%7D)
+
 === "Claude Code"
 
     ```bash

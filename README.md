@@ -58,6 +58,14 @@ Try it: [hot-reload tutorial](https://kaiser-data.github.io/kitsune-mcp/hot-relo
 
 ## Install
 
+**One click:**
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=kitsune&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJraXRzdW5lLW1jcCJdfQ==)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Kitsune-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=kitsune&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22kitsune-mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Kitsune-24bfa5?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=kitsune&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22kitsune-mcp%22%5D%7D)
+
+Both need [uv](https://github.com/astral-sh/uv) installed (`uvx` runs Kitsune).
+
 **Claude Code**
 
 ```bash
