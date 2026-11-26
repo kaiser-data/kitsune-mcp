@@ -311,6 +311,18 @@ test(server_id, level="basic")
 
 Score a server from 0 to 100. `basic` checks schemas; `full` makes live calls.
 
+`server_id` can be a registry id or the alias of a server you `connect()`ed, which is
+usually the one you are building. For a local server the score covers what you can fix:
+tool descriptions, parameter descriptions, a declared `required`, object schemas and
+name clashes with Kitsune's own tools. The result ends with a fix list, one line per gap.
+
+```python
+connect("uv run server.py", name="dev")
+test("dev")  # Score: 80/100 (Good) — dev (local) … get_weather.city: add a parameter description
+reload("dev")  # after fixing it
+test("dev", "full")  # also calls each tool; live calls are half the score
+```
+
 ### `bench` *full profile*
 
 ```python

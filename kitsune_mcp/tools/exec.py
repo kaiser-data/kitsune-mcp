@@ -34,6 +34,26 @@ from kitsune_mcp.utils import (
 )
 
 
+def _live_connection_key(server_id: str) -> str | None:
+    """Pool key of the live connect()'d process addressed by alias or command.
+
+    A connect()'d server is addressed by its alias; never resolve that alias in
+    the registries, or an unrelated package of the same name lends it its
+    credentials and source label. Only live processes count: connection rows
+    restored from state.json after a restart have nothing behind them.
+    """
+    return next(
+        (
+            k
+            for k, c in session["connections"].items()
+            if (c.get("name") == server_id or c.get("command") == server_id)
+            and k in _process_pool
+            and _process_pool[k].is_alive()
+        ),
+        None,
+    )
+
+
 @mcp.tool()
 async def call(
     tool_name: str,
@@ -66,20 +86,7 @@ async def call(
         arguments = {}
     if config is None:
         config = {}
-    # A connect()'d server is addressed by its alias; never resolve that alias in
-    # the registries, or an unrelated package of the same name lends it its
-    # credentials and source label. Only live processes count: connection rows
-    # restored from state.json after a restart have nothing behind them.
-    local_key = next(
-        (
-            k
-            for k, c in session["connections"].items()
-            if (c.get("name") == server_id or c.get("command") == server_id)
-            and k in _process_pool
-            and _process_pool[k].is_alive()
-        ),
-        None,
-    )
+    local_key = _live_connection_key(server_id)
     if local_key is not None:
         srv = None
     elif server_id.startswith(("http://", "https://")):
@@ -197,9 +204,155 @@ async def fetch(url: str, intent: str = "") -> str:
     return f"{header}\n\n{result}"
 
 
+def _grade(score: int) -> str:
+    if score >= 90:
+        return "Excellent"
+    if score >= 75:
+        return "Good"
+    if score >= 50:
+        return "Fair"
+    return "Poor"
+
+
+async def _live_calls(
+    server_id: str, transport: BaseTransport, tools: list[dict], config: dict
+) -> tuple[int, int, list[str]]:
+    """Call up to 5 tools with dummy required args. Returns (ok, attempted, lines)."""
+    ok = attempted = 0
+    lines: list[str] = []
+    for t in tools[:5]:
+        tname = t.get("name", "")
+        props, required = _state._extract_tool_schema(t)
+        dummy_args = {
+            pname: _state._DUMMY_VALUES.get(pschema.get("type", "string"), "test")
+            for pname, pschema in props.items()
+            if pname in required
+        }
+        blocked = await guard_call(server_id, tname, dummy_args)
+        if blocked:
+            lines.append(f"  ⛔ {tname}() not called — guard: {blocked.splitlines()[0]}")
+            continue
+        attempted += 1
+        try:
+            result = await asyncio.wait_for(
+                transport.execute(tname, dummy_args, config), timeout=TIMEOUT_STDIO_TOOL
+            )
+            if "error" not in result.lower() and "failed" not in result.lower()[:50]:
+                ok += 1
+                lines.append(f"  ✅ {tname}() callable")
+            else:
+                lines.append(f"  ⚠️  {tname}() returned error")
+        except Exception as e:
+            lines.append(f"  ❌ {tname}() raised exception: {e!s:.60}")
+    return ok, attempted, lines
+
+
+def _definition_checks(tools: list[dict]) -> tuple[int, list[str], list[str]]:
+    """Score tool definitions a developer can fix. Returns (score/70, checks, fixes).
+
+    Weights: descriptions 25, parameter descriptions 20, 'required' declared 10,
+    object schema 5, no base-name collision 10. tools/list itself is worth 30.
+    """
+    n = len(tools)
+    fixes: list[str] = []
+    described = params_total = params_described = with_params = with_required = 0
+    objects = clean_names = 0
+    for t in tools:
+        name = t.get("name", "?")
+        if len((t.get("description") or "").strip()) >= 15:
+            described += 1
+        else:
+            fixes.append(f"{name}: add a tool description (say what it does and returns)")
+        schema = t.get("inputSchema") or {}
+        if schema.get("type") == "object":
+            objects += 1
+        else:
+            fixes.append(f"{name}: inputSchema should be a JSON object schema")
+        props = schema.get("properties") or {}
+        for pname, pschema in props.items():
+            params_total += 1
+            if isinstance(pschema, dict) and pschema.get("description"):
+                params_described += 1
+            else:
+                fixes.append(f"{name}.{pname}: add a parameter description")
+        if props:
+            with_params += 1
+            if "required" in schema:
+                with_required += 1
+            else:
+                fixes.append(f"{name}: declare 'required' (even if empty) so callers know")
+        if name in _state._BASE_TOOL_NAMES:
+            fixes.append(f"{name}: rename — clashes with a Kitsune tool, gets prefixed on mount")
+        else:
+            clean_names += 1
+
+    def part(weight: int, good: int, total: int) -> int:
+        return weight if total == 0 else int(weight * good / total)
+
+    parts = [
+        (part(25, described, n), 25, f"Tool descriptions: {described}/{n}"),
+        (
+            part(20, params_described, params_total),
+            20,
+            f"Parameter descriptions: {params_described}/{params_total}",
+        ),
+        (
+            part(10, with_required, with_params),
+            10,
+            f"'required' declared: {with_required}/{with_params}",
+        ),
+        (part(5, objects, n), 5, f"Object input schemas: {objects}/{n}"),
+        (part(10, clean_names, n), 10, f"No clash with Kitsune tools: {clean_names}/{n}"),
+    ]
+    checks = [f"{'✅' if got == w else '⚠️ '} {label} (+{got}/{w})" for got, w, label in parts]
+    return sum(got for got, _, _ in parts), checks, fixes
+
+
+async def _test_local(server_id: str, pool_key: str, level: str) -> str:
+    """Score a live connect()'d server: definitions a developer can fix, then calls."""
+    transport = _state.PersistentStdioTransport(json.loads(pool_key))
+    try:
+        tools = await asyncio.wait_for(transport.list_tools(), timeout=TIMEOUT_STDIO_INIT)
+    except TimeoutError:
+        tools = []
+    header = f"{server_id} (local)"
+    if not tools:
+        return (
+            f"Score: 0/100 (Poor) — {header}\n\n❌ tools/list returned no tools (0/30)\n\n"
+            "Check the server's stderr, or reload('" + server_id + "') after fixing it."
+        )
+    defs_score, checks, fixes = _definition_checks(tools)
+    score = 30 + defs_score
+    checks.insert(0, f"✅ tools/list responded with {len(tools)} tools (+30/30)")
+
+    if level == "full":
+        ok, attempted, lines = await _live_calls(server_id, transport, tools, {})
+        checks.append("\n--- FULL MODE: live tool calls (half the score) ---")
+        checks.extend(lines)
+        call_part = 50 if attempted == 0 else round(50 * ok / attempted)
+        score = round(score / 2) + call_part
+
+    grade = _grade(score)
+    out = f"Score: {score}/100 ({grade}) — {header}\n\n" + "\n".join(checks)
+    if fixes:
+        shown = fixes[:15]
+        more = f"\n  … and {len(fixes) - 15} more" if len(fixes) > 15 else ""
+        out += "\n\nFix list:\n" + "\n".join(f"  - {f}" for f in shown) + more
+        out += f"\n\nAfter editing, reload('{server_id}') and test('{server_id}') again."
+    return out + f"\n\nGrade: {grade}"
+
+
 @mcp.tool()
 async def test(server_id: str, level: str = "basic") -> str:
-    """Quality-score a server 0–100. level: 'basic' (schema checks) or 'full' (live calls)."""
+    """Quality-score a server 0–100, registry id or a connect()'d alias (your own server).
+
+    level: 'basic' (schema checks) or 'full' (also live calls). For a local server the
+    result includes a fix list of weak tool definitions.
+    """
+    local_key = _live_connection_key(server_id)
+    if local_key is not None:
+        return await _test_local(server_id, local_key, level)
+
     score = 0
     checks = []
 
@@ -214,6 +367,7 @@ async def test(server_id: str, level: str = "basic") -> str:
             f"Score: {score}/100 (Poor)\n\n"
             + "\n".join(checks)
             + "\nGrade: Poor — server not found."
+            + "\n\nTesting your own server? connect('<command>', name='dev'), then test('dev')."
         )
 
     # Check 2: Known transport type (5 pts)
@@ -272,49 +426,14 @@ async def test(server_id: str, level: str = "basic") -> str:
     # Check 7: Live tool calls (full mode only, 10 pts per tool, max 5 tools)
     if level == "full" and tools:
         checks.append("\n--- FULL MODE: live tool calls ---")
-        call_score = 0
         resolved_config, _ = _state._resolve_config(srv.credentials, {})
-        # Build one transport for the full-mode run — reuse pool entry across all tool calls
         # Same cage policy as the discovery above — a full test runs the tools.
-        transport_obj: BaseTransport
         transport_obj, _ = _state.transport_for_exec(server_id, srv)
-        for t in tools[:5]:
-            tname = t.get("name", "")
-            props, required = _state._extract_tool_schema(t)
-            dummy_args = {
-                pname: _state._DUMMY_VALUES.get(pschema.get("type", "string"), "test")
-                for pname, pschema in props.items()
-                if pname in required
-            }
+        ok, _attempted, lines = await _live_calls(server_id, transport_obj, tools, resolved_config)
+        checks.extend(line.replace("callable", "callable (+10)") for line in lines)
+        score += min(50, 10 * ok)
 
-            blocked = await guard_call(server_id, tname, dummy_args)
-            if blocked:
-                checks.append(f"  ⛔ {tname}() not called — guard: {blocked.splitlines()[0]}")
-                continue
-            try:
-                result = await asyncio.wait_for(
-                    transport_obj.execute(tname, dummy_args, resolved_config),
-                    timeout=TIMEOUT_STDIO_TOOL,
-                )
-                if "error" not in result.lower() and "failed" not in result.lower()[:50]:
-                    call_score += 10
-                    checks.append(f"  ✅ {tname}() callable (+10)")
-                else:
-                    checks.append(f"  ⚠️  {tname}() returned error (0)")
-            except Exception as e:
-                checks.append(f"  ❌ {tname}() raised exception: {e!s:.60} (0)")
-
-        score += min(50, call_score)
-
-    # Grade
-    if score >= 90:
-        grade = "Excellent"
-    elif score >= 75:
-        grade = "Good"
-    elif score >= 50:
-        grade = "Fair"
-    else:
-        grade = "Poor"
+    grade = _grade(score)
 
     header = f"Score: {score}/100 ({grade}) — {server_id}"
     return header + "\n\n" + "\n".join(checks) + f"\n\nGrade: {grade}"

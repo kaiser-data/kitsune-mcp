@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+- **`test()` scores the server you are building.** `test('dev')` on a `connect()`ed alias used to answer "not found in registry — Poor". It now scores the live process on what a developer can fix (tool and parameter descriptions, declared `required`, object schemas, clashes with Kitsune tool names) and ends with a per-tool fix list. `level='full'` also calls each tool; for local servers the live calls are half the score. A registry miss now says how to test a local server.
+
+---
+
 ## [0.25.6] — 2026-11-22
 
 Documentation release: the PyPI and npm pages get the new README. No code changes.
