@@ -6,8 +6,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.26.0] — 2026-11-27
+
 ### Added
 - **`test()` scores the server you are building.** `test('dev')` on a `connect()`ed alias used to answer "not found in registry — Poor". It now scores the live process on what a developer can fix (tool and parameter descriptions, declared `required`, object schemas, clashes with Kitsune tool names) and ends with a per-tool fix list. `level='full'` also calls each tool; for local servers the live calls are half the score. A registry miss now says how to test a local server.
+
+### Fixed
+- **A failed `.env` write is no longer reported as saved.** `key()`, `auth()` and credential harvest said "Saved" even when the write to `.env` failed; they now say the key is active for this session only. The cause is logged to stderr, never the value.
+- **`compare()` runs at most 6 probes at once.** `limit` is unbounded and each probe can start a server process.
+- **`shapeshift()` tells a registry outage from a missing server.** When a registry lookup failed, it names the registry and error instead of "not found in any registry".
 
 ---
 
