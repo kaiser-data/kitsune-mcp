@@ -44,7 +44,7 @@ dependencies = [
     "httpcore>=1.0,<2",  # imported directly: the pinned network backend (utils._PublicOnlyBackend)
     "python-dotenv>=1.0.0",
     "mcp>=2,<3",
-    "pydantic>=2.12,<2.15",
+    "pydantic>=2.14.4,<2.15",
 ]
 
 [project.optional-dependencies]
