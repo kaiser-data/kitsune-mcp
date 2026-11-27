@@ -7,6 +7,7 @@ is a deliberate choice driven by whether tests mock it.
 """
 
 import asyncio
+import contextlib
 import os
 import re
 import shutil
@@ -553,7 +554,11 @@ async def _resolve_server_id(server_id: str) -> tuple[str | None, list[str]]:
         return None, []
     try:
         candidates = await _registry.search(needle, limit=10)
-    except Exception:
+    except Exception as e:
+        # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+        # Record the failure so shapeshift() reports an outage, not "not found".
+        with contextlib.suppress(Exception):
+            _registry.last_registry_errors = {"search": type(e).__name__}
         return None, []
     if not candidates:
         return None, []

@@ -367,6 +367,16 @@ async def shapeshift(
                         f"Did you mean one of these?\n{suggestions}\n"
                         f'Retry: shapeshift("{candidates[0]}")'
                     )
+                # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+                # A registry outage is not a missing server — say which failed.
+                reg_errors = getattr(_state._registry, "last_registry_errors", None)
+                if isinstance(reg_errors, dict) and reg_errors:
+                    failed = ", ".join(f"{n} ({e})" for n, e in reg_errors.items())
+                    return (
+                        f"❌ shapeshift failed: could not look up '{server_id}' — "
+                        f"registry error: {failed}.\n"
+                        "The server may exist; retry shortly, or pass its https:// URL."
+                    )
                 return (
                     f"❌ shapeshift failed: server '{server_id}' not found in any registry.\n"
                     f"Use search() to find servers, or connect() for local servers."

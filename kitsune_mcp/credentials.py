@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -196,7 +197,13 @@ def invalid_env_message(name: str, value: str) -> str:
     )
 
 
-def _save_to_env(env_var: str, value: str) -> None:
+def _save_to_env(env_var: str, value: str) -> bool:
+    """Set env_var for this session and persist it to .env.
+
+    Returns True when the .env write succeeded, False when it failed (the
+    value is still active for this session). Callers must not report a failed
+    write as saved.
+    """
     if is_protected_env_var(env_var):
         raise ProtectedEnvVarError(env_var)
     problem = invalid_env_entry(env_var, value)
@@ -222,9 +229,18 @@ def _save_to_env(env_var: str, value: str) -> None:
         with open(ENV_PATH, "w") as f:
             f.writelines(lines)
         os.chmod(ENV_PATH, 0o600)
-    except OSError:
-        pass
+        persisted = True
+    except OSError as e:
+        # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+        # A failed write used to be swallowed, so key()/auth() said "Saved".
+        # Log the cause (never the value) and tell the caller.
+        print(
+            f"kitsune: could not write {env_var} to {ENV_PATH}: {type(e).__name__}",
+            file=sys.stderr,
+        )
+        persisted = False
     os.environ[env_var] = value
+    return persisted
 
 
 def _resolve_config(credentials: dict, user_config: dict) -> tuple:
