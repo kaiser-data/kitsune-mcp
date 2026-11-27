@@ -195,6 +195,48 @@ async def test_shiftback_does_not_kill_a_form_mounted_while_it_notifies():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("race", ["restart", "remount"])
+async def test_shiftback_spares_process_that_took_over_the_key(race):
+    """After the lock is released, a concurrent restart can put a fresh process
+    under the unmounted key, or a remount of the same server can reuse it.
+    shiftback() must not kill or unpool either."""
+    ss = importlib.import_module("kitsune_mcp.tools.shapeshift")
+    from kitsune_mcp.transport import _process_pool
+
+    _reset_session()
+    old_entry, fresh_entry = MagicMock(name="old"), MagicMock(name="fresh")
+    old_entry.proc.wait = AsyncMock(return_value=0)
+    old_entry.name = fresh_entry.name = "srv"
+    _process_pool["k"] = old_entry
+    session["shapeshift_tools"] = ["old_tool"]
+    session["current_form"] = "srv"
+    session["current_form_pool_key"] = "k"
+    session["current_form_has_process"] = True
+
+    async def concurrent():
+        if race == "restart":
+            _process_pool["k"] = fresh_entry
+        else:
+            session["current_form"] = "srv"
+            session["current_form_pool_key"] = "k"
+
+    ctx = MagicMock()
+    ctx.session.send_tool_list_changed = AsyncMock(side_effect=concurrent)
+    killed = []
+    try:
+        with (
+            patch.object(ss._state, "_do_shed", return_value=["old_tool"]),
+            patch.object(ss, "_kill_process_tree", side_effect=lambda p: killed.append(p)),
+        ):
+            await ss.shiftback(ctx, kill=True)
+        assert killed == []
+        assert _process_pool.get("k") is (fresh_entry if race == "restart" else old_entry)
+    finally:
+        _process_pool.pop("k", None)
+        _reset_session()
+
+
+@pytest.mark.asyncio
 async def test_pool_connection_mount_waits_for_registry_lock():
     """Mounting a connect()ed server sheds and registers tools, so it must hold
     _registry_lock like the registry path does."""

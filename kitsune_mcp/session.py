@@ -60,30 +60,85 @@ def _save_skills() -> None:
     _save_state()
 
 
+# Sections of state.json, and the keys this process last saw for each one.
+# Two clients (two Kitsune processes) can share one state directory. Each used
+# to write its whole in-memory state, so the last writer silently erased what
+# the other had added. Saving now merges with the file on disk: keys another
+# process added are kept, and only keys *this* process removed are dropped.
+_STATE_SECTIONS = ("crafted_tools", "connections", "explored")
+_synced_keys: dict[str, set] = {name: set() for name in _STATE_SECTIONS}
+
+
+def _state_lock_path():
+    return _STATE_PATH.with_name(f"{_STATE_PATH.name}.lock")
+
+
+@contextlib.contextmanager
+def _state_file_lock():
+    """Exclusive inter-process lock around a state.json read-merge-write."""
+    try:
+        import fcntl
+    except ImportError:  # Windows: no flock; the merge still narrows the window
+        yield
+        return
+    fd = os.open(_state_lock_path(), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _read_state_file() -> dict:
+    try:
+        with open(_STATE_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _merge_section(name: str, disk: dict, ours: dict) -> dict:
+    """Disk entries, minus keys this process deleted, plus this process's entries."""
+    merged = dict(disk) if isinstance(disk, dict) else {}
+    for k in _synced_keys[name] - ours.keys():
+        merged.pop(k, None)
+    merged.update(ours)
+    return merged
+
+
 def _save_state() -> None:
     """Persist crafted_tools, connections metadata, and explored history to disk."""
     tmp = _STATE_PATH.with_name(f"{_STATE_PATH.name}.{os.getpid()}.tmp")
     try:
         _KITSUNE_HOME.mkdir(parents=True, exist_ok=True)
-        state = {
-            "crafted_tools": session.get("crafted_tools", {}),
+        ours = {
+            "crafted_tools": dict(session.get("crafted_tools", {})),
             # Strip runtime fields (pid, started_at) — dead after restart
             "connections": {
                 k: {f: v for f, v in conn.items() if f not in ("pid", "started_at")}
                 for k, conn in session.get("connections", {}).items()
             },
-            # Cap explored history to 100 entries (keep most recent)
-            "explored": dict(list(session.get("explored", {}).items())[-100:]),
+            "explored": dict(session.get("explored", {})),
         }
-        # Atomic: write a temp file, then rename over the old one. A crash or a
-        # second process mid-write can no longer leave a truncated state.json
-        # (which _load_state would silently treat as empty).
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump(state, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, _STATE_PATH)
+        with _state_file_lock():
+            disk = _read_state_file()
+            state = {name: _merge_section(name, disk.get(name, {}), ours[name]) for name in ours}
+            # Cap explored history to 100 entries (keep most recent)
+            state["explored"] = dict(list(state["explored"].items())[-100:])
+            # Atomic: write a temp file, then rename over the old one. A crash
+            # mid-write can no longer leave a truncated state.json (which
+            # _load_state would silently treat as empty).
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump(state, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, _STATE_PATH)
+        for name in _STATE_SECTIONS:
+            _synced_keys[name] = set(ours[name])
     except OSError:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
@@ -91,14 +146,12 @@ def _save_state() -> None:
 
 def _load_state() -> None:
     """Restore crafted_tools, connections, and explored from disk."""
-    try:
-        with open(_STATE_PATH) as f:
-            state = json.load(f)
-        session.setdefault("crafted_tools", {}).update(state.get("crafted_tools", {}))
-        session.setdefault("connections", {}).update(state.get("connections", {}))
-        session.setdefault("explored", {}).update(state.get("explored", {}))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        pass
+    state = _read_state_file()
+    for name in _STATE_SECTIONS:
+        section = state.get(name, {})
+        if isinstance(section, dict):
+            session.setdefault(name, {}).update(section)
+        _synced_keys[name] = set(session.get(name, {}))
 
 
 def _restore_crafted_tools() -> None:

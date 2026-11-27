@@ -6,6 +6,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **Two clients sharing a state directory no longer erase each other's state.** Each Kitsune process wrote its whole in-memory state to `state.json`, so the last one to save dropped crafted tools, connections and history the other had added. Saves now take a file lock and merge with the file on disk; a process only removes entries it deleted itself.
+- **The npm launcher's pip fallback works.** Without `uvx`, `npx kitsune-mcp` exited with code 254 before trying the pip-installed `kitsune-mcp`. It now falls back as documented, and if `kitsune-mcp` on PATH is the npm launcher itself it fails with the install hint instead of relaunching forever.
+- **`shiftback()` no longer kills a process that a concurrent restart or remount took over.** It snapshots the process it unmounts while holding the lock and only kills that one.
+
 ---
 
 ## [0.26.0] — 2026-11-27
