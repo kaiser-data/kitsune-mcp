@@ -95,6 +95,8 @@ _BASE_TOOL_NAMES = {
 # Default (lean) profile — server.py prunes to this set when KITSUNE_TOOLS is unset.
 # The connect/release/reload trio is lean so the MCP REPL (Kitsune's headline
 # developer loop) works on a default install without KITSUNE_TOOLS=all.
+# test() is lean too: "let your agent test the MCP server it's building" is the
+# headline use case, and it costs ~125 tokens/turn on load-all clients.
 _LEAN_TOOL_NAMES = {
     "status",
     "search",
@@ -105,6 +107,7 @@ _LEAN_TOOL_NAMES = {
     "connect",
     "release",
     "reload",
+    "test",
 }
 
 

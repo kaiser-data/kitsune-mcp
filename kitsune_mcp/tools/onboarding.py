@@ -91,40 +91,14 @@ async def auto(
     # Guard: built-in Kitsune tool names must be called directly, not routed
     # to an external MCP server. auto("onboard") would otherwise search the
     # registry for a server named "onboard" and fail confusingly.
-    # Core lean-profile tools always available; forge extras only with KITSUNE_TOOLS=all
-    _KITSUNE_LEAN: frozenset[str] = frozenset(
-        {
-            "auth",
-            "auto",
-            "call",
-            "search",
-            "shapeshift",
-            "status",
-            "connect",
-            "release",
-            "reload",
-        }
-    )
-    _KITSUNE_FORGE: frozenset[str] = frozenset(
-        {
-            "bench",
-            "compare",
-            "craft",
-            "fetch",
-            "inspect",
-            "key",
-            "login",
-            "onboard",
-            "run",
-            "setup",
-            "shiftback",
-            "test",
-        }
-    )
-    _KITSUNE_BUILTINS = _KITSUNE_LEAN | _KITSUNE_FORGE
+    # Single source of truth: _state's tool names and the active profile. A
+    # local copy of the lean set drifted (test() joined lean, the copy said
+    # "forge profile").
+    _KITSUNE_BUILTINS = _state._BASE_TOOL_NAMES | {"login"}
     task_stripped = task.strip().lower()
     if task_stripped in _KITSUNE_BUILTINS:
-        note = "" if task_stripped in _KITSUNE_LEAN else " (forge profile — set KITSUNE_TOOLS=all)"
+        active = _state._active_tool_names()
+        note = "" if task_stripped in active else " (not in your profile — set KITSUNE_TOOLS=all)"
         return (
             f"'{task}' is a built-in Kitsune tool — call it directly{note}.\n"
             f"Example: {task_stripped}()"
