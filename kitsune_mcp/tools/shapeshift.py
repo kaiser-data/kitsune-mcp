@@ -609,6 +609,10 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
         # concurrent mount may set its own pool key, which must not be killed.
         exact_key = session.pop("current_form_pool_key", None)
         has_process = session.pop("current_form_has_process", None)
+        # Snapshot the pool *entry* too. A concurrent restart can put a fresh
+        # process under the same key once the lock is released; only the
+        # process this call unmounted may be killed.
+        unmounted_entry = _process_pool.get(exact_key) if exact_key else None
     # Lock released — kill/uninstall I/O runs outside the lock
 
     with contextlib.suppress(Exception):
@@ -643,15 +647,18 @@ async def shiftback(ctx: Context, kill: bool = True, uninstall: bool = False) ->
                 "⚠️  Could not identify the backing process (pool key missing) — "
                 "use release() to kill specific connections by name."
             )
-        keys_to_check = [exact_key] if exact_key else []
-        for pool_key in keys_to_check:
-            entry = _process_pool.get(pool_key)
-            if entry is None:
-                continue
+        entry = unmounted_entry
+        if (
+            entry is not None
+            and _process_pool.get(exact_key) is entry  # not replaced by a restart
+            and session.get("current_form_pool_key") != exact_key  # not remounted
+        ):
             _kill_process_tree(entry.proc)
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(entry.proc.wait(), timeout=TIMEOUT_RESOURCE_LIST)
-            _process_pool.pop(pool_key, None)
+            # Pop only our own entry: a respawn during the wait may own the key now.
+            if _process_pool.get(exact_key) is entry:
+                _process_pool.pop(exact_key, None)
             killed.append(entry.name or entry.install_cmd[0])
         if killed:
             result_lines.append(f"Released: {', '.join(killed)}")
