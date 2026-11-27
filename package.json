@@ -1,6 +1,6 @@
 {
   "name": "kitsune-mcp",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "description": "One MCP server, every form your agent needs: hot-reload your own MCP server (edit, reload(), call again, no client restart) and test any MCP server from 6 registries in seconds, caged in Docker when available.",
   "mcpName": "io.github.kaiser-data/kitsune-mcp",
   "bin": {
