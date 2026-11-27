@@ -378,14 +378,26 @@ async def inspect(server_id: str, probe: bool = False) -> str:
     return "\n".join(lines)
 
 
+_COMPARE_MAX_CONCURRENT_PROBES = 6
+
+
 async def _run_compare(query: str, limit: int = 6, probe: bool = False) -> str:
     """Core compare logic, shared by compare() and search(..., compare=True)."""
     servers = await _state._registry.search(query, limit)
     if not servers:
         return f"No servers found for '{query}'. Try a different query."
 
+    # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+    # limit is caller-chosen and unbounded, and each probe can spawn a server
+    # process — cap how many run at once.
+    sem = asyncio.Semaphore(_COMPARE_MAX_CONCURRENT_PROBES)
+
+    async def _bounded(srv) -> dict:
+        async with sem:
+            return await _compare_probe(srv, allow_low_trust=probe)
+
     rows = await asyncio.gather(
-        *[_compare_probe(s, allow_low_trust=probe) for s in servers],
+        *[_bounded(s) for s in servers],
         return_exceptions=False,
     )
     # Sort: known token cost first (ascending), then unknown last.

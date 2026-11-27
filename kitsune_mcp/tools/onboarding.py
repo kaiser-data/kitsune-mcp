@@ -37,10 +37,21 @@ async def key(env_var: str, value: str) -> str:
         return protected_env_message(var)
     if invalid_env_entry(var, value):
         return invalid_env_message(var, value)
-    _save_to_env(var, value)
+    persisted = _save_to_env(var, value)
     _state._registry.bust_cache()  # credentials changed — invalidate cached server records
+    return _saved_message(var, value, persisted)
+
+
+def _saved_message(var: str, value: str, persisted: bool) -> str:
+    """Result line for key()/auth(); a failed .env write is reported, not hidden."""
     preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
-    return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
+    if persisted:
+        return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
+    # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+    return (
+        f"⚠️ Not saved to .env: {var} = {preview} could not be written to Kitsune's .env file. "
+        "It is active for this session only and will be lost on restart."
+    )
 
 
 def _blocked(what: str, why: str, fix: str, fallback: str = "") -> str:
@@ -1296,6 +1307,7 @@ async def setup(
     if action in ("harvest", "absorb", "exclusive"):
         harvested = _harvest_credentials(competing)
         saved: list[str] = []
+        unsaved: list[str] = []
         for env_var, value in harvested.items():
             # don't overwrite existing values; never import protected knobs
             if (
@@ -1303,13 +1315,17 @@ async def setup(
                 and not is_protected_env_var(env_var)
                 and not invalid_env_entry(env_var, value)
             ):
-                _save_to_env(env_var, value)
+                # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+                if not _save_to_env(env_var, value):
+                    unsaved.append(env_var)
                 saved.append(env_var)
         harvest_summary = (
             f"  Harvested {len(saved)} new credential(s): {', '.join(saved)}"
             if saved
             else "  No new credentials (all already set or none found)."
         )
+        if unsaved:
+            harvest_summary += f"\n  ⚠️ Not written to .env (session only): {', '.join(unsaved)}"
 
         if action == "harvest":
             return "\n".join(
@@ -1439,10 +1455,10 @@ async def auth(server_id_or_var: str, value: str = "") -> str:
             return protected_env_message(var)
         if invalid_env_entry(var, value):
             return invalid_env_message(var, value)
-        _save_to_env(var, value)
+        # Recommended by Norma — fixed with Claude Opus 5.5 via Claude Code
+        persisted = _save_to_env(var, value)
         _state._registry.bust_cache()
-        preview = value[:4] + "***" + value[-2:] if len(value) > 6 else "***"
-        return f"Saved: {var} = {preview} written to .env (mode 0o600) and active for this session."
+        return _saved_message(var, value, persisted)
 
     # ALL_CAPS pattern → env var status check
     if re.match(r"^[A-Z][A-Z0-9_]*$", name):
