@@ -33,13 +33,13 @@ This matches `_estimate_tokens()` in `kitsune_mcp/utils.py` — the same heurist
 
 The comparison shows kitsune's total overhead **including one active mounted server** vs loading N servers all at once:
 
-- **Kitsune lean** = 9 lean tools (incl. the connect/release/reload REPL trio) + 1 mounted server (best case per task)
-- **Kitsune forge** = 22 full tools + 1 mounted server
+- **Kitsune lean** = 10 lean tools (incl. the connect/release/reload REPL trio and test()) + 1 mounted server (best case per task)
+- **Kitsune forge** = 21 full tools + 1 mounted server
 - **Always-on baseline** = N × 8 tools × 97 tokens permanently in context
 
-Lean mode becomes more cost-effective than always-on at 4+ typical servers (at 2–3 servers it costs more). Forge becomes cost-effective at 7+ servers. Note: on clients with native Tool Search these comparisons are largely moot — see the README caveat; the lean REPL trio is worth its context for the develop-live loop, not for token math.
+Lean mode becomes more cost-effective than always-on at 4+ typical servers (at 2–3 servers it costs more). Forge becomes cost-effective at 6+ servers. Note: on clients with native Tool Search these comparisons are largely moot — see the README caveat; the lean REPL trio is worth its context for the develop-live loop, not for token math.
 
-## Reference output (lean REPL, connect/release/reload in lean)
+## Reference output (lean: REPL trio + test(), 2026-11-27)
 
 ```
 ==============================================================
@@ -47,30 +47,30 @@ Lean mode becomes more cost-effective than always-on at 4+ typical servers (at 2
 ==============================================================
 
 === Profile sizes (actual registered schemas) ===
-  lean  ( 9 tools / default):   1774 tokens
-  forge (22 tools / full):     3561 tokens
+  lean  (10 tools / default):   1895 tokens
+  forge (21 tools / full):     3510 tokens
 
 === Savings: kitsune vs always-on N servers ===
   Baseline: 8 tools/server × 97 tokens/tool (representative avg)
 
   2 servers — always-on baseline:  1552 tokens
-    kitsune lean:      2550 tokens  (costs 64% more)
-    kitsune forge:     4337 tokens  (costs 179% more)
+    kitsune lean:      2671 tokens  (costs 72% more)
+    kitsune forge:     4286 tokens  (costs 176% more)
 
   5 servers — always-on baseline:  3880 tokens
-    kitsune lean:      2550 tokens  (saves 34%)
-    kitsune forge:     4337 tokens  (costs 11% more)
+    kitsune lean:      2671 tokens  (saves 31%)
+    kitsune forge:     4286 tokens  (costs 10% more)
 
   10 servers — always-on baseline:  7760 tokens
-    kitsune lean:      2550 tokens  (saves 67%)
-    kitsune forge:     4337 tokens  (saves 44%)
+    kitsune lean:      2671 tokens  (saves 65%)
+    kitsune forge:     4286 tokens  (saves 44%)
 
 === Per-tool breakdown ===
   Tool                         Tokens  Profile
   --------------------------------------------
-  shapeshift                      379  lean + forge
+  shapeshift                      376  lean + forge
   call                            345  lean + forge
-  search                          328  lean + forge
+  search                          325  lean + forge
   setup                           294  forge only
   prewarm                         258  forge only
   auto                            194  lean + forge
@@ -81,11 +81,10 @@ Lean mode becomes more cost-effective than always-on at 4+ typical servers (at 2
   inspect                         136  forge only
   bench                           133  forge only
   connect                         128  lean + forge
+  test                            125  lean + forge
   run                             116  forge only
   onboard                         110  forge only
   shiftback                        88  forge only
-  test                             87  forge only
-  skill                            84  forge only
   key                              79  forge only
   fetch                            78  forge only
   release                          55  lean + forge

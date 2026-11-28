@@ -302,6 +302,18 @@ class TestAutoBuiltinGuard:
         assert "built-in Kitsune tool" in result
 
     @pytest.mark.asyncio
+    async def test_profile_note_follows_active_profile(self, monkeypatch):
+        """test() is in the default profile: no 'set KITSUNE_TOOLS=all' note.
+        A full-profile tool still gets the note when the profile is lean."""
+        from kitsune_mcp.tools.onboarding import auto
+
+        monkeypatch.delenv("KITSUNE_TOOLS", raising=False)
+        assert "KITSUNE_TOOLS" not in await auto("test")
+        assert "KITSUNE_TOOLS=all" in await auto("bench")
+        monkeypatch.setenv("KITSUNE_TOOLS", "all")
+        assert "KITSUNE_TOOLS" not in await auto("bench")
+
+    @pytest.mark.asyncio
     async def test_real_task_not_intercepted(self):
         # "time" is not a built-in name — should proceed to registry search
         with patch("kitsune_mcp.tools._state._registry") as mock_reg:

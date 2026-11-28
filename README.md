@@ -3,7 +3,7 @@
   <img src="https://raw.githubusercontent.com/kaiser-data/kitsune-mcp/main/docs/assets/kitsune-logo-reveal.gif" alt="The Kitsune MCP logo builds itself: a fox head appears, seven tool tails fan out one by one, and the fox's eyes light up" width="240" />
   <h1>🦊 Kitsune MCP</h1>
   <h3>One MCP server. Every form your agent needs.</h3>
-  <p><strong>Nine tools, like the nine-tailed fox.</strong> Your agent borrows a server's powers, uses them and casts them off, mid-session, with no client restart.<br/>
+  <p><strong>Like the nine-tailed fox, it takes any form.</strong> Your agent borrows a server's powers, uses them and casts them off, mid-session, with no client restart.<br/>
   <strong>Build</strong> your own MCP server in a live loop. <strong>Test</strong> any server in seconds, caged.</p>
   <p>
     <a href="https://pypi.org/project/kitsune-mcp/"><img src="https://img.shields.io/pypi/v/kitsune-mcp?color=blue&label=pypi" alt="PyPI version"/></a>
@@ -33,7 +33,7 @@
 | **Turn any API into a power** | *"Make a tool for POST https://api.example.com/summarize."* | `craft()`: live at once, kept across restarts. |
 | **Cast off the form** | *"Drop it."* | `shapeshift()`: tools gone, session stays. |
 
-`test()`, `bench()` and `craft()` come with `KITSUNE_TOOLS=all`. The cage needs Docker; without it, community code runs uncaged, with a warning.
+`bench()` and `craft()` come with `KITSUNE_TOOLS=all`. The cage needs Docker; without it, community code runs uncaged, with a warning.
 
 ## Try it in a minute
 
@@ -182,7 +182,7 @@ Mounted tools appear natively in clients that refresh on `tools/list_changed` (t
 
 ## Tools
 
-Default profile: **9 tools**. Standing cost: **~1,770 tokens/turn** on clients that load every tool schema up front (measured with `python examples/benchmark.py`, 2026-11-22); **~70 tokens/turn** on Claude Code with Tool Search, where schemas load only on first use (measured on Claude Code 2.1.319, 2026-11-06).
+Default profile: **10 tools**. Standing cost: **~1,900 tokens/turn** on clients that load every tool schema up front (measured with `python examples/benchmark.py`, 2026-11-27); **~70 tokens/turn** on Claude Code with Tool Search, where schemas load only on first use (measured on Claude Code 2.1.319, 2026-11-06).
 
 | Tool | Role |
 |---|---|
@@ -195,8 +195,9 @@ Default profile: **9 tools**. Standing cost: **~1,770 tokens/turn** on clients t
 | `auth(var_or_server, value?)` | Set an env key or run an OAuth 2.1 browser flow |
 | `auto(task, server_hint=)` | Search, mount and call in one step |
 | `status()` | Current form, connection pool, session stats |
+| `test(server_id, level?)` | Score a server 0–100 with a fix list: your `connect()`ed server or any registry server |
 
-`KITSUNE_TOOLS=all` (or the `kitsune-forge` command) adds developer tools: `inspect` (schemas, credential check, token cost), `test` (quality score 0–100 for a registry server), `bench` (p50/p95 latency), `compare`, `prewarm`, `craft` (turn any HTTP endpoint into a tool), `setup`, and more. See [`docs/tools.md`](docs/tools.md). Companion skills for Claude Code: `kitsune-dev`, `kitsune-improve`.
+`KITSUNE_TOOLS=all` (or the `kitsune-forge` command) adds developer tools: `inspect` (schemas, credential check, token cost), `bench` (p50/p95 latency), `compare`, `prewarm`, `craft` (turn any HTTP endpoint into a tool), `setup`, and more. See [`docs/tools.md`](docs/tools.md). Companion skills for Claude Code: `kitsune-dev`, `kitsune-improve`.
 
 ## Safety
 

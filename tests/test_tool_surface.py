@@ -72,6 +72,8 @@ LEAN_REQUIRED = {
     "connect",
     "release",
     "reload",
+    # Scores the server you're building — the README's headline use case.
+    "test",
 }
 
 # Tools that must NOT appear in lean (forge-only)
@@ -84,7 +86,6 @@ FORGE_ONLY = {
     "run",
     "fetch",
     "craft",
-    "test",
     "bench",
     "setup",
     "prewarm",
@@ -139,10 +140,10 @@ def test_base_tool_names_covers_lean_and_forge():
 
 
 def test_lean_tools_documented_count():
-    """Lean profile is exactly 9 tools (6 core + connect/release/reload) — catch silent drift."""
+    """Lean profile is exactly 10 tools (6 core + connect/release/reload + test) — catch silent drift."""
     from server import _LEAN_TOOLS
 
-    assert len(_LEAN_TOOLS) == 9, (
+    assert len(_LEAN_TOOLS) == 10, (
         f"Lean tool count changed to {len(_LEAN_TOOLS)} — update server.py header comment "
         f"and this test. Lean tools: {sorted(_LEAN_TOOLS)}"
     )
