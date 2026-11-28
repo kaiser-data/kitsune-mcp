@@ -6,9 +6,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.27.0] — 2026-11-28
+
 ### Changed
 - **`test()` is in the default profile.** "Let your agent test the MCP server it's building" now works on a default install, without `KITSUNE_TOOLS=all`. The default profile is 10 tools, ~1,895 tokens/turn on clients that load every schema up front (+125), and next to nothing on Claude Code with Tool Search.
 - `auto("<built-in tool>")` checks the active profile before telling you to set `KITSUNE_TOOLS=all`; its private copy of the default tool list had drifted.
+
+### Tests
+- `setup()` gateway actions and `auth()` branches covered (#183): `onboarding.py` 62% → 86%, project 91%.
 
 ---
 

@@ -46,4 +46,4 @@ body:
     id: version
     attributes:
       label: Kitsune version
-      placeholder: "0.26.1"
+      placeholder: "0.27.0"
